@@ -1,0 +1,12 @@
+# Единые переводы строк в репозитории
+* text=auto
+
+# Shell-скрипты выполняются на Linux: перевод строки обязательно LF,
+# иначе bash ругается на "\r': command not found"
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Windows-хелперы запускает cmd.exe
+*.cmd  text eol=crlf
+*.bat  text eol=crlf

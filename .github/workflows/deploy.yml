@@ -1,0 +1,75 @@
+name: Deploy
+
+# Выкат на сервер: push в main или кнопка "Run workflow" вручную.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Два деплоя одновременно не запускаем (второй ждёт первый).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Выкат на сервер
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v4
+
+      - name: Настроить SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$SSH_HOST" ] || { echo "::error::Не задан секрет SSH_HOST"; exit 1; }
+          [ -n "$SSH_USER" ] || { echo "::error::Не задан секрет SSH_USER"; exit 1; }
+          [ -n "$SSH_KEY" ]  || { echo "::error::Не задан секрет SSH_KEY"; exit 1; }
+
+          port="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$port" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          cat >> ~/.ssh/config <<CFG
+          Host deploy-target
+            HostName $SSH_HOST
+            Port $port
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 30
+          CFG
+
+          ssh -o BatchMode=yes deploy-target 'echo "SSH OK: $(uname -sr)"'
+
+      - name: Выкатить на сервер
+        env:
+          REPO_URL: ${{ vars.REPO_URL || format('git@github.com:{0}.git', github.repository) }}
+          APP_DIR: ${{ vars.APP_DIR }}
+          HTTP_PORT: ${{ vars.HTTP_PORT }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        run: |
+          set -euo pipefail
+          # Собираем скрипт на лету: переменные подставляем с безопасным
+          # экранированием (%q), поэтому пароли и секреты можно любой формы.
+          {
+            echo 'set -euo pipefail'
+            printf 'export REPO_URL=%q\n'          "$REPO_URL"
+            printf 'export GIT_REF=%q\n'           "${GITHUB_REF_NAME:-main}"
+            printf 'export APP_DIR=%q\n'           "${APP_DIR:-/opt/taskmanager}"
+            printf 'export HTTP_PORT=%q\n'         "${HTTP_PORT:-80}"
+            printf 'export POSTGRES_PASSWORD=%q\n' "$POSTGRES_PASSWORD"
+            printf 'export JWT_SECRET=%q\n'        "$JWT_SECRET"
+            printf 'export CORS_ORIGINS=%q\n'      "$CORS_ORIGINS"
+            cat deploy/deploy.sh
+          } | ssh -F ~/.ssh/config deploy-target 'bash -s'
