@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/taskmanager}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:serg6363}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+server:
+  port: ${SERVER_PORT:8080}
+  # Учитывать X-Forwarded-* заголовки, когда приложение стоит за nginx
+  forward-headers-strategy: framework
+
+app:
+  cors:
+    # Через запятую. На сервере укажите публичный адрес приложения, например:
+    # CORS_ORIGINS=https://tasks.example.com
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
+  jwt:
+    secret: ${JWT_SECRET:super-secret-key-for-jwt-token-generation-must-be-long-enough-1234567890}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  upload-dir: ${UPLOAD_DIR:uploads}
