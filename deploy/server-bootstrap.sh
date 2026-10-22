@@ -22,7 +22,7 @@ command -v apt-get >/dev/null 2>&1 || {
 log "Ставлю git, curl и Docker"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl git
+apt-get install -y -qq ca-certificates curl git openssh-client
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
 else

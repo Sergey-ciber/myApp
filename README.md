@@ -221,3 +221,110 @@ tasks.example.com {
 - **Без Docker:** `mvn package` даёт jar — запускайте его через systemd, а
   `frontend/dist` раздавайте nginx-ом с тем же правилом `try_files ... /index.html`
   и проксированием `/api/` (см. `frontend/nginx.conf`).
+
+## Деплой из git (CI/CD)
+
+Автоматический выкат: `git push` в ветку `main` → GitHub Actions подключается к
+серверу по SSH и запускает `deploy/deploy.sh`, который обновляет код, пишет
+`.env`, пересобирает образы и проверяет, что сайт и API отвечают. Если проверка
+не прошла — деплой падает с красным статусом и показывает логи контейнеров.
+
+```
+разработчик --push--> GitHub --Actions--> ssh --> сервер
+                                                 |- git fetch + reset --hard
+                                                 |- docker compose up -d --build
+                                                 '- health-check (страница + /api)
+```
+
+| Файл | Назначение |
+| --- | --- |
+| `deploy/server-bootstrap.sh` | один раз на чистом сервере: git, Docker + Compose, каталог приложения, ключ для клонирования репозитория |
+| `deploy/deploy.sh` | сам выкат (запускается на сервере) |
+| `.github/workflows/deploy.yml` | вызывает `deploy.sh` по push в `main` |
+
+### Шаг 1. Репозиторий
+
+```bash
+git remote add origin git@github.com:USER/REPO.git
+git push -u origin main
+```
+
+Локальный репозиторий уже создан и первый коммит сделан — осталось добавить
+remote и запушить. Репозиторий может быть приватным: сервер получит доступ
+по deploy-ключу (шаг 3).
+
+### Шаг 2. Подготовка сервера (один раз)
+
+```bash
+ssh root@2.27.33.116 'bash -s' < deploy/server-bootstrap.sh
+```
+
+Скрипт поставит git, curl, Docker и Compose, создаст `/opt/taskmanager`, сгенерирует
+ключ `/root/.ssh/deploy_key` и распечатает его публичную часть.
+
+### Шаг 3. Deploy key в репозитории
+
+GitHub → Settings → Deploy keys → Add deploy key (галочка «только чтение»),
+вставить ключ, напечатанный на шаге 2. Проверка на сервере:
+
+```bash
+ssh -T git@github.com      # должно ответить "Hi ...! You've successfully authenticated"
+```
+
+### Шаг 4. Секреты и переменные в GitHub
+
+Settings → Secrets and variables → Actions.
+
+Secrets:
+
+| Секрет | Значение |
+| --- | --- |
+| `SSH_HOST` | `2.27.33.116` |
+| `SSH_USER` | `root` |
+| `SSH_KEY` | приватный ключ, которым вы заходите на сервер (содержимое `~/.ssh/xorek_ed25519`) |
+| `POSTGRES_PASSWORD` | пароль БД |
+| `JWT_SECRET` | длинная случайная строка (менять на работающем приложении нельзя — разлогинит всех) |
+| `CORS_ORIGINS` | `http://2.27.33.116` |
+
+Необязательные: секрет `SSH_PORT` (по умолчанию 22) и переменные (`Variables`)
+`HTTP_PORT` (по умолчанию 80), `APP_DIR` (по умолчанию `/opt/taskmanager`),
+`REPO_URL` (если репозиторий не на github.com).
+
+### Шаг 5. Выкат
+
+```bash
+git push origin main
+```
+
+Прогресс — во вкладке Actions; повторный запуск без коммита — кнопкой
+«Run workflow». Состояние на сервере:
+
+```bash
+cd /opt/taskmanager
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend
+```
+
+### Ручной деплой (без CI)
+
+Тот же скрипт можно запускать руками — на сервере он подхватит секреты из
+существующего `.env`:
+
+```bash
+ssh root@2.27.33.116
+cd /opt/taskmanager && bash deploy/deploy.sh          # обновить до последнего main
+GIT_REF=v1.2.0 bash deploy/deploy.sh                 # выкатить тег/ветку (откат тоже)
+```
+
+### Что важно знать
+
+- **`.env` на сервере принадлежит CI.** Он перезаписывается при каждом деплое из
+  секретов GitHub — правки файла прямо на сервере потеряются.
+- **Сборка идёт на сервере** (`mvn package` + `vite build` в Docker): нужно
+  ~2 ГБ свободной RAM и 5–15 минут на первый выкат. Если сервер слабый, соберите
+  образы в CI и публикуйте в GHCR, а на сервере делайте `docker compose pull`.
+- **База не теряется:** тома `pgdata` и `uploads` не пересоздаются, `down -v`
+  в скрипте не используется.
+- **GitLab вместо GitHub:** логика та же, меняется только `.gitlab-ci.yml`
+  (вместо `deploy.yml`), а секреты задаются в Settings → CI/CD → Variables.
+

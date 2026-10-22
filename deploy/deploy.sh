@@ -3,10 +3,10 @@
 #
 # Выполняется НА СЕРВЕРЕ. Обычно его вызывает GitHub Actions, но можно и вручную:
 #   ssh root@SERVER 'bash -s' < deploy/deploy.sh
-#   или так, с явным адресом репозитория:
-#   ssh root@SERVER "REPO_URL=git@github.com:user/repo.git bash -s" < deploy/deploy.sh
+# или прямо на сервере (секреты подхватятся из уже существующего .env):
+#   cd /opt/taskmanager && bash deploy/deploy.sh
 #
-# Переменные окружения:
+# Переменные окружения (все необязательные, если есть .env):
 #   REPO_URL           адрес репозитория (обязателен при первом запуске)
 #   GIT_REF            ветка для выката (по умолчанию main)
 #   APP_DIR            каталог приложения (по умолчанию /opt/taskmanager)
@@ -21,12 +21,33 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/taskmanager}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 GIT_REF="${GIT_REF:-main}"
-HTTP_PORT="${HTTP_PORT:-80}"
-POSTGRES_DB="${POSTGRES_DB:-taskmanager}"
-POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 log()  { printf '\n==> %s\n' "$*"; }
 fail() { printf '\n!! %s\n' "$*" >&2; exit 1; }
+
+# ---------- значения из существующего .env ----------
+# Нужно только для ручного запуска: если переменная не задана снаружи,
+# берём её из .env. То, что передал CI, всегда имеет приоритет.
+if [ -f "$APP_DIR/.env" ]; then
+  load_env() {
+    local name="$1" line
+    [ -z "${!name+x}" ] || return 0            # уже задана снаружи
+    line="$(grep -m1 "^$name=" "$APP_DIR/.env" 2>/dev/null || true)"
+    [ -n "$line" ] || return 0                 # нет в .env
+    export "$name=${line#*=}"
+  }
+  load_env HTTP_PORT
+  load_env POSTGRES_DB
+  load_env POSTGRES_USER
+  load_env POSTGRES_PASSWORD
+  load_env JWT_SECRET
+  load_env CORS_ORIGINS
+fi
+
+# ---------- значения по умолчанию ----------
+HTTP_PORT="${HTTP_PORT:-80}"
+POSTGRES_DB="${POSTGRES_DB:-taskmanager}"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 # ---------- проверки ----------
 command -v docker >/dev/null 2>&1 || fail "Docker не установлен. Сначала запустите deploy/server-bootstrap.sh"
@@ -43,7 +64,7 @@ if [ -d "$APP_DIR/.git" ]; then
   log "Обновляю код в $APP_DIR (ветка $GIT_REF)"
   git -C "$APP_DIR" remote set-url origin "$REPO_URL"
   git -C "$APP_DIR" fetch --prune origin "$GIT_REF"
-  # reset --hard: сервер — не место для локальных правок, поэтому история всегда
+  # reset --hard: сервер — не место для локальных правок, поэтому код всегда
   # ровно совпадает с origin/$GIT_REF (файл .env не в git и не пострадает)
   git -C "$APP_DIR" reset --hard "origin/$GIT_REF"
 else
