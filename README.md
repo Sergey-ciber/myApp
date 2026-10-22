@@ -134,10 +134,33 @@ backend + frontend на nginx) и `Dockerfile` для каждой части.
 
 ### 1. Установить Docker на сервере
 
+На актуальных выпусках (Ubuntu 22.04/24.04) достаточно:
+
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER   # затем перелогиниться
 ```
+
+На выпусках, где стандартная поддержка уже закончилась (Ubuntu 20.04 «focal»),
+этот установщик падает на пакете `docker-model-plugin`, которого для focal нет,
+и из-за этого не ставит вообще ничего. Там репозиторий подключается вручную:
+
+```bash
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo tee /etc/apt/keyrings/docker.asc >/dev/null
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $CODENAME stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+```
+
+Проще всего не делать это руками, а сразу запустить `deploy/server-bootstrap.sh`
+(см. раздел «Деплой из git») — он ставит Docker именно так, создаёт каталог
+приложения и ключ для доступа к репозиторию.
 
 ### 2. Скопировать проект
 
