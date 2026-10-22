@@ -59,20 +59,30 @@ command -v git >/dev/null 2>&1 || fail "git не установлен"
 [ -n "${CORS_ORIGINS:-}" ]      || fail "Не задан CORS_ORIGINS"
 
 # ---------- код ----------
-if [ -d "$APP_DIR/.git" ]; then
-  [ -n "${REPO_URL:-}" ] || REPO_URL="$(git -C "$APP_DIR" remote get-url origin)"
-  log "Обновляю код в $APP_DIR (ветка $GIT_REF)"
-  git -C "$APP_DIR" remote set-url origin "$REPO_URL"
-  git -C "$APP_DIR" fetch --prune origin "$GIT_REF"
-  # reset --hard: сервер — не место для локальных правок, поэтому код всегда
-  # ровно совпадает с origin/$GIT_REF (файл .env не в git и не пострадает)
-  git -C "$APP_DIR" reset --hard "origin/$GIT_REF"
-else
-  [ -n "${REPO_URL:-}" ] || fail "Каталог $APP_DIR пуст, а REPO_URL не задан"
-  log "Клонирую $REPO_URL в $APP_DIR"
-  mkdir -p "$(dirname "$APP_DIR")"
-  git clone --branch "$GIT_REF" "$REPO_URL" "$APP_DIR"
+if [ ! -d "$APP_DIR/.git" ]; then
+  [ -n "${REPO_URL:-}" ] || fail "В $APP_DIR нет git-репозитория, а REPO_URL не задан"
+  if [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
+    # Каталог уже чем-то занят (например, туда скопировали проект руками):
+    # не удаляем содержимое, а превращаем его в рабочую копию репозитория.
+    log "В $APP_DIR нет git — инициализирую репозиторий"
+    git -C "$APP_DIR" init -q
+    git -C "$APP_DIR" remote add origin "$REPO_URL" 2>/dev/null \
+      || git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+  else
+    log "Клонирую $REPO_URL в $APP_DIR"
+    mkdir -p "$(dirname "$APP_DIR")"
+    git clone -q --branch "$GIT_REF" "$REPO_URL" "$APP_DIR"
+  fi
 fi
+
+[ -n "${REPO_URL:-}" ] || REPO_URL="$(git -C "$APP_DIR" remote get-url origin)"
+log "Обновляю код из $REPO_URL (ветка/тег: $GIT_REF)"
+git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+git -C "$APP_DIR" fetch --prune origin "$GIT_REF"
+# FETCH_HEAD подходит и для ветки, и для тега, и для коммита (origin/$GIT_REF
+# не существует для тега). reset --hard: сервер — не место для локальных
+# правок, код всегда равен выкачиваемой ревизии (.env не в git, он цел)
+git -C "$APP_DIR" reset --hard FETCH_HEAD
 
 # ---------- настройки ----------
 # .env перезаписывается на каждом деплое: источник истины — секреты в CI.
