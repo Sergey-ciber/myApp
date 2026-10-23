@@ -573,6 +573,72 @@ body {
 .assoc-answer .assoc-input { flex: 1; min-width: 0; }
 .assoc-check { color: var(--success); font-size: 16px; font-weight: 700; }
 
+/* Поле с открытыми подсказкой буквами: префикс серый, остальное — обычный текст */
+.assoc-input-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.assoc-input-wrap .assoc-input { flex: 1; min-width: 0; }
+.assoc-input-wrap.has-hint-prefix .assoc-input { color: transparent; caret-color: var(--text); }
+.assoc-input-live {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  pointer-events: none;
+  white-space: pre;
+  overflow: hidden;
+}
+.assoc-hint-prefix { color: #8b95a7; font-weight: 700; }
+
+/* Кнопка подсказки и обратный отсчёт рядом с таймером */
+.assoc-hint-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid #e6b422;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff7d6, #ffe9a8);
+  color: #7a5b00;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.12);
+  animation: assoc-hint-pulse 2s ease-in-out infinite;
+}
+.assoc-hint-btn:hover { background: #ffe9a8; }
+.assoc-hint-btn:disabled { opacity: 0.65; cursor: default; animation: none; }
+@keyframes assoc-hint-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 180, 34, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(230, 180, 34, 0); }
+}
+.assoc-hint-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #f6f7f9;
+  border: 1px dashed #d7dbe2;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.assoc-hint-notice {
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: #fff8de;
+  border: 1px solid #f0d788;
+  color: #7a5b00;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* Победа */
 .assoc-win { text-align: center; }
 .assoc-win-emoji { font-size: 56px; line-height: 1; }

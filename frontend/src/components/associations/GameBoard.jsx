@@ -3,15 +3,58 @@ import Modal from '../Modal'
 import Leaderboard from './Leaderboard'
 import PyramidHead from './PyramidHead'
 import { apiMessage } from '../../api/client'
-import { checkAnswer, restartGame } from '../../api/games'
+import { checkAnswer, requestHint, restartGame } from '../../api/games'
 import { COLUMN_SIZES, COLUMN_SPANS, formatTime, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
+/** Подсказки открываются по серверному таймеру: 3, 6, 9, 12 минут после старта. */
+const HINT_ONE_SECONDS = 180
+const HINT_TWO_SECONDS = 360
+const HINT_THREE_SECONDS = 540
+const HINT_FOUR_SECONDS = 720
+const MAX_HINT_LEVEL = 4
 
 const emptyValues = () => COLUMN_SIZES.map((size) => Array(size).fill(''))
 
 /** Ключ ячейки на сервере: колонка и позиция нумеруются с 1. */
 const cellKey = (columnIndex, position) => `${columnIndex + 1}:${position + 1}`
+
+/**
+ * Защита букв подсказки: префикс всегда остаётся в начале значения.
+ * Если игрок пытается стереть подсказанные буквы, возвращаем их обратно.
+ */
+const protectValue = (text, prefix) => {
+  if (!prefix) return text
+  const value = text || ''
+  const lowerValue = value.toLowerCase()
+  const lowerPrefix = prefix.toLowerCase()
+  if (lowerValue.startsWith(lowerPrefix)) {
+    return prefix + value.slice(prefix.length)
+  }
+  // текст стал короче подсказки или это её часть — восстанавливаем префикс
+  if (lowerPrefix.includes(lowerValue)) return prefix
+  return prefix + value
+}
+
+/** Добавляет новые буквы подсказки, сохраняя уже введённый игроком текст. */
+const withPrefix = (value, prefix, oldPrefix = '') => {
+  if (!prefix) return value || ''
+  const text = value || ''
+  const lowerText = text.toLowerCase()
+  const lowerPrefix = prefix.toLowerCase()
+  if (lowerText.startsWith(lowerPrefix)) {
+    return prefix + text.slice(prefix.length)
+  }
+  if (oldPrefix && lowerText.startsWith(oldPrefix.toLowerCase())) {
+    const rest = text.slice(oldPrefix.length)
+    if (rest.toLowerCase().startsWith(lowerPrefix)) {
+      return prefix + rest.slice(prefix.length)
+    }
+    return prefix + rest
+  }
+  return prefix + text
+}
+
 
 /**
  * Игровое поле-пирамида.
@@ -34,14 +77,22 @@ export default function GameBoard({
     COLUMN_SIZES.forEach((size, columnIndex) => {
       if (columnIndex === 0) return
       for (let position = 0; position < size; position++) {
-        const word = progress?.solved?.[cellKey(columnIndex, position)]
-        if (word) cells[columnIndex][position] = word
+        const key = cellKey(columnIndex, position)
+        const word = progress?.solved?.[key]
+        // сохранённые подсказки возвращаются в поля после перезагрузки
+        cells[columnIndex][position] = word || progress?.hintPrefixes?.[key] || ''
       }
     })
     return cells
   })
   // разгаданные ячейки этого пользователя: { "2:1": "слон" }
   const [solved, setSolved] = useState(() => progress?.solved || {})
+  // уровень подсказок (0..2) и открытые буквы неразгаданных ячеек
+  const [hintLevel, setHintLevel] = useState(progress?.hintLevel || 0)
+  const [hintPrefixes, setHintPrefixes] = useState(() => progress?.hintPrefixes || {})
+  const [takingHint, setTakingHint] = useState(false)
+  const [hintNotice, setHintNotice] = useState(false)
+  const hintWasAvailable = useRef(false)
   // отсчёт таймера: базовое время из прогресса + время с момента загрузки
   const [clock, setClock] = useState(() => ({
     baseElapsed: progress?.elapsedSeconds || 0,
@@ -75,6 +126,37 @@ export default function GameBoard({
 
   const isSolved = (columnIndex, position) =>
     columnIndex === 0 || Boolean(solved[cellKey(columnIndex, position)])
+
+  /** Префикс, открытый подсказкой; разгаданным ячейкам подсказки не нужны. */
+  const prefixFor = (columnIndex, position) => {
+    if (columnIndex === 0 || isSolved(columnIndex, position)) return ''
+    return hintPrefixes[cellKey(columnIndex, position)] || ''
+  }
+
+  // ближайшая подсказка: первая на 180-й секунде, вторая — на 360-й, третья — на 540-й, четвёртая — на 720-й
+  const nextHintAt = hintLevel >= MAX_HINT_LEVEL
+    ? null
+    : (hintLevel === 0
+      ? HINT_ONE_SECONDS
+      : hintLevel === 1
+        ? HINT_TWO_SECONDS
+        : hintLevel === 2
+          ? HINT_THREE_SECONDS
+          : HINT_FOUR_SECONDS)
+  const hintAvailable = finishedTime == null && nextHintAt != null && elapsed >= nextHintAt
+  const hintSecondsLeft = nextHintAt == null ? 0 : Math.max(0, nextHintAt - elapsed)
+
+  // уведомление в момент, когда подсказка становится доступна
+  useEffect(() => {
+    if (hintAvailable && !hintWasAvailable.current) {
+      setHintNotice(true)
+      hintWasAvailable.current = true
+      const timer = setTimeout(() => setHintNotice(false), 8000)
+      return () => clearTimeout(timer)
+    }
+    hintWasAvailable.current = hintAvailable
+    return undefined
+  }, [hintAvailable])
 
   /** Слово, которое известно клиенту: стартовое (колонка 1) или отгаданное. */
   const wordAt = (columnIndex, position) => (columnIndex === 0
@@ -115,6 +197,9 @@ export default function GameBoard({
       clearWrong(key)
       return
     }
+    const prefix = prefixFor(columnIndex, position)
+    // поле содержит только подсказку — это ещё не ответ, красным не подсвечиваем
+    const onlyPrefix = Boolean(prefix) && text.toLowerCase() === prefix.toLowerCase()
 
     setChecking((prev) => ({ ...prev, [key]: true }))
     setActionError('')
@@ -122,6 +207,8 @@ export default function GameBoard({
       const result = await checkAnswer(game.id, columnIndex + 1, position + 1, text)
       const nextSolved = result.progress?.solved || {}
       setSolved(nextSolved)
+      if (result.progress?.hintLevel != null) setHintLevel(result.progress.hintLevel)
+      if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
       if (result.correct) {
         clearWrong(key)
         // показываем слово в том виде, в каком оно сохранено в прогрессе
@@ -129,8 +216,10 @@ export default function GameBoard({
           ? words.map((word, p) => (p === position ? (nextSolved[key] || text) : word))
           : words)))
         if (columnIndex === LAST_COLUMN) finish(result.progress?.finishedSeconds)
-      } else {
+      } else if (!onlyPrefix) {
         setWrong((prev) => ({ ...prev, [key]: true }))
+      } else {
+        clearWrong(key)
       }
     } catch (err) {
       setActionError(apiMessage(err))
@@ -144,10 +233,70 @@ export default function GameBoard({
   }
 
   const handleChange = (columnIndex, position, text) => {
+    if (isSolved(columnIndex, position)) return
+    const next = protectValue(text, prefixFor(columnIndex, position))
     setValues((prev) => prev.map((words, c) => (c === columnIndex
-      ? words.map((word, p) => (p === position ? text : word))
+      ? words.map((word, p) => (p === position ? next : word))
       : words)))
-    if (!isSolved(columnIndex, position)) clearWrong(cellKey(columnIndex, position))
+    clearWrong(cellKey(columnIndex, position))
+  }
+
+  /** Не даём стереть подсказку и увести курсор перед ней. */
+  const handleInputKeyDown = (event, columnIndex, position) => {
+    const prefix = prefixFor(columnIndex, position)
+    if (prefix && (event.key === 'Backspace' || event.key === 'Delete')) {
+      const start = event.currentTarget.selectionStart ?? 0
+      const end = event.currentTarget.selectionEnd ?? 0
+      const collapsed = start === end
+      const crossesPrefix = collapsed
+        ? (event.key === 'Backspace' ? start <= prefix.length : start < prefix.length)
+        : start < prefix.length
+      if (crossesPrefix) {
+        event.preventDefault()
+        event.currentTarget.setSelectionRange(prefix.length, prefix.length)
+        return
+      }
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      check(columnIndex, position)
+    }
+  }
+
+  const guardCaret = (event, columnIndex, position) => {
+    const prefix = prefixFor(columnIndex, position)
+    if (!prefix) return
+    const input = event.currentTarget
+    const start = input.selectionStart
+    if (start == null || start >= prefix.length) return
+    const end = input.selectionEnd
+    input.setSelectionRange(prefix.length, end != null && end > prefix.length ? end : prefix.length)
+  }
+
+  /** Взять следующую подсказку: сервер сам проверяет, прошло ли нужное время. */
+  const getHint = async () => {
+    if (!hintAvailable || takingHint) return
+    setTakingHint(true)
+    setActionError('')
+    try {
+      const fresh = await requestHint(game.id)
+      const nextPrefixes = fresh?.hintPrefixes || {}
+      const nextSolved = fresh?.solved || {}
+      setSolved(nextSolved)
+      setHintLevel(fresh?.hintLevel ?? Math.min(MAX_HINT_LEVEL, hintLevel + 1))
+      setHintPrefixes(nextPrefixes)
+      setValues((prev) => prev.map((words, c) => words.map((word, p) => {
+        if (c === 0 || nextSolved[cellKey(c, p)]) return word
+        return withPrefix(word, nextPrefixes[cellKey(c, p)] || '',
+          hintPrefixes[cellKey(c, p)] || '')
+      })))
+      setWrong({})
+      setHintNotice(false)
+    } catch (err) {
+      setActionError(apiMessage(err))
+    } finally {
+      setTakingHint(false)
+    }
   }
 
   /** Начать заново: сервер обнуляет прогресс только этого пользователя. */
@@ -164,6 +313,11 @@ export default function GameBoard({
       setFinishedTime(null)
       setClock({ baseElapsed: 0, loadedAt: Date.now() })
       setElapsed(0)
+      setHintLevel(fresh.hintLevel || 0)
+      setHintPrefixes(fresh.hintPrefixes || {})
+      setHintNotice(false)
+      hintWasAvailable.current = false
+      setTakingHint(false)
     } catch (err) {
       setActionError(apiMessage(err))
     } finally {
@@ -177,6 +331,9 @@ export default function GameBoard({
     const cardSolved = isSolved(columnIndex, position)
     const cardWrong = !cardSolved && Boolean(wrong[key])
     const hintOpen = isHintOpen(columnIndex, position)
+    const prefix = prefixFor(columnIndex, position)
+    const value = cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]
+    const showPrefix = Boolean(prefix) && !cardSolved
 
     return (
       <div
@@ -201,21 +358,28 @@ export default function GameBoard({
         </div>
 
         <div className="assoc-answer">
-          <input
-            className="assoc-input"
-            value={cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]}
-            onChange={(event) => handleChange(columnIndex, position, event.target.value)}
-            onBlur={() => check(columnIndex, position)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                check(columnIndex, position)
-              }
-            }}
-            disabled={cardSolved || Boolean(checking[key])}
-            placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
-            aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
-          />
+          <div className={`assoc-input-wrap ${showPrefix ? 'has-hint-prefix' : ''}`}>
+            <input
+              className="assoc-input"
+              value={value}
+              onChange={(event) => handleChange(columnIndex, position, event.target.value)}
+              onBlur={() => check(columnIndex, position)}
+              onKeyDown={(event) => handleInputKeyDown(event, columnIndex, position)}
+              onKeyUp={(event) => guardCaret(event, columnIndex, position)}
+              onClick={(event) => guardCaret(event, columnIndex, position)}
+              onFocus={(event) => guardCaret(event, columnIndex, position)}
+              onSelect={(event) => guardCaret(event, columnIndex, position)}
+              disabled={cardSolved || Boolean(checking[key])}
+              placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
+              aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
+            />
+            {showPrefix && (
+              <span className="assoc-input-live" aria-hidden="true">
+                <span className="assoc-hint-prefix">{value.slice(0, prefix.length)}</span>
+                <span>{value.slice(prefix.length)}</span>
+              </span>
+            )}
+          </div>
           {cardSolved && <span className="assoc-check" aria-label="Верно">✓</span>}
         </div>
       </div>
@@ -238,6 +402,23 @@ export default function GameBoard({
             <span className="assoc-timer-value">{formatTime(timerValue)}</span>
             <span className="assoc-timer-label">{finishedTime != null ? 'финиш' : 'время'}</span>
           </div>
+          {finishedTime == null && nextHintAt != null && (
+            hintAvailable ? (
+              <button
+                type="button"
+                className="assoc-hint-btn"
+                onClick={getHint}
+                disabled={takingHint}
+              >
+                <span aria-hidden="true">💡</span>{' '}
+                {takingHint ? 'Открываем…' : 'Получить подсказку'}
+              </button>
+            ) : (
+              <span className="assoc-hint-countdown">
+                <span aria-hidden="true">💡</span> Подсказка через {formatTime(hintSecondsLeft)}
+              </span>
+            )
+          )}
           <button
             type="button"
             className="btn btn-small btn-secondary"
@@ -248,6 +429,12 @@ export default function GameBoard({
           </button>
         </div>
       </div>
+
+      {hintNotice && hintAvailable && (
+        <div className="assoc-hint-notice" role="status">
+          🔔 Доступна новая подсказка!
+        </div>
+      )}
 
       {actionError && <div className="alert alert-error">{actionError}</div>}
 

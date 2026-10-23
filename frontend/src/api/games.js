@@ -19,6 +19,9 @@ export const checkAnswer = (gameId, column, position, answer) =>
 /** Начать заново: обнуляет прогресс только текущего пользователя. */
 export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) => res.data)
 
+/** Взять подсказку: сервер проверяет время и открывает первые буквы неразгаданных слов. */
+export const requestHint = (id) => api.post(`/games/${id}/hint`).then((res) => res.data)
+
 /** Создать игру. Принимает { title, columns }, автор — текущий пользователь. */
 export const createGame = (game) => api.post('/games', game).then((res) => res.data)
 
