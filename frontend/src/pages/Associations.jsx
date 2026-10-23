@@ -73,8 +73,10 @@ export default function Associations() {
     })
   }, [loadGames])
 
-  // выбранная игра могла быть удалена — тогда открываем активную или первую
+  // выбранная игра могла быть удалена — тогда открываем активную или первую;
+  // пока список грузится, сохранённый выбор не трогаем
   useEffect(() => {
+    if (loading) return
     if (games.length === 0) {
       setSelectedGameId(null)
       return
@@ -84,7 +86,7 @@ export default function Associations() {
       const active = games.find((game) => game.active) || games[0]
       return active.id
     })
-  }, [games])
+  }, [games, loading])
 
   // сменился пользователь — сбрасываем режим и выбранную игру предыдущей сессии
   useEffect(() => {
