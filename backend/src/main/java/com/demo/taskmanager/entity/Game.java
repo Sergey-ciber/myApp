@@ -28,9 +28,18 @@ public class Game {
     @Column(name = "is_active", nullable = false)
     private boolean active = false;
 
+    /** Создатель игры: только он может редактировать и удалять её. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "creator_id", nullable = false)
+    private User creator;
+
     @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("columnNum ASC, position ASC")
     private List<GameWord> words = new ArrayList<>();
+
+    /** Результаты прохождений: удаляются вместе с игрой. */
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<GameResult> results = new ArrayList<>();
 
     /** Добавить слово в колонку columnNum (1..5) на позицию position (1..N). */
     public void addWord(int columnNum, int position, String word) {
@@ -58,5 +67,10 @@ public class Game {
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
 
+    public User getCreator() { return creator; }
+    public void setCreator(User creator) { this.creator = creator; }
+
     public List<GameWord> getWords() { return words; }
+
+    public List<GameResult> getResults() { return results; }
 }

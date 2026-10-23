@@ -477,6 +477,9 @@ body {
 }
 .assoc-badge.editing { background: #e6f0fb; color: #026aa7; }
 .assoc-game-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.assoc-game-author { font-weight: 600; color: var(--text); }
+.assoc-badge.own { background: #eef3fa; color: #1d4f8f; margin-left: 8px; }
+.assoc-saved-hint { margin: -6px 0 14px; }
 
 /* Режим игрока */
 .assoc-player { display: flex; flex-direction: column; gap: 14px; }
@@ -487,6 +490,8 @@ body {
   gap: 16px;
   flex-wrap: wrap;
 }
+.assoc-player-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.assoc-player-author { font-size: 12px; color: var(--text-muted); }
 .assoc-player-title { margin: 0; font-size: 20px; }
 .assoc-game-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
 .assoc-game-select select {
@@ -506,6 +511,29 @@ body {
   flex-wrap: wrap;
 }
 .assoc-board-tip { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+/* таймер прохождения + перезапуск */
+.assoc-board-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.assoc-timer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #eef3fa;
+  border: 1px solid #d5e2f2;
+  font-variant-numeric: tabular-nums;
+}
+.assoc-timer-icon { font-size: 14px; }
+.assoc-timer-value { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: #1d2b45; }
+.assoc-timer-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.assoc-timer.is-finished { background: #e9f8ee; border-color: #b6e2c5; }
+.assoc-timer.is-finished .assoc-timer-value { color: #2d8a4e; }
 
 .assoc-card {
   display: flex;
@@ -548,11 +576,67 @@ body {
 /* Победа */
 .assoc-win { text-align: center; }
 .assoc-win-emoji { font-size: 56px; line-height: 1; }
-.assoc-win-text { margin: 12px 0 20px; font-size: 18px; font-weight: 600; }
+.assoc-win-text { margin: 12px 0 16px; font-size: 18px; font-weight: 600; }
 .assoc-win .form-actions { justify-content: center; }
+.assoc-win-error { margin: 0 0 12px; font-size: 13px; color: #a33a3a; }
+.assoc-win .assoc-leaderboard {
+  text-align: left;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: #f8fafd;
+  box-shadow: none;
+}
+.assoc-win .assoc-leaderboard-title { font-size: 14px; }
+.assoc-win .assoc-table { min-width: 460px; font-size: 13px; }
+.assoc-win .assoc-table td { padding: 7px 8px; }
+
+/* Таблица результатов */
+.assoc-leaderboard {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+.assoc-leaderboard-title { margin: 0 0 10px; font-size: 16px; }
+.assoc-leaderboard-empty { margin: 0; font-size: 13px; color: var(--text-muted); }
+.assoc-table-wrap { overflow-x: auto; }
+.assoc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px; }
+.assoc-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.assoc-table td { padding: 9px 10px; border-bottom: 1px solid #eef1f6; }
+.assoc-table tr:last-child td { border-bottom: none; }
+.assoc-table tbody tr.is-me { background: #f2f8ff; }
+.assoc-table tbody tr.is-me td { font-weight: 600; }
+.assoc-col-place { width: 74px; }
+.assoc-col-time { width: 92px; }
+.assoc-col-date { width: 150px; }
+.assoc-place { font-size: 15px; }
+.assoc-time-cell { font-variant-numeric: tabular-nums; font-weight: 700; }
+.assoc-date-cell { color: var(--text-muted); white-space: nowrap; }
+.assoc-me {
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4f8f;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.assoc-leaderboard-more { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
 
 @media (max-width: 800px) {
   .assoc-pyramid-wrap { min-width: 900px; }
   .assoc-player-title { font-size: 17px; }
   .assoc-form-actions { flex-wrap: wrap; }
+  .assoc-leaderboard { padding: 12px 12px; }
+  .assoc-timer-value { font-size: 16px; }
 }

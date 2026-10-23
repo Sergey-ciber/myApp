@@ -1,15 +1,22 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import Modal from '../Modal'
+import Leaderboard from './Leaderboard'
 import PyramidHead from './PyramidHead'
-import { COLUMN_SIZES, COLUMN_SPANS, normalizeWord, toPairs } from './constants'
+import {
+  COLUMN_SIZES,
+  COLUMN_SPANS,
+  formatTime,
+  normalizeWord,
+  toPairs,
+} from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 
 const emptyValues = () => COLUMN_SIZES.map((size) => Array(size).fill(''))
 
-/** Сохранённый прогресс игрока (localStorage): значения полей и разгаданные слова. */
+/** Сохранённый прогресс игрока: значения полей, разгаданные слова, старт и время победы. */
 function readProgress(storageKey) {
-  const fallback = { values: emptyValues(), solved: {} }
+  const fallback = { values: emptyValues(), solved: {}, startedAt: null, time: null }
   try {
     const raw = localStorage.getItem(storageKey)
     if (!raw) return fallback
@@ -20,7 +27,9 @@ function readProgress(storageKey) {
         return typeof value === 'string' ? value : ''
       }))
     const solved = saved?.solved && typeof saved.solved === 'object' ? saved.solved : {}
-    return { values, solved }
+    const startedAt = Number(saved?.startedAt) > 0 ? Number(saved.startedAt) : null
+    const time = Number(saved?.time) > 0 ? Number(saved.time) : null
+    return { values, solved, startedAt, time }
   } catch {
     // битые данные прогресса просто игнорируем
     return fallback
@@ -35,23 +44,51 @@ function readProgress(storageKey) {
  * - Колонка 2: 8 ответов, каждый стоит на одной строке со своей парой.
  * - Колонки 3-5: ответ занимает 2, 4 и 8 строк и центрируется по двум
  *   подсказкам предыдущей колонки (2^(N-1) строк).
+ *
+ * Таймер стартует при открытии игры (момент сохраняется в localStorage, чтобы
+ * перезагрузка страницы не обнуляла время), останавливается на верном слове
+ * колонки 5 и передаётся наверх для сохранения результата.
  */
-export default function GameBoard({ game }) {
+export default function GameBoard({
+  game, onWin, leaderboard, leaderboardLoading, currentUserId, resultError,
+}) {
   const storageKey = `assoc:progress:${game.id}`
   const [initial] = useState(() => readProgress(storageKey))
   const [values, setValues] = useState(initial.values)
   const [solved, setSolved] = useState(initial.solved)
+  const [startedAt, setStartedAt] = useState(() => initial.startedAt || Date.now())
+  const [finishedTime, setFinishedTime] = useState(initial.time)
+  const [elapsed, setElapsed] = useState(initial.time ?? 0)
   const [wrong, setWrong] = useState({})
   const [win, setWin] = useState(false)
+  // защита от двойной отправки результата (change + blur на одном ответе)
+  const finishedRef = useRef(initial.time != null)
 
-  // прогресс сохраняется, чтобы обновление страницы не сбрасывало игру
+  // прогресс и время сохраняются, чтобы обновление страницы не сбрасывало игру
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ values, solved }))
+      localStorage.setItem(storageKey, JSON.stringify({
+        values,
+        solved,
+        startedAt,
+        time: finishedTime,
+      }))
     } catch {
       // переполнение localStorage не должно ломать игру
     }
-  }, [storageKey, values, solved])
+  }, [storageKey, values, solved, startedAt, finishedTime])
+
+  // тикающий таймер; после победы он замирает на сохранённом времени
+  useEffect(() => {
+    if (finishedTime != null) {
+      setElapsed(finishedTime)
+      return undefined
+    }
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+    tick()
+    const timer = setInterval(tick, 250)
+    return () => clearInterval(timer)
+  }, [startedAt, finishedTime])
 
   // слова первой колонки даны изначально, поэтому считаем их разгаданными
   const isSolved = (columnIndex, position) =>
@@ -69,11 +106,24 @@ export default function GameBoard({ game }) {
       return next
     })
 
+  /** Победа: останавливаем таймер и отдаём время наверх для сохранения. */
+  const finishGame = () => {
+    if (finishedRef.current) return
+    finishedRef.current = true
+    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+    setFinishedTime(seconds)
+    setElapsed(seconds)
+    setWin(true)
+    if (onWin) {
+      Promise.resolve(onWin(seconds)).catch(() => {})
+    }
+  }
+
   const markSolved = (columnIndex, position, key) => {
     setSolved((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
     clearWrong(key)
     // верный ответ в последней колонке — победа, независимо от остальных слов
-    if (columnIndex === LAST_COLUMN) setWin(true)
+    if (columnIndex === LAST_COLUMN) finishGame()
   }
 
   const handleChange = (columnIndex, position, text) => {
@@ -107,10 +157,14 @@ export default function GameBoard({ game }) {
   }
 
   const restart = () => {
+    finishedRef.current = false
     setValues(emptyValues())
     setSolved({})
     setWrong({})
     setWin(false)
+    setFinishedTime(null)
+    setElapsed(0)
+    setStartedAt(Date.now())
     try {
       localStorage.removeItem(storageKey)
     } catch {
@@ -173,6 +227,8 @@ export default function GameBoard({ game }) {
     )
   }
 
+  const timerValue = finishedTime ?? elapsed
+
   return (
     <div className="assoc-board">
       <div className="assoc-board-head">
@@ -180,9 +236,17 @@ export default function GameBoard({ game }) {
           Разгадайте слово в колонке 5 — это победа. Подсказки следующих колонок
           открываются, когда разгаданы оба слова пары.
         </p>
-        <button type="button" className="btn btn-small btn-secondary" onClick={restart}>
-          Начать заново
-        </button>
+
+        <div className="assoc-board-tools">
+          <div className={`assoc-timer ${finishedTime != null ? 'is-finished' : ''}`}>
+            <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
+            <span className="assoc-timer-value">{formatTime(timerValue)}</span>
+            <span className="assoc-timer-label">{finishedTime != null ? 'финиш' : 'время'}</span>
+          </div>
+          <button type="button" className="btn btn-small btn-secondary" onClick={restart}>
+            Начать заново
+          </button>
+        </div>
       </div>
 
       <div className="assoc-scroll">
@@ -241,7 +305,19 @@ export default function GameBoard({ game }) {
         <Modal title="Победа!" onClose={() => setWin(false)}>
           <div className="assoc-win">
             <div className="assoc-win-emoji">🏆</div>
-            <p className="assoc-win-text">Поздравляем! Вы победитель игры «{game.title}»!</p>
+            <p className="assoc-win-text">
+              Поздравляем! Вы победитель! Ваше время: <strong>{finishedTime} сек.</strong>
+            </p>
+            {resultError && <p className="assoc-win-error">{resultError}</p>}
+
+            <Leaderboard
+              entries={leaderboard || []}
+              loading={leaderboardLoading}
+              currentUserId={currentUserId}
+              limit={5}
+              title="Лучшие результаты"
+            />
+
             <div className="form-actions">
               <button type="button" className="btn btn-primary" onClick={restart}>
                 Начать заново

@@ -3,6 +3,7 @@ import { apiMessage } from '../api/client'
 import { fetchGames } from '../api/games'
 import AdminPanel from '../components/associations/AdminPanel'
 import PlayerPanel from '../components/associations/PlayerPanel'
+import { useAuth } from '../context/AuthContext'
 
 // режим и выбранная игра переживают перезагрузку страницы
 const MODE_KEY = 'assoc:mode'
@@ -21,6 +22,7 @@ function readStored(key) {
  * Администратор создаёт игру из 31 слова, игрок разгадывает пирамиду.
  */
 export default function Associations() {
+  const { user } = useAuth()
   const [mode, setMode] = useState(() => (readStored(MODE_KEY) === 'player' ? 'player' : 'admin'))
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,6 +57,19 @@ export default function Associations() {
       })
     })
   }, [loadGames])
+
+  // выбранная игра могла быть удалена — тогда открываем активную или первую
+  useEffect(() => {
+    if (games.length === 0) {
+      setSelectedGameId(null)
+      return
+    }
+    setSelectedGameId((current) => {
+      if (games.some((game) => game.id === current)) return current
+      const active = games.find((game) => game.active) || games[0]
+      return active.id
+    })
+  }, [games])
 
   useEffect(() => {
     try {
@@ -121,9 +136,19 @@ export default function Associations() {
       {loading ? (
         <div className="page-loader">Загрузка игр…</div>
       ) : mode === 'admin' ? (
-        <AdminPanel games={games} onReload={loadGames} onOpenForPlayer={openForPlayer} />
+        <AdminPanel
+          games={games}
+          onReload={loadGames}
+          onPlay={openForPlayer}
+          currentUserId={user?.id}
+        />
       ) : (
-        <PlayerPanel games={games} gameId={selectedGameId} onSelectGame={setSelectedGameId} />
+        <PlayerPanel
+          games={games}
+          gameId={selectedGameId}
+          onSelectGame={setSelectedGameId}
+          currentUserId={user?.id}
+        />
       )}
     </div>
   )

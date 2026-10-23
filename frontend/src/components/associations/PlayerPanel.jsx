@@ -1,20 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiMessage } from '../../api/client'
-import { fetchGame } from '../../api/games'
+import { fetchGame, fetchLeaderboard, submitResult } from '../../api/games'
 import GameBoard from './GameBoard'
+import Leaderboard from './Leaderboard'
 
 /**
- * Режим игрока: выбор игры по названию и игровое поле.
+ * Режим игрока: выбор любой игры платформы, игровое поле, таймер и рейтинг.
  */
-export default function PlayerPanel({ games, gameId, onSelectGame }) {
+export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId }) {
   const [game, setGame] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [leaderboard, setLeaderboard] = useState([])
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+  const [resultError, setResultError] = useState('')
 
   useEffect(() => {
     if (!gameId) {
       setGame(null)
-      return
+      return undefined
     }
     let cancelled = false
     setLoading(true)
@@ -25,6 +29,35 @@ export default function PlayerPanel({ games, gameId, onSelectGame }) {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [gameId])
+
+  const loadLeaderboard = useCallback(async (id) => {
+    if (!id) return
+    setLeaderboardLoading(true)
+    try {
+      setLeaderboard(await fetchLeaderboard(id))
+    } catch (err) {
+      setResultError(apiMessage(err))
+    } finally {
+      setLeaderboardLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    setLeaderboard([])
+    setResultError('')
+    loadLeaderboard(game?.id)
+  }, [game, loadLeaderboard])
+
+  /** Победа: сохраняем время на бэкенде и обновляем рейтинг. */
+  const handleWin = async (timeSeconds) => {
+    setResultError('')
+    try {
+      await submitResult(game.id, timeSeconds)
+    } catch (err) {
+      setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`)
+    }
+    await loadLeaderboard(game.id)
+  }
 
   if (games.length === 0) {
     return (
@@ -41,24 +74,40 @@ export default function PlayerPanel({ games, gameId, onSelectGame }) {
   return (
     <div className="assoc-player">
       <div className="assoc-player-top">
-        <h2 className="assoc-player-title">Игра в ассоциации — {game.title}</h2>
+        <div className="assoc-player-heading">
+          <h2 className="assoc-player-title">Игра в ассоциации — {game.title}</h2>
+          <span className="assoc-player-author">автор: {game.creatorUsername || 'неизвестен'}</span>
+        </div>
 
-        {games.length > 1 && (
-          <label className="assoc-game-select">
-            <span>Выбрать игру</span>
-            <select value={game.id} onChange={(event) => onSelectGame(Number(event.target.value))}>
-              {games.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}{item.active ? ' (активная)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <label className="assoc-game-select">
+          <span>Выбрать игру</span>
+          <select value={game.id} onChange={(event) => onSelectGame(Number(event.target.value))}>
+            {games.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title} — {item.creatorUsername || 'без автора'}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      {/* key по id игры: при переключении прогресс и состояние начинаются заново */}
-      <GameBoard key={game.id} game={game} />
+      {/* key по id игры: при переключении прогресс и таймер начинаются заново */}
+      <GameBoard
+        key={game.id}
+        game={game}
+        onWin={handleWin}
+        leaderboard={leaderboard}
+        leaderboardLoading={leaderboardLoading}
+        currentUserId={currentUserId}
+        resultError={resultError}
+      />
+
+      <Leaderboard
+        entries={leaderboard}
+        loading={leaderboardLoading}
+        currentUserId={currentUserId}
+        title="Рейтинг игры"
+      />
     </div>
   )
 }

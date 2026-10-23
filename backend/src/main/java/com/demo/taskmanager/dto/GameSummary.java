@@ -1,13 +1,18 @@
 package com.demo.taskmanager.dto;
 
 import com.demo.taskmanager.entity.Game;
+import com.demo.taskmanager.entity.User;
 
 import java.time.Instant;
 
-/** Краткая карточка игры для списка сохранённых игр. */
-public record GameSummary(Long id, String title, Instant createdAt, boolean active) {
+/** Краткая карточка игры для списка: ещё и автор, чтобы UI показывал права. */
+public record GameSummary(Long id, String title, Instant createdAt, boolean active,
+                          Long creatorId, String creatorUsername) {
 
     public static GameSummary from(Game game) {
-        return new GameSummary(game.getId(), game.getTitle(), game.getCreatedAt(), game.isActive());
+        User creator = game.getCreator();
+        return new GameSummary(game.getId(), game.getTitle(), game.getCreatedAt(), game.isActive(),
+                creator == null ? null : creator.getId(),
+                creator == null ? null : creator.getUsername());
     }
 }

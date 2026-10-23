@@ -54,3 +54,21 @@ export function toPairs(words) {
   }
   return pairs
 }
+
+/** Секунды в формат таймера: 7 -> "0:07", 75 -> "1:15". */
+export function formatTime(totalSeconds) {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const minutes = Math.floor(safe / 60)
+  const seconds = safe % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+/** Дата прохождения для таблицы результатов. */
+export function formatDate(instant) {
+  if (!instant) return '—'
+  const date = new Date(instant)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+}

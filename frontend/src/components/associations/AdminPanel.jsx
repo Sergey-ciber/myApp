@@ -17,7 +17,7 @@ import {
  * Форма выложена той же сеткой, что и игровое поле: ответ стоит напротив своей
  * пары подсказок, а карточки верхних колонок центрируются по двум нижним.
  */
-export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
+export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [title, setTitle] = useState('')
   const [columns, setColumns] = useState(emptyColumns)
   const [editingId, setEditingId] = useState(null)
@@ -50,7 +50,11 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
     setError('')
   }
 
+  /** Своя игра — только у неё есть «Редактировать» и «Удалить». */
+  const isOwn = (game) => game.creatorId != null && game.creatorId === currentUserId
+
   const startEdit = async (game) => {
+    if (!isOwn(game)) return
     setLoadingGame(true)
     setError('')
     setMessage('')
@@ -108,16 +112,18 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
     await onReload()
   }
 
-  const openForPlayer = async (game) => {
+  const playGame = async (game) => {
     setError('')
     try {
-      // активная игра открывается игроку по умолчанию
-      await activateGame(game.id)
-      await onReload()
-      onOpenForPlayer(game.id)
-    } catch (err) {
-      setError(apiMessage(err))
+      // своя игра становится игрой по умолчанию, чужая — просто открывается
+      if (isOwn(game)) {
+        await activateGame(game.id)
+        await onReload()
+      }
+    } catch {
+      // активация не критична: игру всё равно можно открыть
     }
+    onPlay(game.id)
   }
 
   /** Поле ответа с подписью, какая пара слов предыдущей колонки к нему относится. */
@@ -236,7 +242,11 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
       </form>
 
       <section className="assoc-saved">
-        <h2>Сохранённые игры</h2>
+        <h2>Игры на платформе</h2>
+        <p className="hint assoc-saved-hint">
+          Видны все игры. Редактировать и удалять можно только свои — для чужих игр
+          доступна кнопка «Играть».
+        </p>
         {games.length === 0 ? (
           <div className="empty-state">
             Пока нет ни одной игры. Заполните форму выше и нажмите «Сохранить игру».
@@ -246,36 +256,44 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
             {games.map((game) => (
               <li key={game.id} className={`assoc-game ${game.active ? 'active' : ''}`}>
                 <div className="assoc-game-info">
-                  <span className="assoc-game-title">{game.title}</span>
+                  <span className="assoc-game-title">
+                    {game.title}
+                    {isOwn(game) && <span className="assoc-badge own">моя игра</span>}
+                  </span>
                   <span className="assoc-game-meta">
-                    {new Date(game.createdAt).toLocaleString('ru-RU')}
-                    {game.active && <span className="assoc-badge">активная</span>}
+                    <span className="assoc-game-author">автор: {game.creatorUsername || 'неизвестен'}</span>
+                    <span className="assoc-game-date">{new Date(game.createdAt).toLocaleString('ru-RU')}</span>
+                    {game.active && <span className="assoc-badge">по умолчанию</span>}
                     {editingId === game.id && <span className="assoc-badge editing">редактируется</span>}
                   </span>
                 </div>
                 <div className="assoc-game-actions">
                   <button
                     type="button"
-                    className="btn btn-small btn-secondary"
-                    onClick={() => startEdit(game)}
-                    disabled={loadingGame}
-                  >
-                    Редактировать
-                  </button>
-                  <button
-                    type="button"
                     className="btn btn-small btn-primary"
-                    onClick={() => openForPlayer(game)}
+                    onClick={() => playGame(game)}
                   >
-                    Открыть для игрока
+                    Играть
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-small btn-danger"
-                    onClick={() => setDeleting(game)}
-                  >
-                    Удалить
-                  </button>
+                  {isOwn(game) && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-small btn-secondary"
+                        onClick={() => startEdit(game)}
+                        disabled={loadingGame}
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-small btn-danger"
+                        onClick={() => setDeleting(game)}
+                      >
+                        Удалить
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
@@ -287,7 +305,7 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
         <ConfirmDialog
           title="Удаление игры"
           message={<>Удалить игру «<strong>{deleting.title}</strong>»?</>}
-          hint="Вместе с игрой будут удалены все её слова."
+          hint="Вместе с игрой будут удалены все её слова и результаты прохождений."
           confirmLabel="Удалить игру"
           busyLabel="Удаление…"
           errorMessage="Не удалось удалить игру"
