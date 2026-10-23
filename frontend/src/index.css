@@ -86,7 +86,7 @@ body {
 /* ---------- Pages ---------- */
 .page { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px; }
 .page-narrow { max-width: 720px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 .page-header h1 { margin: 0; font-size: 24px; }
 .page-loader { padding: 48px; text-align: center; color: var(--text-muted); }
 
@@ -292,6 +292,14 @@ body {
 @media (max-width: 800px) {
   .board-columns { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
+
+  /* на узких экранах шапка не должна вылезать за край страницы */
+  .navbar { padding: 0 12px; gap: 10px; }
+  .navbar-left { gap: 12px; min-width: 0; }
+  .navbar-link { font-size: 13px; }
+  .navbar-username { display: none; }
+  .navbar-user { gap: 8px; }
+  .navbar-user .btn { padding: 6px 10px; }
 }
 
 /* ---------- Игра в ассоциации ---------- */
@@ -331,22 +339,34 @@ body {
 /* Горизонтальная прокрутка пирамиды на узких экранах */
 .assoc-scroll { overflow-x: auto; padding-bottom: 8px; }
 
-.assoc-columns {
+/* ---------------- Пирамида: строгое выравнивание по строкам ----------------
+   8 строк = 8 пар слов первой колонки.
+   Колонка 2 — по одной строке на ответ (напротив своей пары).
+   Колонки 3-5 занимают 2, 4 и 8 строк: карточка стоит по центру своих подсказок. */
+.assoc-pyramid-wrap { min-width: 960px; }
+
+.assoc-pyramid-head {
   display: grid;
-  grid-template-columns: repeat(5, minmax(180px, 1fr));
-  gap: 14px;
-  min-width: 960px;
-  align-items: start;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  column-gap: 14px;
+  margin-bottom: 10px;
 }
-.assoc-column {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  background: #eef1f6;
-  border-radius: 12px;
+
+.assoc-pyramid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: minmax(92px, auto);
+  column-gap: 14px;
+  row-gap: 10px;
 }
-.assoc-column-header { padding: 4px 6px 0; }
+/* в форме админа в строке два инпута с подписями — строки выше */
+.assoc-pyramid--admin { grid-auto-rows: minmax(112px, auto); }
+
+/* ячейка растянута на отведённые ей строки, а содержимое центрируется */
+.assoc-cell { display: flex; align-items: center; min-width: 0; }
+.assoc-cell > * { width: 100%; }
+
+.assoc-column-header { padding: 0 4px; }
 .assoc-column-header h3 { margin: 0; font-size: 14px; }
 .assoc-column-header span { font-size: 12px; color: var(--text-muted); }
 
@@ -410,7 +430,6 @@ body {
 }
 
 /* Карточки ответов в форме администратора */
-.assoc-cards { display: flex; flex-direction: column; gap: 8px; }
 .assoc-edit-card {
   display: flex;
   flex-direction: column;
@@ -533,7 +552,7 @@ body {
 .assoc-win .form-actions { justify-content: center; }
 
 @media (max-width: 800px) {
-  .assoc-columns { min-width: 900px; }
+  .assoc-pyramid-wrap { min-width: 900px; }
   .assoc-player-title { font-size: 17px; }
   .assoc-form-actions { flex-wrap: wrap; }
 }

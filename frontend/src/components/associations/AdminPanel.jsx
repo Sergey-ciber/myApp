@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { apiMessage } from '../../api/client'
 import { activateGame, createGame, deleteGame, fetchGame, updateGame } from '../../api/games'
 import ConfirmDialog from '../ConfirmDialog'
+import PyramidHead from './PyramidHead'
 import {
-  COLUMN_HEADERS,
   COLUMN_SIZES,
+  COLUMN_SPANS,
   cloneColumns,
   emptyColumns,
   hintLabel,
@@ -13,6 +14,8 @@ import {
 
 /**
  * Режим администратора: форма из 5 колонок (16/8/4/2/1) + список сохранённых игр.
+ * Форма выложена той же сеткой, что и игровое поле: ответ стоит напротив своей
+ * пары подсказок, а карточки верхних колонок центрируются по двум нижним.
  */
 export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
   const [title, setTitle] = useState('')
@@ -117,6 +120,23 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
     }
   }
 
+  /** Поле ответа с подписью, какая пара слов предыдущей колонки к нему относится. */
+  const renderEditor = (columnIndex, position) => (
+    <div className={`assoc-edit-card ${isCellInvalid(columnIndex, position) ? 'invalid' : ''}`}>
+      <div className="assoc-edit-card-head">
+        <span className="assoc-edit-label">Ответ {position + 1}</span>
+        <span className="assoc-hint">{hintLabel(columnIndex, position)}</span>
+      </div>
+      <input
+        value={columns[columnIndex][position]}
+        onChange={(event) => setWord(columnIndex, position, event.target.value)}
+        className={`assoc-input ${isCellInvalid(columnIndex, position) ? 'input-invalid' : ''}`}
+        aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
+        placeholder="Введите слово"
+      />
+    </div>
+  )
+
   return (
     <div className="assoc-admin">
       <form className="assoc-form" onSubmit={save} noValidate>
@@ -140,61 +160,66 @@ export default function AdminPanel({ games, onReload, onOpenForPlayer }) {
         {message && <div className="alert alert-success">{message}</div>}
 
         <div className="assoc-scroll">
-          <div className="assoc-columns">
-            {COLUMN_SIZES.map((size, columnIndex) => (
-              <section className="assoc-column" key={columnIndex}>
-                <header className="assoc-column-header">
-                  <h3>{COLUMN_HEADERS[columnIndex].title}</h3>
-                  <span>{COLUMN_HEADERS[columnIndex].subtitle}</span>
-                </header>
+          <div className="assoc-pyramid-wrap">
+            <PyramidHead />
 
-                {columnIndex === 0 ? (
-                  <div className="assoc-pairs">
-                    {toPairs(columns[0]).map((pair, pairIndex) => (
-                      <div className="assoc-pair" key={pairIndex}>
-                        <span className="assoc-pair-num">Пара {pairIndex + 1}</span>
-                        {pair.map((word, offset) => {
-                          const position = pairIndex * 2 + offset
-                          return (
-                            <label className="assoc-word-input" key={position}>
-                              <span>Слово {position + 1}</span>
-                              <input
-                                value={columns[0][position]}
-                                onChange={(event) => setWord(0, position, event.target.value)}
-                                className={`assoc-input ${isCellInvalid(0, position) ? 'input-invalid' : ''}`}
-                                aria-label={`Слово ${position + 1}`}
-                                placeholder={`Слово ${position + 1}`}
-                              />
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ))}
+            <div className="assoc-pyramid assoc-pyramid--admin">
+              {/* Колонка 1: пара слов и её ответ из колонки 2 — на одной строке */}
+              {toPairs(columns[0]).map((pair, row) => (
+                <Fragment key={`row-${row}`}>
+                  <div
+                    className="assoc-cell"
+                    data-column="1"
+                    style={{ gridColumn: 1, gridRow: row + 1 }}
+                  >
+                    <div className="assoc-pair">
+                      <span className="assoc-pair-num">Пара {row + 1}</span>
+                      {pair.map((word, offset) => {
+                        const position = row * 2 + offset
+                        return (
+                          <label className="assoc-word-input" key={position}>
+                            <span>Слово {position + 1}</span>
+                            <input
+                              value={columns[0][position]}
+                              onChange={(event) => setWord(0, position, event.target.value)}
+                              className={`assoc-input ${isCellInvalid(0, position) ? 'input-invalid' : ''}`}
+                              aria-label={`Слово ${position + 1}`}
+                              placeholder={`Слово ${position + 1}`}
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
                   </div>
-                ) : (
-                  <div className="assoc-cards">
-                    {Array.from({ length: size }, (_, position) => (
-                      <div
-                        key={position}
-                        className={`assoc-edit-card ${isCellInvalid(columnIndex, position) ? 'invalid' : ''}`}
-                      >
-                        <div className="assoc-edit-card-head">
-                          <span className="assoc-edit-label">Ответ {position + 1}</span>
-                          <span className="assoc-hint">{hintLabel(columnIndex, position)}</span>
-                        </div>
-                        <input
-                          value={columns[columnIndex][position]}
-                          onChange={(event) => setWord(columnIndex, position, event.target.value)}
-                          className={`assoc-input ${isCellInvalid(columnIndex, position) ? 'input-invalid' : ''}`}
-                          aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
-                          placeholder="Введите слово"
-                        />
-                      </div>
-                    ))}
+
+                  <div
+                    className="assoc-cell"
+                    data-column="2"
+                    style={{ gridColumn: 2, gridRow: row + 1 }}
+                  >
+                    {renderEditor(1, row)}
                   </div>
-                )}
-              </section>
-            ))}
+                </Fragment>
+              ))}
+
+              {/* Колонки 3-5: карточка занимает 2/4/8 строк и центрируется по своим подсказкам */}
+              {[2, 3, 4].map((columnIndex) => {
+                const span = COLUMN_SPANS[columnIndex]
+                return Array.from({ length: COLUMN_SIZES[columnIndex] }, (_, position) => (
+                  <div
+                    key={`card-${columnIndex}-${position}`}
+                    className="assoc-cell"
+                    data-column={columnIndex + 1}
+                    style={{
+                      gridColumn: columnIndex + 1,
+                      gridRow: `${position * span + 1} / span ${span}`,
+                    }}
+                  >
+                    {renderEditor(columnIndex, position)}
+                  </div>
+                ))
+              })}
+            </div>
           </div>
         </div>
 

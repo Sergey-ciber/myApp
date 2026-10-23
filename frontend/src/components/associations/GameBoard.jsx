@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Modal from '../Modal'
-import { COLUMN_HEADERS, COLUMN_SIZES, normalizeWord, toPairs } from './constants'
+import PyramidHead from './PyramidHead'
+import { COLUMN_SIZES, COLUMN_SPANS, normalizeWord, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 
@@ -27,9 +28,13 @@ function readProgress(storageKey) {
 }
 
 /**
- * Игровое поле: 5 колонок (16/8/4/2/1).
- * Подсказка карточки i в колонке N+1 — пара слов (2i-1, 2i) из колонки N.
- * В колонке 2 подсказки видны сразу, дальше открываются, когда разгаданы оба слова пары.
+ * Игровое поле-пирамида.
+ *
+ * Раскладка: CSS Grid из 8 строк (по числу пар слов в первой колонке).
+ * - Колонка 1: 8 пар, каждая занимает одну строку.
+ * - Колонка 2: 8 ответов, каждый стоит на одной строке со своей парой.
+ * - Колонки 3-5: ответ занимает 2, 4 и 8 строк и центрируется по двум
+ *   подсказкам предыдущей колонки (2^(N-1) строк).
  */
 export default function GameBoard({ game }) {
   const storageKey = `assoc:progress:${game.id}`
@@ -113,6 +118,61 @@ export default function GameBoard({ game }) {
     }
   }
 
+  /** Карточка ответа: подсказка пары + поле ввода. */
+  const renderCard = (columnIndex, position) => {
+    const key = `${columnIndex}:${position}`
+    const cardSolved = isSolved(columnIndex, position)
+    const cardWrong = !cardSolved && Boolean(wrong[key])
+    const hintOpen = isHintOpen(columnIndex, position)
+    const hintWords = hintOpen
+      ? [
+        game.columns[columnIndex - 1][position * 2],
+        game.columns[columnIndex - 1][position * 2 + 1],
+      ]
+      : null
+
+    return (
+      <div
+        className={[
+          'assoc-card',
+          cardSolved ? 'is-solved' : '',
+          cardWrong ? 'is-wrong' : '',
+          hintOpen ? 'hint-open' : 'hint-locked',
+        ].join(' ').trim()}
+      >
+        <div className="assoc-card-hint">
+          {hintOpen ? (
+            <>
+              <span className="assoc-hint-label">Подсказка</span>{' '}
+              <strong>{hintWords[0]}</strong> + <strong>{hintWords[1]}</strong>
+            </>
+          ) : (
+            'Подсказки откроются позже'
+          )}
+        </div>
+
+        <div className="assoc-answer">
+          <input
+            className="assoc-input"
+            value={values[columnIndex][position]}
+            onChange={(event) => handleChange(columnIndex, position, event.target.value)}
+            onBlur={() => handleCommit(columnIndex, position)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                handleCommit(columnIndex, position)
+              }
+            }}
+            disabled={cardSolved}
+            placeholder="Ваш ответ"
+            aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
+          />
+          {cardSolved && <span className="assoc-check" aria-label="Верно">✓</span>}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="assoc-board">
       <div className="assoc-board-head">
@@ -126,85 +186,54 @@ export default function GameBoard({ game }) {
       </div>
 
       <div className="assoc-scroll">
-        <div className="assoc-columns assoc-columns--player">
-          {COLUMN_SIZES.map((size, columnIndex) => (
-            <section className="assoc-column" key={columnIndex}>
-              <header className="assoc-column-header">
-                <h3>{COLUMN_HEADERS[columnIndex].title}</h3>
-                <span>{COLUMN_HEADERS[columnIndex].subtitle}</span>
-              </header>
+        <div className="assoc-pyramid-wrap">
+          <PyramidHead />
 
-              {columnIndex === 0 ? (
-                <div className="assoc-pairs">
-                  {toPairs(game.columns[0]).map((pair, pairIndex) => (
-                    <div className="assoc-pair" key={pairIndex}>
-                      <span className="assoc-pair-num">{pairIndex + 1}</span>
-                      {pair.map((word, offset) => (
-                        <span className="assoc-word" key={offset}>{word}</span>
-                      ))}
-                    </div>
-                  ))}
+          <div className="assoc-pyramid">
+            {/* Колонка 1: пара слов и её ответ из колонки 2 — на одной строке */}
+            {toPairs(game.columns[0]).map((pair, row) => (
+              <Fragment key={`row-${row}`}>
+                <div
+                  className="assoc-cell"
+                  data-column="1"
+                  style={{ gridColumn: 1, gridRow: row + 1 }}
+                >
+                  <div className="assoc-pair">
+                    <span className="assoc-pair-num">{row + 1}</span>
+                    {pair.map((word, offset) => (
+                      <span className="assoc-word" key={offset}>{word}</span>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="assoc-cards">
-                  {Array.from({ length: size }, (_, position) => {
-                    const key = `${columnIndex}:${position}`
-                    const cardSolved = isSolved(columnIndex, position)
-                    const cardWrong = !cardSolved && Boolean(wrong[key])
-                    const hintOpen = isHintOpen(columnIndex, position)
-                    const hintWords = hintOpen
-                      ? [
-                        game.columns[columnIndex - 1][position * 2],
-                        game.columns[columnIndex - 1][position * 2 + 1],
-                      ]
-                      : null
 
-                    return (
-                      <div
-                        key={position}
-                        className={[
-                          'assoc-card',
-                          cardSolved ? 'is-solved' : '',
-                          cardWrong ? 'is-wrong' : '',
-                          hintOpen ? 'hint-open' : 'hint-locked',
-                        ].join(' ').trim()}
-                      >
-                        <div className="assoc-card-hint">
-                          {hintOpen ? (
-                            <>
-                              <span className="assoc-hint-label">Подсказка</span>{' '}
-                              <strong>{hintWords[0]}</strong> + <strong>{hintWords[1]}</strong>
-                            </>
-                          ) : (
-                            'Подсказки откроются позже'
-                          )}
-                        </div>
-
-                        <div className="assoc-answer">
-                          <input
-                            className="assoc-input"
-                            value={values[columnIndex][position]}
-                            onChange={(event) => handleChange(columnIndex, position, event.target.value)}
-                            onBlur={() => handleCommit(columnIndex, position)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                handleCommit(columnIndex, position)
-                              }
-                            }}
-                            disabled={cardSolved}
-                            placeholder="Ваш ответ"
-                            aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
-                          />
-                          {cardSolved && <span className="assoc-check" aria-label="Верно">✓</span>}
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div
+                  className="assoc-cell"
+                  data-column="2"
+                  style={{ gridColumn: 2, gridRow: row + 1 }}
+                >
+                  {renderCard(1, row)}
                 </div>
-              )}
-            </section>
-          ))}
+              </Fragment>
+            ))}
+
+            {/* Колонки 3-5: карточка занимает 2/4/8 строк и стоит по центру своих подсказок */}
+            {[2, 3, 4].map((columnIndex) => {
+              const span = COLUMN_SPANS[columnIndex]
+              return Array.from({ length: COLUMN_SIZES[columnIndex] }, (_, position) => (
+                <div
+                  key={`card-${columnIndex}-${position}`}
+                  className="assoc-cell"
+                  data-column={columnIndex + 1}
+                  style={{
+                    gridColumn: columnIndex + 1,
+                    gridRow: `${position * span + 1} / span ${span}`,
+                  }}
+                >
+                  {renderCard(columnIndex, position)}
+                </div>
+              ))
+            })}
+          </div>
         </div>
       </div>
 
