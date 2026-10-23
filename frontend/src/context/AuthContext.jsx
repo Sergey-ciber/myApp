@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import api from '../api/client'
+import { clearAssocStorage } from '../utils/assocStorage'
 
 const AuthContext = createContext(null)
 
@@ -22,6 +23,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const applyAuth = (data) => {
+    // новая сессия не должна видеть состояние предыдущего пользователя
+    clearAssocStorage()
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     setUser(data.user)
@@ -38,6 +41,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    clearAssocStorage()
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setUser(null)

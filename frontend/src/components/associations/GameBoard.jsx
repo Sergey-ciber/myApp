@@ -2,39 +2,16 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import Modal from '../Modal'
 import Leaderboard from './Leaderboard'
 import PyramidHead from './PyramidHead'
-import {
-  COLUMN_SIZES,
-  COLUMN_SPANS,
-  formatTime,
-  normalizeWord,
-  toPairs,
-} from './constants'
+import { apiMessage } from '../../api/client'
+import { checkAnswer, restartGame } from '../../api/games'
+import { COLUMN_SIZES, COLUMN_SPANS, formatTime, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 
 const emptyValues = () => COLUMN_SIZES.map((size) => Array(size).fill(''))
 
-/** Сохранённый прогресс игрока: значения полей, разгаданные слова, старт и время победы. */
-function readProgress(storageKey) {
-  const fallback = { values: emptyValues(), solved: {}, startedAt: null, time: null }
-  try {
-    const raw = localStorage.getItem(storageKey)
-    if (!raw) return fallback
-    const saved = JSON.parse(raw)
-    const values = COLUMN_SIZES.map((size, columnIndex) =>
-      Array.from({ length: size }, (_, position) => {
-        const value = saved?.values?.[columnIndex]?.[position]
-        return typeof value === 'string' ? value : ''
-      }))
-    const solved = saved?.solved && typeof saved.solved === 'object' ? saved.solved : {}
-    const startedAt = Number(saved?.startedAt) > 0 ? Number(saved.startedAt) : null
-    const time = Number(saved?.time) > 0 ? Number(saved.time) : null
-    return { values, solved, startedAt, time }
-  } catch {
-    // битые данные прогресса просто игнорируем
-    return fallback
-  }
-}
+/** Ключ ячейки на сервере: колонка и позиция нумеруются с 1. */
+const cellKey = (columnIndex, position) => `${columnIndex + 1}:${position + 1}`
 
 /**
  * Игровое поле-пирамида.
@@ -45,54 +22,64 @@ function readProgress(storageKey) {
  * - Колонки 3-5: ответ занимает 2, 4 и 8 строк и центрируется по двум
  *   подсказкам предыдущей колонки (2^(N-1) строк).
  *
- * Таймер стартует при открытии игры (момент сохраняется в localStorage, чтобы
- * перезагрузка страницы не обнуляла время), останавливается на верном слове
- * колонки 5 и передаётся наверх для сохранения результата.
+ * Ответы колонок 2-5 на клиент не приходят: каждое слово проверяется
+ * запросом POST /api/games/{id}/check. В прогрессе (progress) лежат только
+ * слова, которые угадал текущий пользователь; чужие ответы недоступны.
  */
 export default function GameBoard({
-  game, onWin, leaderboard, leaderboardLoading, currentUserId, resultError,
+  game, progress, onWin, leaderboard, leaderboardLoading, currentUserId, resultError,
 }) {
-  const storageKey = `assoc:progress:${game.id}`
-  const [initial] = useState(() => readProgress(storageKey))
-  const [values, setValues] = useState(initial.values)
-  const [solved, setSolved] = useState(initial.solved)
-  const [startedAt, setStartedAt] = useState(() => initial.startedAt || Date.now())
-  const [finishedTime, setFinishedTime] = useState(initial.time)
-  const [elapsed, setElapsed] = useState(initial.time ?? 0)
+  const [values, setValues] = useState(() => {
+    const cells = emptyValues()
+    COLUMN_SIZES.forEach((size, columnIndex) => {
+      if (columnIndex === 0) return
+      for (let position = 0; position < size; position++) {
+        const word = progress?.solved?.[cellKey(columnIndex, position)]
+        if (word) cells[columnIndex][position] = word
+      }
+    })
+    return cells
+  })
+  // разгаданные ячейки этого пользователя: { "2:1": "слон" }
+  const [solved, setSolved] = useState(() => progress?.solved || {})
+  // отсчёт таймера: базовое время из прогресса + время с момента загрузки
+  const [clock, setClock] = useState(() => ({
+    baseElapsed: progress?.elapsedSeconds || 0,
+    loadedAt: Date.now(),
+  }))
+  const [finishedTime, setFinishedTime] = useState(progress?.finishedSeconds ?? null)
+  const [elapsed, setElapsed] = useState(progress?.finishedSeconds ?? progress?.elapsedSeconds ?? 0)
   const [wrong, setWrong] = useState({})
+  const [checking, setChecking] = useState({})
   const [win, setWin] = useState(false)
-  // защита от двойной отправки результата (change + blur на одном ответе)
-  const finishedRef = useRef(initial.time != null)
+  const [actionError, setActionError] = useState('')
+  const [restarting, setRestarting] = useState(false)
+  // защита от двойной отправки результата при победе
+  const finishedRef = useRef(progress?.finishedSeconds != null)
 
-  // прогресс и время сохраняются, чтобы обновление страницы не сбрасывало игру
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({
-        values,
-        solved,
-        startedAt,
-        time: finishedTime,
-      }))
-    } catch {
-      // переполнение localStorage не должно ломать игру
-    }
-  }, [storageKey, values, solved, startedAt, finishedTime])
+  const elapsedSeconds = () =>
+    clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
 
-  // тикающий таймер; после победы он замирает на сохранённом времени
+  // тикающий таймер; после победы он замирает на серверном времени
   useEffect(() => {
     if (finishedTime != null) {
       setElapsed(finishedTime)
       return undefined
     }
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+    const tick = () => setElapsed(elapsedSeconds())
     tick()
     const timer = setInterval(tick, 250)
     return () => clearInterval(timer)
-  }, [startedAt, finishedTime])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock, finishedTime])
 
-  // слова первой колонки даны изначально, поэтому считаем их разгаданными
   const isSolved = (columnIndex, position) =>
-    columnIndex === 0 || Boolean(solved[`${columnIndex}:${position}`])
+    columnIndex === 0 || Boolean(solved[cellKey(columnIndex, position)])
+
+  /** Слово, которое известно клиенту: стартовое (колонка 1) или отгаданное. */
+  const wordAt = (columnIndex, position) => (columnIndex === 0
+    ? game.startWords[position] || ''
+    : solved[cellKey(columnIndex, position)] || '')
 
   const isHintOpen = (columnIndex, position) =>
     columnIndex === 1 ||
@@ -106,84 +93,90 @@ export default function GameBoard({
       return next
     })
 
-  /** Победа: останавливаем таймер и отдаём время наверх для сохранения. */
-  const finishGame = () => {
+  const finish = (serverSeconds) => {
     if (finishedRef.current) return
     finishedRef.current = true
-    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+    const seconds = Number.isFinite(serverSeconds) && serverSeconds > 0
+      ? serverSeconds
+      : Math.max(1, elapsedSeconds())
     setFinishedTime(seconds)
     setElapsed(seconds)
     setWin(true)
-    if (onWin) {
-      Promise.resolve(onWin(seconds)).catch(() => {})
-    }
+    setActionError('')
+    if (onWin) Promise.resolve(onWin(seconds)).catch(() => {})
   }
 
-  const markSolved = (columnIndex, position, key) => {
-    setSolved((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
-    clearWrong(key)
-    // верный ответ в последней колонке — победа, независимо от остальных слов
-    if (columnIndex === LAST_COLUMN) finishGame()
-  }
-
-  const handleChange = (columnIndex, position, text) => {
-    const key = `${columnIndex}:${position}`
-    setValues((prev) =>
-      prev.map((words, c) =>
-        c === columnIndex ? words.map((word, p) => (p === position ? text : word)) : words))
-    if (isSolved(columnIndex, position)) return
-
-    // при новом вводе подсветка ошибки сбрасывается
-    clearWrong(key)
-    if (normalizeWord(text) === normalizeWord(game.columns[columnIndex][position])) {
-      markSolved(columnIndex, position, key)
-    }
-  }
-
-  /** Проверка по Enter/уходу из поля: неверный ответ подсвечиваем красным. */
-  const handleCommit = (columnIndex, position) => {
-    const key = `${columnIndex}:${position}`
-    if (isSolved(columnIndex, position)) return
-    const value = values[columnIndex][position] || ''
-    if (!value.trim()) {
+  /** Проверка ответа на сервере: правильное слово клиенту неизвестно. */
+  const check = async (columnIndex, position) => {
+    const key = cellKey(columnIndex, position)
+    if (isSolved(columnIndex, position) || checking[key]) return
+    const text = (values[columnIndex][position] || '').trim()
+    if (!text) {
       clearWrong(key)
       return
     }
-    if (normalizeWord(value) === normalizeWord(game.columns[columnIndex][position])) {
-      markSolved(columnIndex, position, key)
-    } else {
-      setWrong((prev) => ({ ...prev, [key]: true }))
+
+    setChecking((prev) => ({ ...prev, [key]: true }))
+    setActionError('')
+    try {
+      const result = await checkAnswer(game.id, columnIndex + 1, position + 1, text)
+      const nextSolved = result.progress?.solved || {}
+      setSolved(nextSolved)
+      if (result.correct) {
+        clearWrong(key)
+        // показываем слово в том виде, в каком оно сохранено в прогрессе
+        setValues((prev) => prev.map((words, c) => (c === columnIndex
+          ? words.map((word, p) => (p === position ? (nextSolved[key] || text) : word))
+          : words)))
+        if (columnIndex === LAST_COLUMN) finish(result.progress?.finishedSeconds)
+      } else {
+        setWrong((prev) => ({ ...prev, [key]: true }))
+      }
+    } catch (err) {
+      setActionError(apiMessage(err))
+    } finally {
+      setChecking((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
     }
   }
 
-  const restart = () => {
-    finishedRef.current = false
-    setValues(emptyValues())
-    setSolved({})
-    setWrong({})
-    setWin(false)
-    setFinishedTime(null)
-    setElapsed(0)
-    setStartedAt(Date.now())
+  const handleChange = (columnIndex, position, text) => {
+    setValues((prev) => prev.map((words, c) => (c === columnIndex
+      ? words.map((word, p) => (p === position ? text : word))
+      : words)))
+    if (!isSolved(columnIndex, position)) clearWrong(cellKey(columnIndex, position))
+  }
+
+  /** Начать заново: сервер обнуляет прогресс только этого пользователя. */
+  const restart = async () => {
+    setRestarting(true)
+    setActionError('')
     try {
-      localStorage.removeItem(storageKey)
-    } catch {
-      // нечего очищать
+      const fresh = await restartGame(game.id)
+      finishedRef.current = false
+      setSolved(fresh.solved || {})
+      setValues(emptyValues())
+      setWrong({})
+      setWin(false)
+      setFinishedTime(null)
+      setClock({ baseElapsed: 0, loadedAt: Date.now() })
+      setElapsed(0)
+    } catch (err) {
+      setActionError(apiMessage(err))
+    } finally {
+      setRestarting(false)
     }
   }
 
   /** Карточка ответа: подсказка пары + поле ввода. */
   const renderCard = (columnIndex, position) => {
-    const key = `${columnIndex}:${position}`
+    const key = cellKey(columnIndex, position)
     const cardSolved = isSolved(columnIndex, position)
     const cardWrong = !cardSolved && Boolean(wrong[key])
     const hintOpen = isHintOpen(columnIndex, position)
-    const hintWords = hintOpen
-      ? [
-        game.columns[columnIndex - 1][position * 2],
-        game.columns[columnIndex - 1][position * 2 + 1],
-      ]
-      : null
 
     return (
       <div
@@ -191,6 +184,7 @@ export default function GameBoard({
           'assoc-card',
           cardSolved ? 'is-solved' : '',
           cardWrong ? 'is-wrong' : '',
+          checking[key] ? 'is-checking' : '',
           hintOpen ? 'hint-open' : 'hint-locked',
         ].join(' ').trim()}
       >
@@ -198,7 +192,8 @@ export default function GameBoard({
           {hintOpen ? (
             <>
               <span className="assoc-hint-label">Подсказка</span>{' '}
-              <strong>{hintWords[0]}</strong> + <strong>{hintWords[1]}</strong>
+              <strong>{wordAt(columnIndex - 1, position * 2)}</strong> +{' '}
+              <strong>{wordAt(columnIndex - 1, position * 2 + 1)}</strong>
             </>
           ) : (
             'Подсказки откроются позже'
@@ -208,17 +203,17 @@ export default function GameBoard({
         <div className="assoc-answer">
           <input
             className="assoc-input"
-            value={values[columnIndex][position]}
+            value={cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]}
             onChange={(event) => handleChange(columnIndex, position, event.target.value)}
-            onBlur={() => handleCommit(columnIndex, position)}
+            onBlur={() => check(columnIndex, position)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()
-                handleCommit(columnIndex, position)
+                check(columnIndex, position)
               }
             }}
-            disabled={cardSolved}
-            placeholder="Ваш ответ"
+            disabled={cardSolved || Boolean(checking[key])}
+            placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
             aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
           />
           {cardSolved && <span className="assoc-check" aria-label="Верно">✓</span>}
@@ -234,7 +229,7 @@ export default function GameBoard({
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
           Разгадайте слово в колонке 5 — это победа. Подсказки следующих колонок
-          открываются, когда разгаданы оба слова пары.
+          открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
         </p>
 
         <div className="assoc-board-tools">
@@ -243,11 +238,18 @@ export default function GameBoard({
             <span className="assoc-timer-value">{formatTime(timerValue)}</span>
             <span className="assoc-timer-label">{finishedTime != null ? 'финиш' : 'время'}</span>
           </div>
-          <button type="button" className="btn btn-small btn-secondary" onClick={restart}>
-            Начать заново
+          <button
+            type="button"
+            className="btn btn-small btn-secondary"
+            onClick={restart}
+            disabled={restarting}
+          >
+            {restarting ? 'Сброс…' : 'Начать заново'}
           </button>
         </div>
       </div>
+
+      {actionError && <div className="alert alert-error">{actionError}</div>}
 
       <div className="assoc-scroll">
         <div className="assoc-pyramid-wrap">
@@ -255,7 +257,7 @@ export default function GameBoard({
 
           <div className="assoc-pyramid">
             {/* Колонка 1: пара слов и её ответ из колонки 2 — на одной строке */}
-            {toPairs(game.columns[0]).map((pair, row) => (
+            {toPairs(game.startWords).map((pair, row) => (
               <Fragment key={`row-${row}`}>
                 <div
                   className="assoc-cell"
@@ -319,7 +321,7 @@ export default function GameBoard({
             />
 
             <div className="form-actions">
-              <button type="button" className="btn btn-primary" onClick={restart}>
+              <button type="button" className="btn btn-primary" onClick={restart} disabled={restarting}>
                 Начать заново
               </button>
             </div>

@@ -1,7 +1,11 @@
 package com.demo.taskmanager.controller;
 
+import com.demo.taskmanager.dto.CheckAnswerRequest;
+import com.demo.taskmanager.dto.CheckAnswerResponse;
+import com.demo.taskmanager.dto.GameProgressDto;
 import com.demo.taskmanager.dto.GameRequest;
 import com.demo.taskmanager.dto.GameResponse;
+import com.demo.taskmanager.dto.GameSessionResponse;
 import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
 import com.demo.taskmanager.dto.ResultRequest;
@@ -18,8 +22,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Игра в ассоциации. Список игр и играбельны все игры — для любого авторизованного
- * пользователя; создавать, редактировать и удалять игру может только её автор.
+ * Игра в ассоциации. Играть может любой авторизованный пользователь,
+ * создавать, редактировать и удалять игру — только её автор.
+ * Прогресс и ответы всегда фильтруются по пользователю из токена.
  */
 @RestController
 @RequestMapping("/api/games")
@@ -38,9 +43,43 @@ public class GameController {
         return gameService.listGames();
     }
 
+    /**
+     * Игра для прохождения: стартовые слова + прогресс текущего пользователя.
+     * Ответы колонок 2-5 не отдаются.
+     */
     @GetMapping("/{id}")
-    public GameResponse get(@PathVariable Long id) {
-        return gameService.getGame(id);
+    public GameSessionResponse get(@AuthenticationPrincipal UserDetails principal,
+                                   @PathVariable Long id) {
+        return gameService.getGameForPlay(id, currentUser(principal));
+    }
+
+    /** Полная игра со всеми словами — только автору, для формы редактирования. */
+    @GetMapping("/{id}/edit")
+    public GameResponse getForEdit(@AuthenticationPrincipal UserDetails principal,
+                                   @PathVariable Long id) {
+        return gameService.getGameForEdit(id, currentUser(principal));
+    }
+
+    /** Старт/продолжение попытки: таймер считается от серверного времени. */
+    @PostMapping("/{id}/start")
+    public GameSessionResponse start(@AuthenticationPrincipal UserDetails principal,
+                                     @PathVariable Long id) {
+        return gameService.startSession(id, currentUser(principal));
+    }
+
+    /** Проверка ответа на сервере: клиент не знает правильные слова. */
+    @PostMapping("/{id}/check")
+    public CheckAnswerResponse check(@AuthenticationPrincipal UserDetails principal,
+                                     @PathVariable Long id,
+                                     @RequestBody CheckAnswerRequest request) {
+        return gameService.checkAnswer(id, currentUser(principal), request);
+    }
+
+    /** Начать заново: сбрасывается прогресс только текущего пользователя. */
+    @PostMapping("/{id}/restart")
+    public GameProgressDto restart(@AuthenticationPrincipal UserDetails principal,
+                                   @PathVariable Long id) {
+        return gameService.restartProgress(id, currentUser(principal));
     }
 
     @PostMapping
@@ -75,7 +114,7 @@ public class GameController {
     @PostMapping("/{id}/results")
     public ResponseEntity<ResultResponse> submitResult(@AuthenticationPrincipal UserDetails principal,
                                                        @PathVariable Long id,
-                                                       @RequestBody ResultRequest request) {
+                                                       @RequestBody(required = false) ResultRequest request) {
         ResultResponse result = gameService.submitResult(id, currentUser(principal),
                 request == null ? null : request.timeSeconds());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);

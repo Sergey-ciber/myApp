@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { apiMessage } from '../../api/client'
-import { activateGame, createGame, deleteGame, fetchGame, updateGame } from '../../api/games'
+import { activateGame, createGame, deleteGame, fetchGameForEdit, updateGame } from '../../api/games'
 import ConfirmDialog from '../ConfirmDialog'
 import PyramidHead from './PyramidHead'
 import {
@@ -59,7 +59,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setError('')
     setMessage('')
     try {
-      applyGame(await fetchGame(game.id))
+      // полные слова отдаёт только /edit и только автору игры
+      applyGame(await fetchGameForEdit(game.id))
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
       setError(apiMessage(err))

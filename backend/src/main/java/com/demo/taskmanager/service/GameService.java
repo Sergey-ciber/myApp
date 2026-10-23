@@ -1,24 +1,38 @@
 package com.demo.taskmanager.service;
 
+import com.demo.taskmanager.dto.CheckAnswerRequest;
+import com.demo.taskmanager.dto.CheckAnswerResponse;
+import com.demo.taskmanager.dto.GamePlayResponse;
+import com.demo.taskmanager.dto.GameProgressDto;
 import com.demo.taskmanager.dto.GameRequest;
 import com.demo.taskmanager.dto.GameResponse;
+import com.demo.taskmanager.dto.GameSessionResponse;
 import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
 import com.demo.taskmanager.dto.ResultResponse;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameResult;
+import com.demo.taskmanager.entity.GameWord;
 import com.demo.taskmanager.entity.User;
+import com.demo.taskmanager.entity.UserProgress;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
 import com.demo.taskmanager.repository.GameRepository;
 import com.demo.taskmanager.repository.GameResultRepository;
+import com.demo.taskmanager.repository.UserProgressRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -34,10 +48,17 @@ public class GameService {
 
     private final GameRepository gameRepository;
     private final GameResultRepository resultRepository;
+    private final UserProgressRepository progressRepository;
+    private final ObjectMapper objectMapper;
 
-    public GameService(GameRepository gameRepository, GameResultRepository resultRepository) {
+    public GameService(GameRepository gameRepository,
+                       GameResultRepository resultRepository,
+                       UserProgressRepository progressRepository,
+                       ObjectMapper objectMapper) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
+        this.progressRepository = progressRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -47,10 +68,86 @@ public class GameService {
                 .toList();
     }
 
-    /** Игру может открыть любой авторизованный пользователь. */
+    /**
+     * Игра для прохождения: только стартовые слова колонки 1
+     * и прогресс текущего пользователя. Чужие ответы не отдаются.
+     */
     @Transactional(readOnly = true)
-    public GameResponse getGame(Long id) {
-        return GameResponse.from(findGame(id));
+    public GameSessionResponse getGameForPlay(Long id, User user) {
+        Game game = findGame(id);
+        UserProgress progress = progressRepository.findByGameIdAndUserId(id, user.getId()).orElse(null);
+        return new GameSessionResponse(GamePlayResponse.from(game),
+                progress == null ? null : toDto(progress));
+    }
+
+    /** Полная игра со всеми словами — только для формы редактирования её автора. */
+    @Transactional(readOnly = true)
+    public GameResponse getGameForEdit(Long id, User user) {
+        Game game = findGame(id);
+        requireCreator(game, user);
+        return GameResponse.from(game);
+    }
+
+    /**
+     * Старт или продолжение попытки: если прогресса нет — создаём его
+     * для текущего пользователя, иначе возвращаем сохранённый.
+     */
+    @Transactional
+    public GameSessionResponse startSession(Long id, User user) {
+        Game game = findGame(id);
+        UserProgress progress = findOrCreateProgress(game, user);
+        return new GameSessionResponse(GamePlayResponse.from(game), toDto(progress));
+    }
+
+    /**
+     * Проверка ответа на сервере: правильные слова не уходят на клиент.
+     * Верный ответ сразу сохраняется в прогресс этого пользователя.
+     */
+    @Transactional
+    public CheckAnswerResponse checkAnswer(Long gameId, User user, CheckAnswerRequest request) {
+        Game game = findGame(gameId);
+        if (request == null || request.column() == null || request.position() == null) {
+            throw new BadRequestException("Укажите колонку и номер ответа");
+        }
+        int column = request.column();
+        int position = request.position();
+        if (column < 2 || column > COLUMN_SIZES.length) {
+            throw new BadRequestException("Проверять можно только ответы колонок 2-5");
+        }
+        if (position < 1 || position > COLUMN_SIZES[column - 1]) {
+            throw new BadRequestException("В колонке " + column + " нет ответа " + position);
+        }
+
+        String expected = wordAt(game, column, position);
+        boolean correct = expected != null
+                && normalize(request.answer()).equals(normalize(expected));
+
+        UserProgress progress = findOrCreateProgress(game, user);
+        if (correct) {
+            Map<String, String> solved = parseSolved(progress);
+            solved.put(column + ":" + position, expected);
+            writeSolved(progress, solved);
+            // верное слово колонки 5 — победа, время считает сервер
+            if (column == COLUMN_SIZES.length && progress.getFinishedSeconds() == null) {
+                progress.setFinishedSeconds((int) Math.max(1, elapsedSeconds(progress)));
+            }
+            progress.setUpdatedAt(Instant.now());
+            progressRepository.save(progress);
+        }
+        return new CheckAnswerResponse(correct, toDto(progress));
+    }
+
+    /** «Начать заново»: очищаем только прогресс этого пользователя. */
+    @Transactional
+    public GameProgressDto restartProgress(Long gameId, User user) {
+        Game game = findGame(gameId);
+        UserProgress progress = findOrCreateProgress(game, user);
+        progress.setSolvedWords("{}");
+        progress.setStartedAt(Instant.now());
+        progress.setFinishedSeconds(null);
+        progress.setUpdatedAt(Instant.now());
+        progressRepository.save(progress);
+        return toDto(progress);
     }
 
     @Transactional
@@ -74,6 +171,8 @@ public class GameService {
         Game game = findGame(id);
         requireCreator(game, currentUser);
         game.setTitle(request.title().trim());
+        // ответы могли измениться — прогресс игроков по старой версии больше не актуален
+        game.getProgressEntries().clear();
         // сначала удаляем старые слова и фиксируем удаление,
         // иначе вставка новых слов упрётся в уникальный индекс (game_id, column_num, position)
         game.clearWords();
@@ -106,15 +205,19 @@ public class GameService {
         }
     }
 
-    /** Сохранить время прохождения. Играть может любой пользователь, включая автора. */
+    /**
+     * Сохранить время прохождения. Если на сервере уже зафиксировано время победы
+     * этого пользователя, берём его — подделать результат из клиента нельзя.
+     */
     @Transactional
     public ResultResponse submitResult(Long gameId, User user, Integer timeSeconds) {
         Game game = findGame(gameId);
-        if (timeSeconds == null || timeSeconds < 1 || timeSeconds > MAX_TIME_SECONDS) {
-            throw new BadRequestException("Время прохождения должно быть от 1 до "
-                    + MAX_TIME_SECONDS + " секунд");
-        }
-        GameResult result = new GameResult(game, user, timeSeconds);
+        UserProgress progress = progressRepository
+                .findByGameIdAndUserId(gameId, user.getId()).orElse(null);
+        Integer serverTime = progress == null ? null : progress.getFinishedSeconds();
+        int seconds = serverTime != null ? serverTime : validateTime(timeSeconds);
+
+        GameResult result = new GameResult(game, user, seconds);
         resultRepository.save(result);
         return ResultResponse.from(result);
     }
@@ -154,6 +257,70 @@ public class GameService {
                 || !game.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Изменять игру может только её создатель");
         }
+    }
+
+    private UserProgress findOrCreateProgress(Game game, User user) {
+        UserProgress existing = progressRepository.findByGameIdAndUserId(game.getId(), user.getId())
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        // идемпотентно: параллельные открытия игры не создают дубль
+        progressRepository.insertIfAbsent(user.getId(), game.getId());
+        return progressRepository.findByGameIdAndUserId(game.getId(), user.getId())
+                .orElseThrow(() -> new IllegalStateException("Не удалось создать прогресс игры"));
+    }
+
+    private String wordAt(Game game, int column, int position) {
+        return game.getWords().stream()
+                .filter(word -> word.getColumnNum() == column && word.getPosition() == position)
+                .map(GameWord::getWord)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private GameProgressDto toDto(UserProgress progress) {
+        long elapsed = progress.getFinishedSeconds() != null
+                ? progress.getFinishedSeconds()
+                : elapsedSeconds(progress);
+        return new GameProgressDto(parseSolved(progress), progress.getStartedAt(),
+                elapsed, progress.getFinishedSeconds());
+    }
+
+    private long elapsedSeconds(UserProgress progress) {
+        if (progress.getStartedAt() == null) return 0;
+        return Math.max(0, Duration.between(progress.getStartedAt(), Instant.now()).getSeconds());
+    }
+
+    private Map<String, String> parseSolved(UserProgress progress) {
+        try {
+            Map<String, String> solved = objectMapper.readValue(progress.getSolvedWords(),
+                    new TypeReference<LinkedHashMap<String, String>>() { });
+            return solved == null ? new LinkedHashMap<>() : solved;
+        } catch (JsonProcessingException e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private void writeSolved(UserProgress progress, Map<String, String> solved) {
+        try {
+            progress.setSolvedWords(objectMapper.writeValueAsString(solved));
+        } catch (JsonProcessingException e) {
+            progress.setSolvedWords("{}");
+        }
+    }
+
+    private int validateTime(Integer timeSeconds) {
+        if (timeSeconds == null || timeSeconds < 1 || timeSeconds > MAX_TIME_SECONDS) {
+            throw new BadRequestException("Время прохождения должно быть от 1 до "
+                    + MAX_TIME_SECONDS + " секунд");
+        }
+        return timeSeconds;
+    }
+
+    /** Сравнение слов: без учёта регистра и пробелов по краям. */
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     /** Раскладывает колонки по строкам таблицы game_words. */

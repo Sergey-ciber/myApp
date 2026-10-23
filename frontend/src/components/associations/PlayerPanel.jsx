@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiMessage } from '../../api/client'
-import { fetchGame, fetchLeaderboard, submitResult } from '../../api/games'
+import { fetchLeaderboard, startGame, submitResult } from '../../api/games'
 import GameBoard from './GameBoard'
 import Leaderboard from './Leaderboard'
 
 /**
  * Режим игрока: выбор любой игры платформы, игровое поле, таймер и рейтинг.
+ *
+ * Прогресс приходит с сервера и принадлежит только текущему пользователю:
+ * POST /api/games/{id}/start возвращает структуру поля без ответов и личный прогресс.
  */
 export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId }) {
   const [game, setGame] = useState(null)
+  const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [leaderboard, setLeaderboard] = useState([])
@@ -18,17 +22,23 @@ export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId
   useEffect(() => {
     if (!gameId) {
       setGame(null)
+      setProgress(null)
       return undefined
     }
     let cancelled = false
     setLoading(true)
     setError('')
-    fetchGame(gameId)
-      .then((data) => { if (!cancelled) setGame(data) })
+    // старт/продолжение попытки: сервер создаёт отдельный прогресс для этого пользователя
+    startGame(gameId)
+      .then((data) => {
+        if (cancelled) return
+        setGame(data.game)
+        setProgress(data.progress)
+      })
       .catch((err) => { if (!cancelled) setError(apiMessage(err)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [gameId])
+  }, [gameId, currentUserId])
 
   const loadLeaderboard = useCallback(async (id) => {
     if (!id) return
@@ -91,10 +101,11 @@ export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId
         </label>
       </div>
 
-      {/* key по id игры: при переключении прогресс и таймер начинаются заново */}
+      {/* key по пользователю и игре: при смене игрока или игры поле начинается с чистого листа */}
       <GameBoard
-        key={game.id}
+        key={`${currentUserId ?? 'anon'}-${game.id}`}
         game={game}
+        progress={progress}
         onWin={handleWin}
         leaderboard={leaderboard}
         leaderboardLoading={leaderboardLoading}

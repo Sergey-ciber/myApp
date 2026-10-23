@@ -41,6 +41,10 @@ public class Game {
     @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GameResult> results = new ArrayList<>();
 
+    /** Прогресс игроков: удаляется вместе с игрой. */
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserProgress> progressEntries = new ArrayList<>();
+
     /** Добавить слово в колонку columnNum (1..5) на позицию position (1..N). */
     public void addWord(int columnNum, int position, String word) {
         GameWord gameWord = new GameWord();
@@ -73,4 +77,6 @@ public class Game {
     public List<GameWord> getWords() { return words; }
 
     public List<GameResult> getResults() { return results; }
+
+    public List<UserProgress> getProgressEntries() { return progressEntries; }
 }

@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { fetchGames } from '../api/games'
 import AdminPanel from '../components/associations/AdminPanel'
 import PlayerPanel from '../components/associations/PlayerPanel'
 import { useAuth } from '../context/AuthContext'
-
-// режим и выбранная игра переживают перезагрузку страницы
-const MODE_KEY = 'assoc:mode'
-const GAME_KEY = 'assoc:game'
+import { userScopedKey } from '../utils/assocStorage'
 
 function readStored(key) {
+  if (!key) return null
   try {
     return localStorage.getItem(key)
   } catch {
@@ -17,20 +15,37 @@ function readStored(key) {
   }
 }
 
+function writeStored(key, value) {
+  if (!key) return
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // localStorage может быть недоступен — не критично
+  }
+}
+
 /**
  * Раздел «Игра в ассоциации»: переключатель режима «Администратор» / «Игрок».
  * Администратор создаёт игру из 31 слова, игрок разгадывает пирамиду.
+ *
+ * Настройки раздела хранятся под ключами с id пользователя, а прогресс игры
+ * живёт только на сервере: при смене пользователя состояние сбрасывается.
  */
 export default function Associations() {
   const { user } = useAuth()
-  const [mode, setMode] = useState(() => (readStored(MODE_KEY) === 'player' ? 'player' : 'admin'))
+  const userId = user?.id
+  const modeKey = userScopedKey('mode', userId)
+  const gameKey = userScopedKey('game', userId)
+
+  const [mode, setMode] = useState(() => (readStored(modeKey) === 'player' ? 'player' : 'admin'))
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedGameId, setSelectedGameId] = useState(() => {
-    const stored = Number(readStored(GAME_KEY))
+    const stored = Number(readStored(gameKey))
     return Number.isFinite(stored) && stored > 0 ? stored : null
   })
+  const previousUserId = useRef(userId)
 
   const loadGames = useCallback(async () => {
     try {
@@ -71,22 +86,22 @@ export default function Associations() {
     })
   }, [games])
 
+  // сменился пользователь — сбрасываем режим и выбранную игру предыдущей сессии
   useEffect(() => {
-    try {
-      localStorage.setItem(MODE_KEY, mode)
-    } catch {
-      // localStorage может быть недоступен — не критично
-    }
-  }, [mode])
+    if (previousUserId.current === userId) return
+    previousUserId.current = userId
+    setMode('admin')
+    setSelectedGameId(null)
+  }, [userId])
 
   useEffect(() => {
-    if (!selectedGameId) return
-    try {
-      localStorage.setItem(GAME_KEY, String(selectedGameId))
-    } catch {
-      // localStorage может быть недоступен — не критично
-    }
-  }, [selectedGameId])
+    writeStored(modeKey, mode)
+  }, [modeKey, mode])
+
+  useEffect(() => {
+    if (!selectedGameId || !gameKey) return
+    writeStored(gameKey, String(selectedGameId))
+  }, [gameKey, selectedGameId])
 
   const openForPlayer = (id) => {
     setSelectedGameId(id)

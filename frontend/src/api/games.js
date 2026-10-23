@@ -3,8 +3,21 @@ import api from './client'
 /** Список всех игр платформы: [{ id, title, createdAt, active, creatorId, creatorUsername }]. */
 export const fetchGames = () => api.get('/games').then((res) => res.data)
 
-/** Полная игра: { id, title, active, creatorId, creatorUsername, columns: [[16], [8], [4], [2], [1]] }. */
+/** Игра для прохождения: только стартовые слова + прогресс текущего пользователя. */
 export const fetchGame = (id) => api.get(`/games/${id}`).then((res) => res.data)
+
+/** Полная игра со всеми словами — только автору, для формы редактирования. */
+export const fetchGameForEdit = (id) => api.get(`/games/${id}/edit`).then((res) => res.data)
+
+/** Старт/продолжение попытки: возвращает { game, progress } текущего пользователя. */
+export const startGame = (id) => api.post(`/games/${id}/start`).then((res) => res.data)
+
+/** Проверка ответа на сервере: { column (1..5), position (1..N), answer } → { correct, progress }. */
+export const checkAnswer = (gameId, column, position, answer) =>
+  api.post(`/games/${gameId}/check`, { column, position, answer }).then((res) => res.data)
+
+/** Начать заново: обнуляет прогресс только текущего пользователя. */
+export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) => res.data)
 
 /** Создать игру. Принимает { title, columns }, автор — текущий пользователь. */
 export const createGame = (game) => api.post('/games', game).then((res) => res.data)
