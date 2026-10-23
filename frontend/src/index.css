@@ -34,6 +34,9 @@ body {
   color: #fff;
 }
 .navbar-brand { color: #fff; text-decoration: none; font-size: 18px; font-weight: 700; }
+.navbar-left { display: flex; align-items: center; gap: 22px; }
+.navbar-link { color: #c3cee0; text-decoration: none; font-size: 14px; font-weight: 500; }
+.navbar-link:hover { color: #fff; text-decoration: underline; }
 .navbar-user { display: flex; align-items: center; gap: 12px; }
 .navbar-profile { display: flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; }
 .navbar-username { font-size: 14px; }
@@ -289,4 +292,248 @@ body {
 @media (max-width: 800px) {
   .board-columns { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
+}
+
+/* ---------- Игра в ассоциации ---------- */
+.assoc-page { max-width: 1400px; }
+
+.mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: #e4e6eb;
+  border-radius: 999px;
+}
+.mode-btn {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+.assoc-admin { display: flex; flex-direction: column; gap: 26px; }
+.assoc-panel {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+/* Горизонтальная прокрутка пирамиды на узких экранах */
+.assoc-scroll { overflow-x: auto; padding-bottom: 8px; }
+
+.assoc-columns {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: 14px;
+  min-width: 960px;
+  align-items: start;
+}
+.assoc-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: #eef1f6;
+  border-radius: 12px;
+}
+.assoc-column-header { padding: 4px 6px 0; }
+.assoc-column-header h3 { margin: 0; font-size: 14px; }
+.assoc-column-header span { font-size: 12px; color: var(--text-muted); }
+
+/* Колонка 1: слова сгруппированы в 8 пар */
+.assoc-pairs { display: flex; flex-direction: column; gap: 8px; }
+.assoc-pair {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px 8px;
+  border: 1px solid #d7dde8;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.06);
+}
+.assoc-pair:nth-child(odd) { background: #f2f8ff; border-color: #c6dbf5; }
+.assoc-pair:nth-child(even) { background: #fffaf2; border-color: #f0dfc4; }
+.assoc-pair-num {
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+.assoc-word {
+  display: block;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  word-break: break-word;
+}
+.assoc-pair:nth-child(odd) .assoc-word { border-color: #c6dbf5; }
+.assoc-pair:nth-child(even) .assoc-word { border-color: #f0dfc4; }
+
+.assoc-word-input { display: flex; flex-direction: column; gap: 3px; }
+.assoc-word-input > span { font-size: 11px; color: var(--text-muted); }
+
+.assoc-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+}
+.assoc-input:focus { outline: 2px solid rgba(0, 121, 191, 0.35); border-color: var(--primary); }
+.assoc-input:disabled { background: #eaf7ef; color: #1f6b3d; font-weight: 600; }
+.input-invalid,
+.field input.input-invalid {
+  border-color: #d64545;
+  box-shadow: 0 0 0 1px #d64545;
+  background: #fff5f5;
+}
+
+/* Карточки ответов в форме администратора */
+.assoc-cards { display: flex; flex-direction: column; gap: 8px; }
+.assoc-edit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.06);
+}
+.assoc-edit-card.invalid { border-color: #f3bcbc; background: #fff8f8; }
+.assoc-edit-card-head { display: flex; flex-direction: column; gap: 2px; }
+.assoc-edit-label { font-size: 12px; font-weight: 600; }
+.assoc-hint { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+
+.assoc-form-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.assoc-counter { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Список сохранённых игр */
+.assoc-saved h2 { margin: 0 0 12px; font-size: 18px; }
+.assoc-games { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.assoc-game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-left: 4px solid transparent;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  flex-wrap: wrap;
+}
+.assoc-game.active { border-left-color: var(--success); }
+.assoc-game-info { display: flex; flex-direction: column; gap: 4px; }
+.assoc-game-title { font-size: 15px; font-weight: 600; }
+.assoc-game-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.assoc-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #dcfff0;
+  color: #2d8a4e;
+  font-size: 11px;
+  font-weight: 600;
+}
+.assoc-badge.editing { background: #e6f0fb; color: #026aa7; }
+.assoc-game-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Режим игрока */
+.assoc-player { display: flex; flex-direction: column; gap: 14px; }
+.assoc-player-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.assoc-player-title { margin: 0; font-size: 20px; }
+.assoc-game-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.assoc-game-select select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+}
+.assoc-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.assoc-board-tip { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+.assoc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.06);
+  transition: border-color 0.15s, background 0.15s;
+}
+/* состояние: подсказка ещё скрыта */
+.assoc-card.hint-locked { border-style: dashed; }
+/* состояние: подсказка открыта */
+.assoc-card.hint-open { border-color: #b9d4f0; background: #fbfdff; }
+/* состояние: неверный ответ */
+.assoc-card.is-wrong {
+  border-color: #d64545;
+  box-shadow: 0 0 0 1px #d64545;
+  background: #fff5f5;
+}
+/* состояние: верный ответ */
+.assoc-card.is-solved { border-color: #47a06a; background: #f2fbf5; }
+.assoc-card.is-solved .assoc-input { border-color: #9fd4b1; }
+
+.assoc-card-hint { min-height: 28px; font-size: 11px; line-height: 1.35; color: var(--text-muted); }
+.assoc-card.is-solved .assoc-card-hint { color: #2d8a4e; }
+.assoc-card.is-wrong .assoc-card-hint { color: #a33a3a; }
+.assoc-hint-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.assoc-answer { display: flex; align-items: center; gap: 6px; }
+.assoc-answer .assoc-input { flex: 1; min-width: 0; }
+.assoc-check { color: var(--success); font-size: 16px; font-weight: 700; }
+
+/* Победа */
+.assoc-win { text-align: center; }
+.assoc-win-emoji { font-size: 56px; line-height: 1; }
+.assoc-win-text { margin: 12px 0 20px; font-size: 18px; font-weight: 600; }
+.assoc-win .form-actions { justify-content: center; }
+
+@media (max-width: 800px) {
+  .assoc-columns { min-width: 900px; }
+  .assoc-player-title { font-size: 17px; }
+  .assoc-form-actions { flex-wrap: wrap; }
 }

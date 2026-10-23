@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Boards from './pages/Boards'
 import BoardDetail from './pages/BoardDetail'
 import Profile from './pages/Profile'
+import Associations from './pages/Associations'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/boards" replace />} />
         <Route path="/boards" element={<Protected><Boards /></Protected>} />
         <Route path="/boards/:id" element={<Protected><BoardDetail /></Protected>} />
+        <Route path="/associations" element={<Protected><Associations /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Routes>

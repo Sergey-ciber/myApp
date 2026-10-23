@@ -17,9 +17,16 @@ export default function Navbar() {
 
   return (
     <header className="navbar">
-      <Link to="/boards" className="navbar-brand">
-        🗂 Task Manager
-      </Link>
+      <div className="navbar-left">
+        <Link to="/boards" className="navbar-brand">
+          Мои доски
+        </Link>
+        {user && (
+          <Link to="/associations" className="navbar-link">
+            Игра в ассоциации
+          </Link>
+        )}
+      </div>
       {user && (
         <div className="navbar-user">
           <Link to="/profile" className="navbar-profile">

@@ -1,7 +1,9 @@
 package com.demo.taskmanager.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -29,6 +31,24 @@ public class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Map<String, Object> handleAuth(AuthenticationException e) {
         return error(HttpStatus.UNAUTHORIZED, "Неверный логин или пароль");
+    }
+
+    /** Ошибки @Valid: отдаём 400 с первой ошибкой поля, а не 500. */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleValidation(MethodArgumentNotValidException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .orElse("Некорректные данные запроса");
+        return error(HttpStatus.BAD_REQUEST, message);
+    }
+
+    /** Битая JSON-структура запроса — это ошибка клиента, а не сбой сервера. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> handleUnreadable(HttpMessageNotReadableException e) {
+        return error(HttpStatus.BAD_REQUEST, "Некорректный JSON в запросе");
     }
 
     @ExceptionHandler(Exception.class)
