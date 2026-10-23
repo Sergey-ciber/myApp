@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from './Modal'
+import ConfirmDialog from './ConfirmDialog'
 
 const STATUSES = [
   { value: 'TODO', label: 'К выполнению' },
@@ -14,6 +15,7 @@ export default function TaskModal({ task, defaultStatus, onSave, onDelete, onClo
   const [dueDate, setDueDate] = useState(task?.dueDate || '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const submit = async (e) => {
     e.preventDefault()
@@ -38,52 +40,59 @@ export default function TaskModal({ task, defaultStatus, onSave, onDelete, onClo
     }
   }
 
-  const remove = async () => {
-    if (!window.confirm('Удалить задание?')) return
-    try {
-      await onDelete()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Не удалось удалить задание')
-    }
-  }
-
   return (
-    <Modal title={task ? 'Карточка задания' : 'Новое задание'} onClose={onClose}>
-      <form onSubmit={submit} className="form">
-        {error && <div className="alert alert-error">{error}</div>}
-        <label className="field">
-          <span>Название</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)}
-                 placeholder="Что нужно сделать?" autoFocus />
-        </label>
-        <label className="field">
-          <span>Описание</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Подробности задания" rows={4} />
-        </label>
-        <div className="field-row">
+    <>
+      <Modal title={task ? 'Карточка задания' : 'Новое задание'} onClose={onClose}>
+        <form onSubmit={submit} className="form">
+          {error && <div className="alert alert-error">{error}</div>}
           <label className="field">
-            <span>Статус</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+            <span>Название</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)}
+                   placeholder="Что нужно сделать?" autoFocus />
           </label>
           <label className="field">
-            <span>Срок</span>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <span>Описание</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Подробности задания" rows={4} />
           </label>
-        </div>
-        <div className="form-actions">
-          {task && (
-            <button type="button" className="btn btn-danger" onClick={remove}>Удалить</button>
-          )}
-          <span className="spacer" />
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Отмена</button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Сохранение…' : 'Сохранить'}
-          </button>
-        </div>
-      </form>
-    </Modal>
+          <div className="field-row">
+            <label className="field">
+              <span>Статус</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Срок</span>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </label>
+          </div>
+          <div className="form-actions">
+            {task && (
+              <button type="button" className="btn btn-danger"
+                      onClick={() => setConfirming(true)}>Удалить</button>
+            )}
+            <span className="spacer" />
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Отмена</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Сохранение…' : 'Сохранить'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {confirming && (
+        <ConfirmDialog
+          title="Удаление задания"
+          message={<>Удалить задание «<strong>{task.title}</strong>»?</>}
+          hint="Действие необратимо."
+          confirmLabel="Удалить задание"
+          busyLabel="Удаление…"
+          errorMessage="Не удалось удалить задание"
+          onConfirm={onDelete}
+          onClose={() => setConfirming(false)}
+        />
+      )}
+    </>
   )
 }
