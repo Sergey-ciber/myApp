@@ -82,6 +82,13 @@ public class GameController {
         return gameService.restartProgress(id, currentUser(principal));
     }
 
+    /** Подсказка: первые буквы неразгаданных слов. Доступность проверяется сервером. */
+    @PostMapping("/{id}/hint")
+    public GameProgressDto hint(@AuthenticationPrincipal UserDetails principal,
+                                @PathVariable Long id) {
+        return gameService.takeHint(id, currentUser(principal));
+    }
+
     @PostMapping
     public ResponseEntity<GameResponse> create(@AuthenticationPrincipal UserDetails principal,
                                                @RequestBody GameRequest request) {

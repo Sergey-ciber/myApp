@@ -18,8 +18,8 @@ public interface UserProgressRepository extends JpaRepository<UserProgress, Long
      * ON CONFLICT защищает от гонки двух одновременных открытий игры.
      */
     @Modifying
-    @Query(value = "insert into user_progress (user_id, game_id, solved_words, started_at, updated_at) "
-            + "values (:userId, :gameId, '{}', now(), now()) on conflict (user_id, game_id) do nothing",
+    @Query(value = "insert into user_progress (user_id, game_id, solved_words, hint_level, hint_prefixes, started_at, updated_at) "
+            + "values (:userId, :gameId, '{}', 0, '{}', now(), now()) on conflict (user_id, game_id) do nothing",
             nativeQuery = true)
     void insertIfAbsent(@Param("userId") Long userId, @Param("gameId") Long gameId);
 }

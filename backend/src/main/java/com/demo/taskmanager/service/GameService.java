@@ -45,6 +45,12 @@ public class GameService {
     private static final int MAX_WORD_LENGTH = 60;
     /** Больше суток на одну игру не отводим — защита от мусорных результатов. */
     private static final int MAX_TIME_SECONDS = 24 * 60 * 60;
+    /** Подсказки открываются по серверному таймеру: 3, 6, 9, 12 минут после старта. */
+    private static final int HINT_LEVEL_ONE_SECONDS = 180;
+    private static final int HINT_LEVEL_TWO_SECONDS = 360;
+    private static final int HINT_LEVEL_THREE_SECONDS = 540;
+    private static final int HINT_LEVEL_FOUR_SECONDS = 720;
+    private static final int MAX_HINT_LEVEL = 4;
 
     private final GameRepository gameRepository;
     private final GameResultRepository resultRepository;
@@ -127,6 +133,11 @@ public class GameService {
             Map<String, String> solved = parseSolved(progress);
             solved.put(column + ":" + position, expected);
             writeSolved(progress, solved);
+            // ячейка разгадана — подсказка для неё больше не нужна
+            Map<String, String> prefixes = parsePrefixes(progress);
+            if (prefixes.remove(column + ":" + position) != null) {
+                writePrefixes(progress, prefixes);
+            }
             // верное слово колонки 5 — победа, время считает сервер
             if (column == COLUMN_SIZES.length && progress.getFinishedSeconds() == null) {
                 progress.setFinishedSeconds((int) Math.max(1, elapsedSeconds(progress)));
@@ -137,12 +148,69 @@ public class GameService {
         return new CheckAnswerResponse(correct, toDto(progress));
     }
 
+    /**
+     * Выдать следующую подсказку. Доступность считается только по серверному времени:
+     * первая — через 180 секунд после старта, вторая — через 360, третья через 520.
+     * Подсказка открывает первые буквы всех ещё не разгаданных ячеек.
+     */
+    @Transactional
+    public GameProgressDto takeHint(Long gameId, User user) {
+        Game game = findGame(gameId);
+        UserProgress progress = findOrCreateProgress(game, user);
+        if (progress.getFinishedSeconds() != null) {
+            throw new BadRequestException("Игра уже пройдена — подсказка не нужна");
+        }
+        int level = progress.getHintLevel();
+        if (level >= MAX_HINT_LEVEL) {
+            throw new BadRequestException("Все подсказки уже получены");
+        }
+
+
+        int required = switch (level) {
+            case 0 -> HINT_LEVEL_ONE_SECONDS;
+            case 1 -> HINT_LEVEL_TWO_SECONDS;
+            case 2 -> HINT_LEVEL_THREE_SECONDS;
+            case 3 -> HINT_LEVEL_FOUR_SECONDS;
+            default -> Integer.MAX_VALUE;
+        };
+        long elapsed = elapsedSeconds(progress);
+        if (elapsed < required) {
+            throw new BadRequestException("Подсказка будет доступна через "
+                    + (required - elapsed) + " с");
+        }
+
+        int newLevel = level + 1;
+        Map<String, String> solved = parseSolved(progress);
+        Map<String, String> prefixes = new LinkedHashMap<>();
+        for (GameWord word : game.getWords()) {
+            if (word.getColumnNum() < 2) {
+                continue;
+            }
+            String key = word.getColumnNum() + ":" + word.getPosition();
+            if (solved.containsKey(key)) {
+                continue;
+            }
+            String value = word.getWord();
+            if (value == null || value.isEmpty()) {
+                continue;
+            }
+            prefixes.put(key, value.substring(0, Math.min(newLevel, value.length())));
+        }
+        progress.setHintLevel(newLevel);
+        writePrefixes(progress, prefixes);
+        progress.setUpdatedAt(Instant.now());
+        progressRepository.save(progress);
+        return toDto(progress);
+    }
+
     /** «Начать заново»: очищаем только прогресс этого пользователя. */
     @Transactional
     public GameProgressDto restartProgress(Long gameId, User user) {
         Game game = findGame(gameId);
         UserProgress progress = findOrCreateProgress(game, user);
         progress.setSolvedWords("{}");
+        progress.setHintLevel(0);
+        progress.setHintPrefixes("{}");
         progress.setStartedAt(Instant.now());
         progress.setFinishedSeconds(null);
         progress.setUpdatedAt(Instant.now());
@@ -284,7 +352,8 @@ public class GameService {
                 ? progress.getFinishedSeconds()
                 : elapsedSeconds(progress);
         return new GameProgressDto(parseSolved(progress), progress.getStartedAt(),
-                elapsed, progress.getFinishedSeconds());
+                elapsed, progress.getFinishedSeconds(),
+                progress.getHintLevel(), parsePrefixes(progress));
     }
 
     private long elapsedSeconds(UserProgress progress) {
@@ -307,6 +376,25 @@ public class GameService {
             progress.setSolvedWords(objectMapper.writeValueAsString(solved));
         } catch (JsonProcessingException e) {
             progress.setSolvedWords("{}");
+        }
+    }
+
+    private Map<String, String> parsePrefixes(UserProgress progress) {
+        try {
+            Map<String, String> prefixes = objectMapper.readValue(
+                    progress.getHintPrefixes() == null ? "{}" : progress.getHintPrefixes(),
+                    new TypeReference<LinkedHashMap<String, String>>() { });
+            return prefixes == null ? new LinkedHashMap<>() : prefixes;
+        } catch (JsonProcessingException e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private void writePrefixes(UserProgress progress, Map<String, String> prefixes) {
+        try {
+            progress.setHintPrefixes(objectMapper.writeValueAsString(prefixes));
+        } catch (JsonProcessingException e) {
+            progress.setHintPrefixes("{}");
         }
     }
 

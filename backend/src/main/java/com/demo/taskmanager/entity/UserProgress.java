@@ -31,6 +31,14 @@ public class UserProgress {
     @Column(name = "solved_words", nullable = false, columnDefinition = "text")
     private String solvedWords = "{}";
 
+    /** Текущий уровень подсказки: 0 — нет, 1 — первые буквы, 2 — первые две буквы. */
+    @Column(name = "hint_level", nullable = false, columnDefinition = "integer default 0")
+    private int hintLevel = 0;
+
+    /** Открытые подсказкой префиксы: {"2:1":"с","2:2":"ве"} — только для неразгаданных ячеек. */
+    @Column(name = "hint_prefixes", nullable = false, columnDefinition = "text default '{}'")
+    private String hintPrefixes = "{}";
+
     /** Момент старта текущей попытки — от него считается таймер. */
     @Column(name = "started_at", nullable = false)
     private Instant startedAt = Instant.now();
@@ -60,6 +68,12 @@ public class UserProgress {
 
     public String getSolvedWords() { return solvedWords; }
     public void setSolvedWords(String solvedWords) { this.solvedWords = solvedWords; }
+
+    public int getHintLevel() { return hintLevel; }
+    public void setHintLevel(int hintLevel) { this.hintLevel = hintLevel; }
+
+    public String getHintPrefixes() { return hintPrefixes; }
+    public void setHintPrefixes(String hintPrefixes) { this.hintPrefixes = hintPrefixes; }
 
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
