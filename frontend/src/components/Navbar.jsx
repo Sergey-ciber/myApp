@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import InvitationsBell from './InvitationsBell'
 
 function initials(user) {
   const name = user?.fullName || user?.username || '?'
@@ -22,13 +23,19 @@ export default function Navbar() {
           Мои доски
         </Link>
         {user && (
-          <Link to="/associations" className="navbar-link">
-            Игра в ассоциации
-          </Link>
+          <>
+            <Link to="/associations" className="navbar-link">
+              Игра в ассоциации
+            </Link>
+            <Link to="/teams" className="navbar-link">
+              Команды
+            </Link>
+          </>
         )}
       </div>
       {user && (
         <div className="navbar-user">
+          <InvitationsBell />
           <Link to="/profile" className="navbar-profile">
             {user.avatarUrl
               ? <img src={user.avatarUrl} alt="avatar" className="avatar avatar-sm" />

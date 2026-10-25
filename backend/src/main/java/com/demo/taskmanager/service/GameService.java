@@ -58,15 +58,18 @@ public class GameService {
     private final GameRepository gameRepository;
     private final GameResultRepository resultRepository;
     private final UserProgressRepository progressRepository;
+    private final TeamService teamService;
     private final ObjectMapper objectMapper;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
                        UserProgressRepository progressRepository,
+                       TeamService teamService,
                        ObjectMapper objectMapper) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
+        this.teamService = teamService;
         this.objectMapper = objectMapper;
     }
 
@@ -226,6 +229,7 @@ public class GameService {
         progress.setHintPrefixes("{}");
         progress.setStartedAt(Instant.now());
         progress.setFinishedSeconds(null);
+        progress.setWinCounted(false);
         progress.setUpdatedAt(Instant.now());
         progressRepository.save(progress);
         return toDto(progress);
@@ -318,6 +322,14 @@ public class GameService {
 
         GameResult result = new GameResult(game, user, seconds);
         resultRepository.save(result);
+        // Повторная отправка результата разрешена (в рейтинг идёт лучшая попытка),
+        // но победа текущей попытки начисляет командам +1 только один раз.
+        if (serverTime != null && !progress.isWinCounted()) {
+            progress.setWinCounted(true);
+            progress.setUpdatedAt(Instant.now());
+            progressRepository.save(progress);
+            teamService.registerWin(user);
+        }
         return ResultResponse.from(result);
     }
 

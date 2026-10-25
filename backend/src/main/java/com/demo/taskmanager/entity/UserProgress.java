@@ -47,6 +47,10 @@ public class UserProgress {
     @Column(name = "finished_seconds")
     private Integer finishedSeconds;
 
+    /** Победа текущей попытки уже учтена в рейтинге команд (защита от повторного начисления). */
+    @Column(name = "win_counted", nullable = false, columnDefinition = "boolean default false")
+    private boolean winCounted = false;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
@@ -80,6 +84,9 @@ public class UserProgress {
 
     public Integer getFinishedSeconds() { return finishedSeconds; }
     public void setFinishedSeconds(Integer finishedSeconds) { this.finishedSeconds = finishedSeconds; }
+
+    public boolean isWinCounted() { return winCounted; }
+    public void setWinCounted(boolean winCounted) { this.winCounted = winCounted; }
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }

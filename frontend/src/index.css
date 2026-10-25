@@ -734,3 +734,298 @@ body {
   .assoc-leaderboard { padding: 12px 12px; }
   .assoc-timer-value { font-size: 16px; }
 }
+
+/* ---------- Teams ---------- */
+.btn-outline-danger {
+  background: transparent;
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px #e0a99f;
+}
+.btn-outline-danger:hover:not(:disabled) { background: #fdecea; }
+
+.teams-page { max-width: 1200px; }
+.teams-header { align-items: flex-start; }
+.teams-subtitle { margin: 6px 0 0; font-size: 14px; color: var(--text-muted); max-width: 660px; }
+.teams-rating-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: #fffaeb;
+  border: 1px solid #f2dfae;
+  color: #6b5315;
+  font-size: 13px;
+}
+.teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.teams-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.teams-empty p { margin: 0; }
+.teams-hint { margin: 22px 0 0; font-size: 12px; color: var(--text-muted); }
+
+.team-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.team-card-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.team-card-title { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.team-card-title h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.team-rating { font-size: 15px; font-weight: 700; color: #8a5a00; }
+.team-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.team-place {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #eef3fa;
+  color: #1d4f8f;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.team-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f6;
+}
+.team-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.team-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: #f8f9fb;
+  min-width: 0;
+}
+.team-member-info { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.team-member-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.team-member-login { font-size: 11px; color: var(--text-muted); }
+.team-role {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #eef1f6;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.team-role-admin { background: #fff3cd; color: #7a5a00; }
+.team-remove { flex-shrink: 0; color: var(--danger); }
+.team-remove:hover { background: rgba(176, 70, 50, 0.1); color: var(--danger); }
+
+.team-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-weight: 700;
+  color: #fff;
+}
+.team-avatar-sm { width: 32px; height: 32px; font-size: 12px; }
+.team-avatar-md { width: 44px; height: 44px; font-size: 15px; }
+.team-avatar-lg { width: 64px; height: 64px; font-size: 22px; }
+.team-avatar-fallback { background: linear-gradient(135deg, #0079bf, #4c9aff); }
+.team-avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+.team-avatar-editor-controls { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+
+.invite-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 9px;
+  background: #f8f9fb;
+}
+.invite-person { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.invite-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.invite-login { font-size: 11px; color: var(--text-muted); }
+.invite-state { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.invite-state-sent { color: var(--success); font-weight: 600; }
+.invite-empty { margin: 18px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+.invitations-panel {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #f0d48c;
+  background: #fffaf0;
+}
+.invitations-panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.invitations-panel-head h2 { margin: 0; font-size: 16px; }
+.invitations-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.invitations-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.invitation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: #fff;
+  border: 1px solid #f2e2bd;
+}
+.invitation-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.invitation-team { font-size: 14px; font-weight: 600; }
+.invitation-meta { font-size: 12px; color: var(--text-muted); }
+.invitation-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- Invitations bell ---------- */
+.navbar-bell-wrap { position: relative; display: flex; align-items: center; }
+.navbar-bell {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.navbar-bell:hover { background: rgba(255, 255, 255, 0.12); }
+.bell-badge {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  border: 2px solid #1d2b45;
+  background: #e5484d;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bell-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  max-height: 480px;
+  overflow-y: auto;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(9, 30, 66, 0.25);
+  z-index: 120;
+}
+.bell-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #eef1f6;
+  font-size: 14px;
+}
+.bell-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bell-empty { margin: 0; padding: 22px 14px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.bell-error { margin: 10px 12px; padding: 8px 10px; border-radius: 7px; background: #ffebe6; color: #b04632; font-size: 12px; }
+.bell-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.bell-item { display: flex; gap: 10px; padding: 9px; border-radius: 9px; background: #f8f9fb; }
+.bell-item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bell-team { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.bell-meta { font-size: 11px; color: var(--text-muted); }
+.bell-actions { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.bell-footer {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-top: 1px solid #eef1f6;
+  background: #fafbfc;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0 0 12px 12px;
+}
+.bell-footer:hover { background: #f2f8ff; }
+
+@media (max-width: 760px) {
+  .teams-grid { grid-template-columns: 1fr; }
+  .invitation-row { flex-wrap: wrap; }
+  .invitation-actions { width: 100%; justify-content: flex-end; }
+}
