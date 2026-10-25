@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import InvitationsBell from './InvitationsBell'
 
@@ -19,29 +19,41 @@ export default function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <Link to="/boards" className="navbar-brand">
+        <NavLink
+          to="/boards"
+          className={({ isActive }) => `navbar-brand${isActive ? ' is-active' : ''}`}
+        >
           Мои доски
-        </Link>
+        </NavLink>
         {user && (
           <>
-            <Link to="/associations" className="navbar-link">
+            <NavLink
+              to="/associations"
+              className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
+            >
               Игра в ассоциации
-            </Link>
-            <Link to="/teams" className="navbar-link">
+            </NavLink>
+            <NavLink
+              to="/teams"
+              className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
+            >
               Команды
-            </Link>
+            </NavLink>
           </>
         )}
       </div>
       {user && (
         <div className="navbar-user">
           <InvitationsBell />
-          <Link to="/profile" className="navbar-profile">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => `navbar-profile${isActive ? ' is-active' : ''}`}
+          >
             {user.avatarUrl
               ? <img src={user.avatarUrl} alt="avatar" className="avatar avatar-sm" />
               : <span className="avatar avatar-sm avatar-fallback">{initials(user)}</span>}
             <span className="navbar-username">{user.fullName || user.username}</span>
-          </Link>
+          </NavLink>
           <button className="btn btn-ghost" onClick={handleLogout}>Выйти</button>
         </div>
       )}
