@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../ConfirmDialog'
 import { membersLabel, winsLabel } from '../../utils/plural'
 import TeamAvatar from './TeamAvatar'
@@ -14,6 +15,17 @@ const placeLabel = (place) => {
 export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
   const [confirm, setConfirm] = useState(null)
   const [leaving, setLeaving] = useState(false)
+  const navigate = useNavigate()
+
+  const openTeam = () => navigate(`/teams/${team.id}`)
+
+  const openTeamFromKeyboard = (event) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openTeam()
+    }
+  }
 
   const confirmLeave = async () => {
     setLeaving(true)
@@ -38,7 +50,14 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
 
   return (
     <>
-      <article className="team-card">
+      <article
+        className="team-card"
+        role="link"
+        tabIndex={0}
+        aria-label={`Открыть карточку команды «${team.name}»`}
+        onClick={openTeam}
+        onKeyDown={openTeamFromKeyboard}
+      >
         <div className="team-card-head">
           <TeamAvatar src={team.avatarUrl} name={team.name} size="lg" />
           <div className="team-card-title">
@@ -53,13 +72,14 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
 
         <div className="team-card-actions">
           {team.currentUserCreator && (
-            <button type="button" className="btn btn-primary btn-small" onClick={() => onInvite(team)}>
+            <button type="button" className="btn btn-primary btn-small"
+                    onClick={(event) => { event.stopPropagation(); onInvite(team) }}>
               Пригласить пользователя
             </button>
           )}
           {team.currentUserMember && (
             <button type="button" className="btn btn-outline-danger btn-small"
-                    onClick={() => setConfirm({ type: 'leave' })}>
+                    onClick={(event) => { event.stopPropagation(); setConfirm({ type: 'leave' }) }}>
               Покинуть команду
             </button>
           )}
@@ -80,7 +100,7 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
                 </span>
                 {team.currentUserCreator && !isCreator && (
                   <button type="button" className="btn btn-ghost btn-small team-remove"
-                          onClick={() => setConfirm({ type: 'remove', member })}>
+                          onClick={(event) => { event.stopPropagation(); setConfirm({ type: 'remove', member }) }}>
                     Исключить
                   </button>
                 )}

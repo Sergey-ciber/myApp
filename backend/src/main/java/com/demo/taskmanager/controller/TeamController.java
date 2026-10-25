@@ -3,6 +3,7 @@ package com.demo.taskmanager.controller;
 import com.demo.taskmanager.dto.AvatarResponse;
 import com.demo.taskmanager.dto.InvitationResponse;
 import com.demo.taskmanager.dto.InviteRequest;
+import com.demo.taskmanager.dto.TeamDetailsResponse;
 import com.demo.taskmanager.dto.TeamRequest;
 import com.demo.taskmanager.dto.TeamResponse;
 import com.demo.taskmanager.entity.User;
@@ -38,6 +39,19 @@ public class TeamController {
     @GetMapping
     public List<TeamResponse> list(@AuthenticationPrincipal UserDetails principal) {
         return teamService.listTeams(currentUser(principal));
+    }
+
+    @GetMapping("/{id}")
+    public TeamDetailsResponse details(@AuthenticationPrincipal UserDetails principal,
+                                       @PathVariable Long id) {
+        return teamService.getTeam(id, currentUser(principal));
+    }
+
+    @PutMapping("/{id}")
+    public TeamDetailsResponse update(@AuthenticationPrincipal UserDetails principal,
+                                      @PathVariable Long id,
+                                      @RequestBody TeamRequest request) {
+        return teamService.updateTeam(id, request, currentUser(principal));
     }
 
     @PostMapping

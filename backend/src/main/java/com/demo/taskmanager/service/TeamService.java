@@ -2,6 +2,7 @@ package com.demo.taskmanager.service;
 
 import com.demo.taskmanager.dto.InvitationResponse;
 import com.demo.taskmanager.dto.InviteRequest;
+import com.demo.taskmanager.dto.TeamDetailsResponse;
 import com.demo.taskmanager.dto.TeamRequest;
 import com.demo.taskmanager.dto.TeamResponse;
 import com.demo.taskmanager.entity.InvitationStatus;
@@ -13,6 +14,7 @@ import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
+import com.demo.taskmanager.repository.GameResultRepository;
 import com.demo.taskmanager.repository.TeamInvitationRepository;
 import com.demo.taskmanager.repository.TeamMemberRepository;
 import com.demo.taskmanager.repository.TeamRepository;
@@ -34,15 +36,18 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository memberRepository;
     private final TeamInvitationRepository invitationRepository;
+    private final GameResultRepository resultRepository;
     private final UserRepository userRepository;
 
     public TeamService(TeamRepository teamRepository,
                        TeamMemberRepository memberRepository,
                        TeamInvitationRepository invitationRepository,
+                       GameResultRepository resultRepository,
                        UserRepository userRepository) {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
+        this.resultRepository = resultRepository;
         this.userRepository = userRepository;
     }
 
@@ -57,20 +62,38 @@ public class TeamService {
                 .toList();
     }
 
+    /** Детальная карточка команды доступна всем авторизованным пользователям. */
+    @Transactional(readOnly = true)
+    public TeamDetailsResponse getTeam(Long teamId, User currentUser) {
+        return toDetails(findTeam(teamId), currentUser);
+    }
+
+    /** Изменить название и/или аватар может только создатель команды. */
+    @Transactional
+    public TeamDetailsResponse updateTeam(Long teamId, TeamRequest request, User currentUser) {
+        Team team = findTeam(teamId);
+        requireCreator(team, currentUser);
+        if (request == null) {
+            throw new BadRequestException("Некорректные данные команды");
+        }
+        if (request.name() != null) {
+            team.setName(validateName(request.name()));
+        }
+        if (request.avatarUrl() != null) {
+            String avatar = request.avatarUrl().trim();
+            team.setAvatarUrl(avatar.isEmpty() ? null : validateAvatarUrl(avatar));
+        }
+        teamRepository.save(team);
+        return toDetails(team, currentUser);
+    }
+
     /** Создать команду: создатель сразу становится её администратором. */
     @Transactional
     public TeamResponse createTeam(TeamRequest request, User creator) {
         if (request == null) {
             throw new BadRequestException("Некорректные данные команды");
         }
-        String name = request.name() == null ? "" : request.name().trim();
-        if (name.isEmpty()) {
-            throw new BadRequestException("Введите название команды");
-        }
-        if (name.length() > MAX_NAME_LENGTH) {
-            throw new BadRequestException("Название команды не должно быть длиннее "
-                    + MAX_NAME_LENGTH + " символов");
-        }
+        String name = validateName(request.name());
 
         Team team = new Team();
         team.setName(name);
@@ -197,6 +220,28 @@ public class TeamService {
     private Team findTeam(Long id) {
         return teamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Команда не найдена"));
+    }
+
+    private TeamDetailsResponse toDetails(Team team, User currentUser) {
+        List<Long> memberIds = team.getMembers().stream()
+                .map(member -> member.getUser().getId())
+                .toList();
+        long gamesPlayed = memberIds.isEmpty()
+                ? 0
+                : resultRepository.countMemberGames(memberIds);
+        return TeamDetailsResponse.from(team, currentUser.getId(), gamesPlayed);
+    }
+
+    private String validateName(String raw) {
+        String name = raw == null ? "" : raw.trim();
+        if (name.isEmpty()) {
+            throw new BadRequestException("Введите название команды");
+        }
+        if (name.length() > MAX_NAME_LENGTH) {
+            throw new BadRequestException("Название команды не должно быть длиннее "
+                    + MAX_NAME_LENGTH + " символов");
+        }
+        return name;
     }
 
     private TeamInvitation findPendingInvitation(Long invitationId, User user) {

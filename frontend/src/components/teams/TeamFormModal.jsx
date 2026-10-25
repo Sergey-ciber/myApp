@@ -1,15 +1,16 @@
 import { useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
-import { createTeam, uploadTeamAvatar } from '../../api/teams'
+import { createTeam, updateTeam, uploadTeamAvatar } from '../../api/teams'
 import Modal from '../Modal'
 import TeamAvatar from './TeamAvatar'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
-/** Создание команды: название + аватар ссылкой или файлом с превью. */
-export default function CreateTeamModal({ onClose, onCreated }) {
-  const [name, setName] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState('')
+/** Создание или редактирование команды: название + аватар ссылкой или файлом. */
+export default function TeamFormModal({ team = null, onClose, onSaved }) {
+  const editing = Boolean(team)
+  const [name, setName] = useState(team?.name || '')
+  const [avatarUrl, setAvatarUrl] = useState(team?.avatarUrl || '')
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -51,8 +52,11 @@ export default function CreateTeamModal({ onClose, onCreated }) {
     setSaving(true)
     setError('')
     try {
-      const team = await createTeam({ name: name.trim(), avatarUrl: avatarUrl.trim() || null })
-      onCreated(team)
+      const payload = { name: name.trim(), avatarUrl: avatarUrl.trim() }
+      const saved = editing
+        ? await updateTeam(team.id, payload)
+        : await createTeam(payload)
+      onSaved(saved)
     } catch (err) {
       setError(apiMessage(err))
     } finally {
@@ -61,7 +65,7 @@ export default function CreateTeamModal({ onClose, onCreated }) {
   }
 
   return (
-    <Modal title="Создать команду" onClose={onClose}>
+    <Modal title={editing ? 'Редактировать команду' : 'Создать команду'} onClose={onClose}>
       <form className="form" onSubmit={submit}>
         {error && <div className="alert alert-error">{error}</div>}
 
@@ -101,7 +105,9 @@ export default function CreateTeamModal({ onClose, onCreated }) {
             Отмена
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving || uploading}>
-            {saving ? 'Создание…' : 'Создать команду'}
+            {saving
+              ? (editing ? 'Сохранение…' : 'Создание…')
+              : (editing ? 'Сохранить изменения' : 'Создать команду')}
           </button>
         </div>
       </form>

@@ -8,7 +8,12 @@ export function plural(count, one, few, many) {
   return many
 }
 
-export const winsLabel = (wins) => `${wins} ${plural(wins, 'победа', 'победы', 'побед')}`
+export const winsWord = (count) => plural(count, 'победа', 'победы', 'побед')
+export const membersWord = (count) => plural(count, 'участник', 'участника', 'участников')
+export const gamesWord = (count) => plural(count, 'игра', 'игры', 'игр')
 
-export const membersLabel = (count) =>
-  `${count} ${plural(count, 'участник', 'участника', 'участников')}`
+export const winsLabel = (wins) => `${wins} ${winsWord(wins)}`
+
+export const membersLabel = (count) => `${count} ${membersWord(count)}`
+
+export const gamesLabel = (count) => `${count} ${gamesWord(count)}`

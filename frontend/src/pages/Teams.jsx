@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
 import { fetchTeams, leaveTeam, removeTeamMember } from '../api/teams'
-import CreateTeamModal from '../components/teams/CreateTeamModal'
+import TeamFormModal from '../components/teams/TeamFormModal'
 import IncomingInvitations from '../components/teams/IncomingInvitations'
 import InviteModal from '../components/teams/InviteModal'
 import TeamCard from '../components/teams/TeamCard'
@@ -117,7 +117,7 @@ export default function Teams() {
       )}
 
       {showCreate && (
-        <CreateTeamModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />
+        <TeamFormModal onClose={() => setShowCreate(false)} onSaved={handleCreated} />
       )}
 
       {inviteTeam && (

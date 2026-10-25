@@ -3,8 +3,15 @@ import api from './client'
 /** Все команды платформы, отсортированные сервером по числу побед. */
 export const fetchTeams = () => api.get('/teams').then((res) => res.data)
 
+/** Детальная карточка команды: статистика, участники и права текущего пользователя. */
+export const fetchTeam = (teamId) => api.get(`/teams/${teamId}`).then((res) => res.data)
+
 /** Создать команду: { name, avatarUrl }. Создатель становится администратором. */
 export const createTeam = (team) => api.post('/teams', team).then((res) => res.data)
+
+/** Изменить название и/или аватар команды (только создатель/администратор). */
+export const updateTeam = (teamId, team) =>
+  api.put(`/teams/${teamId}`, team).then((res) => res.data)
 
 /** Загрузить аватар команды и получить публичный URL. */
 export const uploadTeamAvatar = (file) => {
