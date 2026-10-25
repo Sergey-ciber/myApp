@@ -10,6 +10,7 @@ import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
 import com.demo.taskmanager.dto.ResultRequest;
 import com.demo.taskmanager.dto.ResultResponse;
+import com.demo.taskmanager.dto.TimeoutResponse;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.service.GameService;
 import com.demo.taskmanager.service.UserService;
@@ -87,6 +88,13 @@ public class GameController {
     public GameProgressDto hint(@AuthenticationPrincipal UserDetails principal,
                                 @PathVariable Long id) {
         return gameService.takeHint(id, currentUser(principal));
+    }
+
+    /** Время вышло: раскрываем игроку правильный ответ колонки 5 (без записи результата). */
+    @PostMapping("/{id}/timeout")
+    public TimeoutResponse timeout(@AuthenticationPrincipal UserDetails principal,
+                                   @PathVariable Long id) {
+        return gameService.revealTimeoutAnswer(id, currentUser(principal));
     }
 
     @PostMapping

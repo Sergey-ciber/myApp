@@ -22,7 +22,10 @@ export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) =
 /** Взять подсказку: сервер проверяет время и открывает первые буквы неразгаданных слов. */
 export const requestHint = (id) => api.post(`/games/${id}/hint`).then((res) => res.data)
 
-/** Создать игру. Принимает { title, columns }, автор — текущий пользователь. */
+/** Время вышло: сервер раскрывает правильный ответ колонки 5 (рекорд не записывается). */
+export const requestTimeout = (id) => api.post(`/games/${id}/timeout`).then((res) => res.data)
+
+/** Создать игру. Принимает { title, timeLimitMinutes, columns }, автор — текущий пользователь. */
 export const createGame = (game) => api.post('/games', game).then((res) => res.data)
 
 /** Обновить игру (только свою). */

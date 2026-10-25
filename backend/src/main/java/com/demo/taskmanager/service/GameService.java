@@ -10,6 +10,7 @@ import com.demo.taskmanager.dto.GameSessionResponse;
 import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
 import com.demo.taskmanager.dto.ResultResponse;
+import com.demo.taskmanager.dto.TimeoutResponse;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameResult;
 import com.demo.taskmanager.entity.GameWord;
@@ -45,6 +46,8 @@ public class GameService {
     private static final int MAX_WORD_LENGTH = 60;
     /** Больше суток на одну игру не отводим — защита от мусорных результатов. */
     private static final int MAX_TIME_SECONDS = 24 * 60 * 60;
+    /** Лимит времени на прохождение задаёт администратор: от 0 до 24 часов. */
+    private static final double MAX_TIME_LIMIT_MINUTES = 24 * 60;
     /** Подсказки открываются по серверному таймеру: 3, 6, 9, 12 минут после старта. */
     private static final int HINT_LEVEL_ONE_SECONDS = 180;
     private static final int HINT_LEVEL_TWO_SECONDS = 360;
@@ -129,6 +132,9 @@ public class GameService {
                 && normalize(request.answer()).equals(normalize(expected));
 
         UserProgress progress = findOrCreateProgress(game, user);
+        if (progress.getFinishedSeconds() == null && isTimeUp(game, progress)) {
+            throw new BadRequestException("Время вышло — игра окончена");
+        }
         if (correct) {
             Map<String, String> solved = parseSolved(progress);
             solved.put(column + ":" + position, expected);
@@ -140,7 +146,11 @@ public class GameService {
             }
             // верное слово колонки 5 — победа, время считает сервер
             if (column == COLUMN_SIZES.length && progress.getFinishedSeconds() == null) {
-                progress.setFinishedSeconds((int) Math.max(1, elapsedSeconds(progress)));
+                long elapsed = elapsedSeconds(progress);
+                if (elapsed > limitSeconds(game)) {
+                    throw new BadRequestException("Время вышло — результат не засчитывается");
+                }
+                progress.setFinishedSeconds((int) Math.max(1, elapsed));
             }
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
@@ -150,8 +160,8 @@ public class GameService {
 
     /**
      * Выдать следующую подсказку. Доступность считается только по серверному времени:
-     * первая — через 180 секунд после старта, вторая — через 360, третья через 520.
-     * Подсказка открывает первые буквы всех ещё не разгаданных ячеек.
+     * 180, 360, 540 и 720 секунд после старта. Подсказка открывает первые буквы
+     * всех ещё не разгаданных ячеек.
      */
     @Transactional
     public GameProgressDto takeHint(Long gameId, User user) {
@@ -159,6 +169,9 @@ public class GameService {
         UserProgress progress = findOrCreateProgress(game, user);
         if (progress.getFinishedSeconds() != null) {
             throw new BadRequestException("Игра уже пройдена — подсказка не нужна");
+        }
+        if (isTimeUp(game, progress)) {
+            throw new BadRequestException("Время вышло — подсказки недоступны");
         }
         int level = progress.getHintLevel();
         if (level >= MAX_HINT_LEVEL) {
@@ -221,9 +234,11 @@ public class GameService {
     @Transactional
     public GameResponse createGame(GameRequest request, User creator) {
         List<List<String>> columns = validateAndNormalize(request);
+        double timeLimit = validateTimeLimit(request.timeLimitMinutes());
 
         Game game = new Game();
         game.setTitle(request.title().trim());
+        game.setTimeLimitMinutes(timeLimit);
         game.setCreator(creator);
         // первая игра сразу становится активной — её и откроет игрок
         game.setActive(gameRepository.count() == 0);
@@ -235,10 +250,12 @@ public class GameService {
     @Transactional
     public GameResponse updateGame(Long id, GameRequest request, User currentUser) {
         List<List<String>> columns = validateAndNormalize(request);
+        double timeLimit = validateTimeLimit(request.timeLimitMinutes());
 
         Game game = findGame(id);
         requireCreator(game, currentUser);
         game.setTitle(request.title().trim());
+        game.setTimeLimitMinutes(timeLimit);
         // ответы могли измениться — прогресс игроков по старой версии больше не актуален
         game.getProgressEntries().clear();
         // сначала удаляем старые слова и фиксируем удаление,
@@ -276,18 +293,51 @@ public class GameService {
     /**
      * Сохранить время прохождения. Если на сервере уже зафиксировано время победы
      * этого пользователя, берём его — подделать результат из клиента нельзя.
+     * После истечения лимита результат не принимается.
      */
     @Transactional
     public ResultResponse submitResult(Long gameId, User user, Integer timeSeconds) {
         Game game = findGame(gameId);
         UserProgress progress = progressRepository
-                .findByGameIdAndUserId(gameId, user.getId()).orElse(null);
-        Integer serverTime = progress == null ? null : progress.getFinishedSeconds();
-        int seconds = serverTime != null ? serverTime : validateTime(timeSeconds);
+                .findByGameIdAndUserId(gameId, user.getId())
+                .orElseThrow(() -> new BadRequestException("Сначала начните игру"));
+        int limit = limitSeconds(game);
+        Integer serverTime = progress.getFinishedSeconds();
+        int seconds;
+        if (serverTime != null) {
+            seconds = serverTime;
+        } else {
+            if (isTimeUp(game, progress)) {
+                throw new BadRequestException("Время вышло — результат не засчитывается");
+            }
+            seconds = validateTime(timeSeconds);
+            if (seconds > limit) {
+                throw new BadRequestException("Результат не может превышать лимит времени игры");
+            }
+        }
 
         GameResult result = new GameResult(game, user, seconds);
         resultRepository.save(result);
         return ResultResponse.from(result);
+    }
+
+    /**
+     * Раскрыть правильный ответ колонки 5 после истечения времени.
+     * До таймаута ответ не отдаётся, после победы также не нужен.
+     */
+    @Transactional(readOnly = true)
+    public TimeoutResponse revealTimeoutAnswer(Long gameId, User user) {
+        Game game = findGame(gameId);
+        UserProgress progress = progressRepository.findByGameIdAndUserId(gameId, user.getId())
+                .orElseThrow(() -> new BadRequestException("Игра ещё не начата"));
+        if (progress.getFinishedSeconds() != null) {
+            throw new BadRequestException("Игра уже пройдена");
+        }
+        // допускаем секундную рассинхронизацию между клиентом и сервером
+        if (elapsedSeconds(progress) + 1 < limitSeconds(game)) {
+            throw new BadRequestException("Время ещё не вышло");
+        }
+        return new TimeoutResponse(wordAt(game, COLUMN_SIZES.length, 1));
     }
 
     /**
@@ -404,6 +454,27 @@ public class GameService {
                     + MAX_TIME_SECONDS + " секунд");
         }
         return timeSeconds;
+    }
+
+    /** Лимит времени игры обязателен: положительное число минут, можно дробное. */
+    private double validateTimeLimit(Double timeLimitMinutes) {
+        if (timeLimitMinutes == null || !Double.isFinite(timeLimitMinutes)
+                || timeLimitMinutes <= 0) {
+            throw new BadRequestException("Укажите время на прохождение в минутах (больше 0)");
+        }
+        if (timeLimitMinutes > MAX_TIME_LIMIT_MINUTES) {
+            throw new BadRequestException("Время на прохождение не должно превышать "
+                    + (int) MAX_TIME_LIMIT_MINUTES + " минут");
+        }
+        return timeLimitMinutes;
+    }
+
+    private int limitSeconds(Game game) {
+        return (int) Math.max(1, Math.round(game.getTimeLimitMinutes() * 60));
+    }
+
+    private boolean isTimeUp(Game game, UserProgress progress) {
+        return elapsedSeconds(progress) >= limitSeconds(game);
     }
 
     /** Сравнение слов: без учёта регистра и пробелов по краям. */

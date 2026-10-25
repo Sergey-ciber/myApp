@@ -63,6 +63,13 @@ export function formatTime(totalSeconds) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+/** Минуты без лишних нулей: 10 -> "10", 2.5 -> "2.5". */
+export function formatMinutes(value) {
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes)) return '—'
+  return String(minutes)
+}
+
 /** Дата прохождения для таблицы результатов. */
 export function formatDate(instant) {
   if (!instant) return '—'

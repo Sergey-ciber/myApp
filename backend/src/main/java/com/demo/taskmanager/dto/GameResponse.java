@@ -9,9 +9,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** Полная игра: название + пирамида слов [16, 8, 4, 2, 1] + автор. */
+/** Полная игра: название + пирамида слов [16, 8, 4, 2, 1] + автор + лимит времени. */
 public record GameResponse(Long id, String title, Instant createdAt, boolean active,
                            Long creatorId, String creatorUsername,
+                           double timeLimitMinutes,
                            List<List<String>> columns) {
 
     /** Размеры колонок пирамиды (всего 31 слово). */
@@ -31,6 +32,7 @@ public record GameResponse(Long id, String title, Instant createdAt, boolean act
         return new GameResponse(game.getId(), game.getTitle(), game.getCreatedAt(), game.isActive(),
                 creator == null ? null : creator.getId(),
                 creator == null ? null : creator.getUsername(),
+                game.getTimeLimitMinutes(),
                 columns);
     }
 }

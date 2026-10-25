@@ -3,8 +3,8 @@ import Modal from '../Modal'
 import Leaderboard from './Leaderboard'
 import PyramidHead from './PyramidHead'
 import { apiMessage } from '../../api/client'
-import { checkAnswer, requestHint, restartGame } from '../../api/games'
-import { COLUMN_SIZES, COLUMN_SPANS, formatTime, toPairs } from './constants'
+import { checkAnswer, requestHint, requestTimeout, restartGame } from '../../api/games'
+import { COLUMN_SIZES, COLUMN_SPANS, formatMinutes, formatTime, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 /** Подсказки открываются по серверному таймеру: 3, 6, 9, 12 минут после старта. */
@@ -103,18 +103,27 @@ export default function GameBoard({
   const [wrong, setWrong] = useState({})
   const [checking, setChecking] = useState({})
   const [win, setWin] = useState(false)
+  // время вышло: игра остановлена, поля заблокированы, результат не отправляется
+  const [timeUp, setTimeUp] = useState(false)
+  const [showTimeout, setShowTimeout] = useState(false)
+  const [timeoutAnswer, setTimeoutAnswer] = useState('')
+  const [timeoutError, setTimeoutError] = useState('')
   const [actionError, setActionError] = useState('')
   const [restarting, setRestarting] = useState(false)
   // защита от двойной отправки результата при победе
   const finishedRef = useRef(progress?.finishedSeconds != null)
 
+  // лимит времени задаёт администратор; сервер прислал его в минутах
+  const limitSeconds = Math.max(1, Math.round((Number(game.timeLimitMinutes) || 10) * 60))
+  const remainingSeconds = Math.max(0, limitSeconds - elapsed)
+
   const elapsedSeconds = () =>
     clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
 
-  // тикающий таймер; после победы он замирает на серверном времени
+  // тикающий таймер; после победы или истечения времени он замирает
   useEffect(() => {
-    if (finishedTime != null) {
-      setElapsed(finishedTime)
+    if (finishedTime != null || timeUp) {
+      if (finishedTime != null) setElapsed(finishedTime)
       return undefined
     }
     const tick = () => setElapsed(elapsedSeconds())
@@ -122,7 +131,7 @@ export default function GameBoard({
     const timer = setInterval(tick, 250)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clock, finishedTime])
+  }, [clock, finishedTime, timeUp])
 
   const isSolved = (columnIndex, position) =>
     columnIndex === 0 || Boolean(solved[cellKey(columnIndex, position)])
@@ -143,8 +152,12 @@ export default function GameBoard({
         : hintLevel === 2
           ? HINT_THREE_SECONDS
           : HINT_FOUR_SECONDS)
-  const hintAvailable = finishedTime == null && nextHintAt != null && elapsed >= nextHintAt
+  const hintAvailable = !timeUp && finishedTime == null && nextHintAt != null
+    && nextHintAt < limitSeconds && elapsed >= nextHintAt
   const hintSecondsLeft = nextHintAt == null ? 0 : Math.max(0, nextHintAt - elapsed)
+  // подсказка, которая не успеет появиться до конца игры, не показывается вовсе
+  const hintScheduled = !timeUp && finishedTime == null && nextHintAt != null
+    && nextHintAt < limitSeconds
 
   // уведомление в момент, когда подсказка становится доступна
   useEffect(() => {
@@ -157,6 +170,51 @@ export default function GameBoard({
     hintWasAvailable.current = hintAvailable
     return undefined
   }, [hintAvailable])
+
+  // лимит времени истёк: останавливаем игру и не отправляем результат
+  useEffect(() => {
+    if (finishedTime != null || timeUp || elapsed < limitSeconds) return
+    setTimeUp(true)
+    setShowTimeout(true)
+    setWin(false)
+    setActionError('')
+    setWrong({})
+    setHintNotice(false)
+  }, [elapsed, finishedTime, limitSeconds, timeUp])
+
+  // после таймаута сервер раскрывает правильный ответ колонки 5 (без записи рекорда)
+  useEffect(() => {
+    if (!timeUp || timeoutAnswer) return undefined
+    let cancelled = false
+    let attempts = 0
+    let retryTimer
+    const load = async () => {
+      attempts += 1
+      try {
+        const result = await requestTimeout(game.id)
+        if (cancelled) return
+        setTimeoutAnswer(result?.answer || '')
+        setTimeoutError('')
+        if (result?.answer) {
+          setValues((prev) => prev.map((words, c) => (c === LAST_COLUMN
+            ? words.map((word, p) => (p === 0 ? result.answer : word))
+            : words)))
+        }
+      } catch (err) {
+        if (cancelled) return
+        if (attempts < 4) {
+          retryTimer = setTimeout(load, 1200)
+        } else {
+          setTimeoutError(apiMessage(err))
+        }
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+      clearTimeout(retryTimer)
+    }
+  }, [game.id, timeoutAnswer, timeUp])
 
   /** Слово, которое известно клиенту: стартовое (колонка 1) или отгаданное. */
   const wordAt = (columnIndex, position) => (columnIndex === 0
@@ -176,7 +234,7 @@ export default function GameBoard({
     })
 
   const finish = (serverSeconds) => {
-    if (finishedRef.current) return
+    if (finishedRef.current || timeUp) return
     finishedRef.current = true
     const seconds = Number.isFinite(serverSeconds) && serverSeconds > 0
       ? serverSeconds
@@ -191,7 +249,7 @@ export default function GameBoard({
   /** Проверка ответа на сервере: правильное слово клиенту неизвестно. */
   const check = async (columnIndex, position) => {
     const key = cellKey(columnIndex, position)
-    if (isSolved(columnIndex, position) || checking[key]) return
+    if (timeUp || isSolved(columnIndex, position) || checking[key]) return
     const text = (values[columnIndex][position] || '').trim()
     if (!text) {
       clearWrong(key)
@@ -233,7 +291,7 @@ export default function GameBoard({
   }
 
   const handleChange = (columnIndex, position, text) => {
-    if (isSolved(columnIndex, position)) return
+    if (timeUp || isSolved(columnIndex, position)) return
     const next = protectValue(text, prefixFor(columnIndex, position))
     setValues((prev) => prev.map((words, c) => (c === columnIndex
       ? words.map((word, p) => (p === position ? next : word))
@@ -311,6 +369,10 @@ export default function GameBoard({
       setWrong({})
       setWin(false)
       setFinishedTime(null)
+      setTimeUp(false)
+      setShowTimeout(false)
+      setTimeoutAnswer('')
+      setTimeoutError('')
       setClock({ baseElapsed: 0, loadedAt: Date.now() })
       setElapsed(0)
       setHintLevel(fresh.hintLevel || 0)
@@ -334,6 +396,7 @@ export default function GameBoard({
     const prefix = prefixFor(columnIndex, position)
     const value = cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]
     const showPrefix = Boolean(prefix) && !cardSolved
+    const expiredAnswer = timeUp && columnIndex === LAST_COLUMN
 
     return (
       <div
@@ -341,6 +404,7 @@ export default function GameBoard({
           'assoc-card',
           cardSolved ? 'is-solved' : '',
           cardWrong ? 'is-wrong' : '',
+          expiredAnswer ? 'is-timeup-answer' : '',
           checking[key] ? 'is-checking' : '',
           hintOpen ? 'hint-open' : 'hint-locked',
         ].join(' ').trim()}
@@ -369,8 +433,8 @@ export default function GameBoard({
               onClick={(event) => guardCaret(event, columnIndex, position)}
               onFocus={(event) => guardCaret(event, columnIndex, position)}
               onSelect={(event) => guardCaret(event, columnIndex, position)}
-              disabled={cardSolved || Boolean(checking[key])}
-              placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
+              disabled={cardSolved || Boolean(checking[key]) || timeUp}
+              placeholder={checking[key] ? 'Проверяем…' : (expiredAnswer ? 'Время вышло' : 'Ваш ответ')}
               aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
             />
             {showPrefix && (
@@ -386,29 +450,43 @@ export default function GameBoard({
     )
   }
 
-  const timerValue = finishedTime ?? elapsed
+  const timerValue = remainingSeconds
+  const timerCritical = finishedTime == null && !timeUp
+    && remainingSeconds > 0 && remainingSeconds <= 60
 
   return (
     <div className="assoc-board">
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
-          Разгадайте слово в колонке 5 — это победа. Подсказки следующих колонок
-          открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
+          Время на игру: <strong>{formatMinutes(game.timeLimitMinutes)} мин.</strong>{' '}
+          Разгадайте слово в колонке 5 до конца таймера — это победа. Подсказки следующих
+          колонок открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
         </p>
 
         <div className="assoc-board-tools">
-          <div className={`assoc-timer ${finishedTime != null ? 'is-finished' : ''}`}>
+          <div
+            className={[
+              'assoc-timer',
+              finishedTime != null ? 'is-finished' : '',
+              timeUp ? 'is-timeup' : '',
+              timerCritical ? 'is-critical' : '',
+            ].join(' ').trim()}
+            role="timer"
+            aria-live={timerCritical ? 'polite' : 'off'}
+          >
             <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
             <span className="assoc-timer-value">{formatTime(timerValue)}</span>
-            <span className="assoc-timer-label">{finishedTime != null ? 'финиш' : 'время'}</span>
+            <span className="assoc-timer-label">
+              {finishedTime != null ? 'финиш' : (timeUp ? 'время вышло' : 'осталось')}
+            </span>
           </div>
-          {finishedTime == null && nextHintAt != null && (
+          {hintScheduled && (
             hintAvailable ? (
               <button
                 type="button"
                 className="assoc-hint-btn"
                 onClick={getHint}
-                disabled={takingHint}
+                disabled={takingHint || timeUp}
               >
                 <span aria-hidden="true">💡</span>{' '}
                 {takingHint ? 'Открываем…' : 'Получить подсказку'}
@@ -508,6 +586,37 @@ export default function GameBoard({
             />
 
             <div className="form-actions">
+              <button type="button" className="btn btn-primary" onClick={restart} disabled={restarting}>
+                Начать заново
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {timeUp && showTimeout && (
+        <Modal title="Время вышло!" onClose={() => setShowTimeout(false)}>
+          <div className="assoc-timeup">
+            <div className="assoc-win-emoji" aria-hidden="true">⏳</div>
+            <p className="assoc-win-text">
+              Время вышло! Вы не успели угадать загаданное слово. Игра окончена.
+            </p>
+            <p className="assoc-timeup-text">
+              Результат не засчитан в рейтинге.
+            </p>
+            {timeoutAnswer ? (
+              <p className="assoc-timeup-answer">
+                Правильный ответ в колонке 5: <strong>{timeoutAnswer}</strong>
+              </p>
+            ) : (
+              <p className="assoc-timeup-text">
+                {timeoutError || 'Загружаем правильный ответ…'}
+              </p>
+            )}
+            <div className="form-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTimeout(false)}>
+                Закрыть
+              </button>
               <button type="button" className="btn btn-primary" onClick={restart} disabled={restarting}>
                 Начать заново
               </button>

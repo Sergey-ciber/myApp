@@ -28,6 +28,10 @@ public class Game {
     @Column(name = "is_active", nullable = false)
     private boolean active = false;
 
+    /** Лимит времени на прохождение в минутах (может быть дробным, например 2.5). */
+    @Column(name = "time_limit", nullable = false, columnDefinition = "double precision default 10")
+    private double timeLimitMinutes = 10.0;
+
     /** Создатель игры: только он может редактировать и удалять её. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "creator_id", nullable = false)
@@ -70,6 +74,9 @@ public class Game {
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public double getTimeLimitMinutes() { return timeLimitMinutes; }
+    public void setTimeLimitMinutes(double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
 
     public User getCreator() { return creator; }
     public void setCreator(User creator) { this.creator = creator; }

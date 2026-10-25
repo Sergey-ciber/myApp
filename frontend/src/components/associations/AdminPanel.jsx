@@ -8,6 +8,7 @@ import {
   COLUMN_SPANS,
   cloneColumns,
   emptyColumns,
+  formatMinutes,
   hintLabel,
   toPairs,
 } from './constants'
@@ -19,6 +20,7 @@ import {
  */
 export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [title, setTitle] = useState('')
+  const [timeLimit, setTimeLimit] = useState('10')
   const [columns, setColumns] = useState(emptyColumns)
   const [editingId, setEditingId] = useState(null)
   const [showErrors, setShowErrors] = useState(false)
@@ -36,6 +38,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   const resetForm = () => {
     setTitle('')
+    setTimeLimit('10')
     setColumns(emptyColumns())
     setEditingId(null)
     setShowErrors(false)
@@ -44,6 +47,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   const applyGame = (game) => {
     setTitle(game.title)
+    setTimeLimit(formatMinutes(game.timeLimitMinutes ?? 10))
     setColumns(cloneColumns(game.columns))
     setEditingId(game.id)
     setShowErrors(false)
@@ -73,16 +77,24 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const isCellInvalid = (columnIndex, position) =>
     showErrors && !columns[columnIndex][position].trim()
 
+  const timeLimitValue = Number(timeLimit)
+  const timeLimitInvalid = !timeLimit.trim() || !Number.isFinite(timeLimitValue)
+    || timeLimitValue <= 0 || timeLimitValue > 24 * 60
+
   const save = async (event) => {
     event.preventDefault()
     setError('')
     setMessage('')
 
-    if (!title.trim() || emptyCount > 0) {
+    if (!title.trim() || emptyCount > 0 || timeLimitInvalid) {
       setShowErrors(true)
-      setError(!title.trim()
-        ? 'Укажите название игры'
-        : `Заполните все 31 слово — пустых полей: ${emptyCount}`)
+      if (!title.trim()) {
+        setError('Укажите название игры')
+      } else if (emptyCount > 0) {
+        setError(`Заполните все 31 слово — пустых полей: ${emptyCount}`)
+      } else {
+        setError('Укажите время на прохождение в минутах (положительное число, например 2.5)')
+      }
       return
     }
 
@@ -90,6 +102,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     try {
       const payload = {
         title: title.trim(),
+        timeLimitMinutes: timeLimitValue,
         columns: columns.map((words) => words.map((word) => word.trim())),
       }
       const saved = editingId
@@ -148,18 +161,35 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     <div className="assoc-admin">
       <form className="assoc-form" onSubmit={save} noValidate>
         <div className="assoc-panel">
-          <label className="field">
-            <span>Название игры</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Например, Животный мир"
-              className={showErrors && !title.trim() ? 'input-invalid' : ''}
-            />
-          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Название игры</span>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Например, Животный мир"
+                className={showErrors && !title.trim() ? 'input-invalid' : ''}
+              />
+            </label>
+            <label className="field">
+              <span>Время на прохождение (в минутах)</span>
+              <input
+                type="number"
+                min="0.1"
+                max="1440"
+                step="any"
+                inputMode="decimal"
+                value={timeLimit}
+                onChange={(event) => setTimeLimit(event.target.value)}
+                placeholder="Например, 10 или 2.5"
+                className={showErrors && timeLimitInvalid ? 'input-invalid' : ''}
+              />
+            </label>
+          </div>
           <p className="hint">
             Заполните 31 слово: колонка 1 — 16 стартовых слов, дальше 8 + 4 + 2 + 1 ответ.
             Ответ в колонке N+1 загадывается по паре слов (2i−1, 2i) из колонки N.
+            Время на прохождение — положительное число минут, можно дробное (например, 2.5).
           </p>
         </div>
 
@@ -263,6 +293,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                   </span>
                   <span className="assoc-game-meta">
                     <span className="assoc-game-author">автор: {game.creatorUsername || 'неизвестен'}</span>
+                    <span className="assoc-game-limit">лимит: {formatMinutes(game.timeLimitMinutes)} мин.</span>
                     <span className="assoc-game-date">{new Date(game.createdAt).toLocaleString('ru-RU')}</span>
                     {game.active && <span className="assoc-badge">по умолчанию</span>}
                     {editingId === game.id && <span className="assoc-badge editing">редактируется</span>}

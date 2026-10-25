@@ -3,6 +3,7 @@ import { apiMessage } from '../../api/client'
 import { fetchLeaderboard, startGame, submitResult } from '../../api/games'
 import GameBoard from './GameBoard'
 import Leaderboard from './Leaderboard'
+import { formatMinutes } from './constants'
 
 /**
  * Режим игрока: выбор любой игры платформы, игровое поле, таймер и рейтинг.
@@ -86,7 +87,9 @@ export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId
       <div className="assoc-player-top">
         <div className="assoc-player-heading">
           <h2 className="assoc-player-title">Игра в ассоциации — {game.title}</h2>
-          <span className="assoc-player-author">автор: {game.creatorUsername || 'неизвестен'}</span>
+          <span className="assoc-player-author">
+            автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
+          </span>
         </div>
 
         <label className="assoc-game-select">

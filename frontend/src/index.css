@@ -534,6 +534,18 @@ body {
 }
 .assoc-timer.is-finished { background: #e9f8ee; border-color: #b6e2c5; }
 .assoc-timer.is-finished .assoc-timer-value { color: #2d8a4e; }
+.assoc-timer.is-critical {
+  background: #fff1f0;
+  border-color: #f0b4ae;
+  animation: assoc-timer-pulse 1s ease-in-out infinite;
+}
+.assoc-timer.is-critical .assoc-timer-value { color: #c0392b; }
+.assoc-timer.is-timeup { background: #fdecea; border-color: #e8a39b; animation: none; }
+.assoc-timer.is-timeup .assoc-timer-value { color: #c0392b; }
+@keyframes assoc-timer-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(192, 57, 43, 0); }
+}
 
 .assoc-card {
   display: flex;
@@ -645,6 +657,22 @@ body {
 .assoc-win-text { margin: 12px 0 16px; font-size: 18px; font-weight: 600; }
 .assoc-win .form-actions { justify-content: center; }
 .assoc-win-error { margin: 0 0 12px; font-size: 13px; color: #a33a3a; }
+
+/* Время вышло */
+.assoc-timeup { text-align: center; }
+.assoc-timeup-text { margin: 0 0 12px; font-size: 14px; color: var(--text-muted); }
+.assoc-timeup-answer {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff8de;
+  border: 1px solid #f0d788;
+  color: #7a5b00;
+  font-size: 16px;
+}
+.assoc-timeup .form-actions { justify-content: center; }
+.assoc-card.is-timeup-answer { border-color: #f0d788; background: #fffaf0; }
+.assoc-card.is-timeup-answer .assoc-input { background: #fffaf0; color: #8a5a00; font-weight: 600; }
 .assoc-win .assoc-leaderboard {
   text-align: left;
   margin: 0 0 18px;
