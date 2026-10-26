@@ -2,6 +2,7 @@ package com.demo.taskmanager.dto;
 
 import com.demo.taskmanager.entity.Team;
 import com.demo.taskmanager.entity.TeamMember;
+import com.fasterxml.jackson.annotation.JsonGetter;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,4 +30,8 @@ public record TeamResponse(Long id, String name, String avatarUrl,
                 team.getWins(), members.size(), team.getCreatedAt(), members,
                 creator, own != null, own == null ? null : own.getRole().name());
     }
+
+    // Совместимое snake_case-поле для внешних клиентов; основной формат API — camelCase.
+    @JsonGetter("creator_id")
+    public Long creatorIdSnakeCase() { return creatorId; }
 }

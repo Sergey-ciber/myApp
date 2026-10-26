@@ -54,6 +54,13 @@ public class TeamController {
         return teamService.updateTeam(id, request, currentUser(principal));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal UserDetails principal,
+                                       @PathVariable Long id) {
+        teamService.deleteTeam(id, currentUser(principal));
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping
     public ResponseEntity<TeamResponse> create(@AuthenticationPrincipal UserDetails principal,
                                                @RequestBody TeamRequest request) {

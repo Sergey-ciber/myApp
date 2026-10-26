@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../ConfirmDialog'
 import { membersLabel, winsLabel } from '../../utils/plural'
 import TeamAvatar from './TeamAvatar'
@@ -11,12 +11,15 @@ const placeLabel = (place) => {
   return `${place} место`
 }
 
-/** Карточка команды: рейтинг, участники и действия по правам текущего пользователя. */
-export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
+/** Горизонтальная строка команды: статистика и действия по правам пользователя. */
+export default function TeamCard({ team, place, onEdit, onInvite, onLeave, onDelete }) {
   const [confirm, setConfirm] = useState(null)
   const [leaving, setLeaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
 
+  const isAdmin = team.currentUserCreator
+  const isMember = team.currentUserMember && !isAdmin
   const openTeam = () => navigate(`/teams/${team.id}`)
 
   const openTeamFromKeyboard = (event) => {
@@ -37,21 +40,24 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
     }
   }
 
-  const confirmRemove = async () => {
-    await onRemove(team, confirm.member.userId)
-    setConfirm(null)
+  const confirmDelete = async () => {
+    setDeleting(true)
+    try {
+      await onDelete(team)
+      setConfirm(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const leaveHint = team.memberCount > 1
-    ? (team.currentUserCreator
-      ? 'Вы создатель: права перейдут самому раннему участнику команды.'
-      : 'Вы сможете вернуться, если получите новое приглашение.')
+    ? 'Вы сможете вернуться, если получите новое приглашение.'
     : 'Вы последний участник — команда будет удалена.'
 
   return (
     <>
       <article
-        className="team-card"
+        className={`team-card${isAdmin ? ' team-card-admin' : ''}`}
         role="link"
         tabIndex={0}
         aria-label={`Открыть карточку команды «${team.name}»`}
@@ -61,53 +67,47 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
         <div className="team-card-head">
           <TeamAvatar src={team.avatarUrl} name={team.name} size="lg" />
           <div className="team-card-title">
-            <h2>{team.name}</h2>
-            <div className="team-rating">🏆 {winsLabel(team.wins)}</div>
+            <div className="team-card-name-row">
+              <h2>{team.name}</h2>
+              {isAdmin && <span className="team-admin-badge">Админ</span>}
+            </div>
             <div className="team-card-meta">
+              <span className="team-rating">🏆 {winsLabel(team.wins)}</span>
               <span>{membersLabel(team.memberCount)}</span>
               <span className="team-place">{placeLabel(place)}</span>
             </div>
           </div>
         </div>
 
-        <div className="team-card-actions">
-          {team.currentUserCreator && (
-            <button type="button" className="btn btn-primary btn-small"
-                    onClick={(event) => { event.stopPropagation(); onInvite(team) }}>
-              Пригласить пользователя
-            </button>
+        <div className="team-card-actions" onClick={(event) => event.stopPropagation()}>
+          {isAdmin && (
+            <>
+              <button type="button" className="btn btn-secondary btn-small"
+                      onClick={() => onEdit(team)}>
+                Редактировать
+              </button>
+              <button type="button" className="btn btn-primary btn-small"
+                      onClick={() => onInvite(team)}>
+                Пригласить пользователя
+              </button>
+              <button type="button" className="btn btn-outline-danger btn-small"
+                      onClick={() => setConfirm({ type: 'delete' })}>
+                Удалить
+              </button>
+            </>
           )}
-          {team.currentUserMember && (
+          {isMember && (
             <button type="button" className="btn btn-outline-danger btn-small"
-                    onClick={(event) => { event.stopPropagation(); setConfirm({ type: 'leave' }) }}>
+                    onClick={() => setConfirm({ type: 'leave' })}>
               Покинуть команду
             </button>
           )}
+          {!isAdmin && (
+            <Link to={`/teams/${team.id}`} className="btn btn-secondary btn-small">
+              Открыть
+            </Link>
+          )}
         </div>
-
-        <ul className="team-members">
-          {team.members.map((member) => {
-            const isCreator = member.userId === team.creatorId
-            return (
-              <li className="team-member" key={member.userId}>
-                <TeamAvatar src={member.avatarUrl} name={member.fullName || member.username} size="sm" />
-                <div className="team-member-info">
-                  <span className="team-member-name">{member.fullName || member.username}</span>
-                  <span className="team-member-login">@{member.username}</span>
-                </div>
-                <span className={`team-role ${isCreator ? 'team-role-admin' : ''}`}>
-                  {isCreator ? 'Создатель' : 'Участник'}
-                </span>
-                {team.currentUserCreator && !isCreator && (
-                  <button type="button" className="btn btn-ghost btn-small team-remove"
-                          onClick={(event) => { event.stopPropagation(); setConfirm({ type: 'remove', member }) }}>
-                    Исключить
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
       </article>
 
       {confirm?.type === 'leave' && (
@@ -123,16 +123,16 @@ export default function TeamCard({ team, place, onInvite, onLeave, onRemove }) {
         />
       )}
 
-      {confirm?.type === 'remove' && (
+      {confirm?.type === 'delete' && (
         <ConfirmDialog
-          title="Исключение участника"
-          message={<>Исключить <strong>{confirm.member.fullName || confirm.member.username}</strong> из команды «{team.name}»?</>}
-          hint="Пользователь сможет вернуться по новому приглашению."
-          confirmLabel="Исключить"
-          busyLabel="Исключение…"
-          errorMessage="Не удалось исключить участника"
-          onConfirm={confirmRemove}
-          onClose={() => setConfirm(null)}
+          title="Удалить команду"
+          message={<>Удалить команду «<strong>{team.name}</strong>»?</>}
+          hint="Команда, её состав и приглашения будут удалены без возможности восстановления."
+          confirmLabel="Удалить"
+          busyLabel="Удаление…"
+          errorMessage="Не удалось удалить команду"
+          onConfirm={confirmDelete}
+          onClose={() => { if (!deleting) setConfirm(null) }}
         />
       )}
     </>

@@ -13,6 +13,9 @@ export const createTeam = (team) => api.post('/teams', team).then((res) => res.d
 export const updateTeam = (teamId, team) =>
   api.put(`/teams/${teamId}`, team).then((res) => res.data)
 
+/** Удалить команду вместе с составом и приглашениями (только создатель). */
+export const deleteTeam = (teamId) => api.delete(`/teams/${teamId}`)
+
 /** Загрузить аватар команды и получить публичный URL. */
 export const uploadTeamAvatar = (file) => {
   const form = new FormData()

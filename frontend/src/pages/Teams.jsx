@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../api/client'
-import { fetchTeams, leaveTeam, removeTeamMember } from '../api/teams'
+import { deleteTeam, fetchTeams, leaveTeam } from '../api/teams'
 import TeamFormModal from '../components/teams/TeamFormModal'
 import IncomingInvitations from '../components/teams/IncomingInvitations'
 import InviteModal from '../components/teams/InviteModal'
@@ -8,9 +8,11 @@ import TeamCard from '../components/teams/TeamCard'
 import { useAuth } from '../context/AuthContext'
 import { useInvitations } from '../context/InvitationsContext'
 
+const teamCreatorId = (team) => team.creator_id ?? team.creatorId
+
 /**
- * Раздел «Команды»: общий рейтинг, создание команды, приглашения
- * и управление участниками.
+ * Раздел «Команды»: команды пользователя-администратора отдельно от остальных,
+ * создание, приглашения и управление участниками.
  */
 export default function Teams() {
   const { user } = useAuth()
@@ -21,6 +23,7 @@ export default function Teams() {
   const [message, setMessage] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [inviteTeam, setInviteTeam] = useState(null)
+  const [editingTeam, setEditingTeam] = useState(null)
   const previousInvitationCount = useRef(null)
 
   const loadTeams = useCallback(async () => {
@@ -56,17 +59,27 @@ export default function Teams() {
     await loadTeams()
   }
 
+  const handleUpdated = async () => {
+    setEditingTeam(null)
+    setMessage('Изменения команды сохранены.')
+    await loadTeams()
+  }
+
   const handleLeave = async (team) => {
     await leaveTeam(team.id)
     setMessage(`Вы покинули команду «${team.name}».`)
     await loadTeams()
   }
 
-  const handleRemove = async (team, userId) => {
-    await removeTeamMember(team.id, userId)
-    setMessage('Участник исключён из команды.')
+  const handleDelete = async (team) => {
+    await deleteTeam(team.id)
+    setMessage(`Команда «${team.name}» удалена.`)
     await loadTeams()
   }
+
+  const adminTeams = teams.filter((team) => teamCreatorId(team) === user?.id)
+  const otherTeams = teams.filter((team) => teamCreatorId(team) !== user?.id)
+  const placeById = new Map(teams.map((team, index) => [team.id, index + 1]))
 
   return (
     <div className="page teams-page">
@@ -102,22 +115,77 @@ export default function Teams() {
           </button>
         </div>
       ) : (
-        <div className="teams-grid">
-          {teams.map((team, index) => (
-            <TeamCard
-              key={team.id}
-              team={team}
-              place={index + 1}
-              onInvite={setInviteTeam}
-              onLeave={handleLeave}
-              onRemove={handleRemove}
-            />
-          ))}
-        </div>
+        <>
+          <section className="teams-section teams-section-admin" aria-labelledby="admin-teams-title">
+            <div className="teams-section-head">
+              <div>
+                <h2 id="admin-teams-title" className="teams-section-title">
+                  Мои команды
+                  <span className="teams-section-badge">Администратор</span>
+                </h2>
+                <p className="teams-section-description">
+                  Команды, которые вы создали и которыми управляете.
+                </p>
+              </div>
+              <span className="teams-section-count">{adminTeams.length}</span>
+            </div>
+            {adminTeams.length === 0 ? (
+              <div className="teams-section-empty">Вы пока не создали ни одной команды.</div>
+            ) : (
+              <div className="teams-grid">
+                {adminTeams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    place={placeById.get(team.id)}
+                    onEdit={setEditingTeam}
+                    onInvite={setInviteTeam}
+                    onLeave={handleLeave}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="teams-section" aria-labelledby="other-teams-title">
+            <div className="teams-section-head">
+              <div>
+                <h2 id="other-teams-title" className="teams-section-title">Остальные команды</h2>
+                <p className="teams-section-description">
+                  Команды, в которых вы состоите, и все остальные команды платформы.
+                </p>
+              </div>
+              <span className="teams-section-count">{otherTeams.length}</span>
+            </div>
+            {otherTeams.length === 0 ? (
+              <div className="teams-section-empty">Других команд пока нет.</div>
+            ) : (
+              <div className="teams-grid">
+                {otherTeams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    place={placeById.get(team.id)}
+                    onEdit={setEditingTeam}
+                    onInvite={setInviteTeam}
+                    onLeave={handleLeave}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </>
       )}
 
       {showCreate && (
         <TeamFormModal onClose={() => setShowCreate(false)} onSaved={handleCreated} />
+      )}
+
+      {editingTeam && (
+        <TeamFormModal team={editingTeam} onClose={() => setEditingTeam(null)}
+                       onSaved={handleUpdated} />
       )}
 
       {inviteTeam && (

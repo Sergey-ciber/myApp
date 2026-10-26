@@ -87,6 +87,14 @@ public class TeamService {
         return toDetails(team, currentUser);
     }
 
+    /** Удалить команду вместе с составом и приглашениями может только создатель. */
+    @Transactional
+    public void deleteTeam(Long teamId, User currentUser) {
+        Team team = findTeam(teamId);
+        requireCreator(team, currentUser);
+        teamRepository.delete(team);
+    }
+
     /** Создать команду: создатель сразу становится её администратором. */
     @Transactional
     public TeamResponse createTeam(TeamRequest request, User creator) {
