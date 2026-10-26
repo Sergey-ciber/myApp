@@ -1,6 +1,6 @@
 package com.demo.taskmanager.controller;
 
-import com.demo.taskmanager.service.UserService;
+import com.demo.taskmanager.service.ImageStorageService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -11,21 +11,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.file.Path;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
 
-    private final UserService userService;
+    private final ImageStorageService imageStorageService;
 
-    public FileController(UserService userService) {
-        this.userService = userService;
+    public FileController(ImageStorageService imageStorageService) {
+        this.imageStorageService = imageStorageService;
     }
 
     @GetMapping("/{filename}")
     public ResponseEntity<Resource> serveFile(@PathVariable String filename) {
-        Path path = userService.resolveFile(filename);
+        Path path = imageStorageService.resolve(filename);
         MediaType type = probeType(filename);
         return ResponseEntity.ok().contentType(type).body(new FileSystemResource(path));
     }
