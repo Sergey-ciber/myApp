@@ -1,15 +1,18 @@
 :root {
   --bg: #232529;
-  --surface: #cf6320;
+  --surface: #ae9d94;
   --border: #dcdfe4;
   --text: #cc6220;
-  --text-muted: #0c0101;
+  --text-muted: #0b0b0b;
   --primary: #c85f19;
   --primary-hover: #fd6a06;
   --danger: #b04632;
   --success: #2d8a4e;
   --radius: 8px;
   --shadow: 0 1px 3px rgba(9, 30, 66, 0.15);
+  --glitched-duration: 0.9s;      /* Скорость обычного глитча */
+  --glitched-long-duration: 3s;   /* Скорость медленного глитча (для линий) */
+  --answer-block: linear-gradient(135deg, #365565 50%, #2f5d71 100%); /* Градиент для  блоков с подсказками / ответами*/
 }
 
 * { box-sizing: border-box; }
@@ -53,6 +56,43 @@ body {
   border-radius: 6px;
   transition: color 0.15s, background 0.15s;
 }
+
+.navbar-link.cyberpunk {
+  display: inline-block;
+  position: relative;
+  animation-name: navbar-glitch;
+  animation-duration: calc(var(--glitched-duration) * 1.2);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+@keyframes navbar-glitch {
+  0% {
+    transform: skew(-4deg);
+  }
+  10% {
+    transform: skew(-4deg);
+  }
+  11% {
+    transform: skew(0deg);
+  }
+  50% {
+    transform: skew(0deg);
+  }
+  51% {
+    transform: skew(6deg);
+  }
+  59% {
+    transform: skew(6deg);
+  }
+  60% {
+    transform: skew(0deg);
+  }
+  100% {
+    transform: skew(0deg);
+  }
+}
+
 .navbar-link:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .navbar-brand.is-active,
 .navbar-link.is-active { color: #fff; background: rgba(255, 255, 255, 0.16); }
@@ -98,8 +138,9 @@ body {
 .page .btn-ghost:hover { background: rgba(9, 30, 66, 0.08); }
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #932a1a; }
-.btn-block { width: 100%; }
+.btn-block { width: 100%; margin-top: 10px}
 .btn-small { padding: 4px 10px; font-size: 12px; }
+.btn-medium { padding: 4px 10px; font-size: 18px; border-radius: 4px; border: 2px; background-color: #f97316; }
 .btn-ghost-light { color: #fff; background: rgba(0, 0, 0, 0.15); }
 .btn-ghost-light:hover { background: rgba(0, 0, 0, 0.28); }
 .btn-icon {
@@ -117,7 +158,7 @@ body {
 .page { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px; }
 .page-narrow { max-width: 720px; }
 .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-.page-header h1 { margin: 0; font-size: 24px; }
+.page-header h1 { margin: 0; font-size: 24px; color: #f6792b}
 .page-loader { padding: 48px; text-align: center; color: var(--text-muted); }
 
 .empty-state {
@@ -187,7 +228,7 @@ body {
 /* ---------- Forms ---------- */
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.field > span { color: #ffffff; font-weight: 500; }
+.field > span { color: #f6792b; font-weight: 500; }
 .field input, .field textarea, .field select {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -333,7 +374,7 @@ body {
   z-index: 100;
 }
 .modal {
-  background: #dfc4b2;
+  background: #fff8e2;
   border-radius: 12px;
   width: 100%;
   max-width: 520px;
@@ -405,21 +446,21 @@ body {
 
 .assoc-admin { display: flex; flex-direction: column; gap: 26px; }
 .assoc-panel {
-  background: #e5e7eb;
+  background: #ac480d;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
   padding: 20px 22px;
   margin-bottom: 16px;
   border: 1px solid #3a3a4a;
   border-left: 3px solid #ff8c00;
-  color: #0c0101;
+  color: #f3efef;
 }
-.assoc-panel .field > span { color: rgb(16 6 1 / 0.8); font-weight: 500; }
+.assoc-panel .field > span { color: #ffffff; font-weight: 500; }
 .assoc-panel input,
 .assoc-panel select {
   background: #e0e0f1;
   border: 1px solid #3a3a4a;
-  color: #0c0101;
+  color: #070707;
   border-radius: 8px;
 }
 .assoc-panel input:focus,
@@ -428,7 +469,7 @@ body {
   border-color: #ff8c00;
   box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.25);
 }
-.assoc-panel .hint { color: #a0a0b0; }
+.assoc-panel .hint { color: #fdfdfd; }
 
 /* Горизонтальная прокрутка пирамиды на узких экранах */
 .assoc-scroll { overflow-x: auto; padding-bottom: 8px; }
@@ -477,8 +518,8 @@ body {
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(9, 30, 66, 0.06);
 }
-.assoc-pair:nth-child(odd) { background: #f2f8ff; border-color: #c6dbf5; }
-.assoc-pair:nth-child(even) { background: #fffaf2; border-color: #f0dfc4; }
+.assoc-pair:nth-child(odd) { background: var(--answer-block); border-color: #c6dbf5; }
+.assoc-pair:nth-child(even) { background: #ff8c00; border-color: #c6dbf5; }
 .assoc-pair-num {
   position: absolute;
   top: 3px;
@@ -492,17 +533,19 @@ body {
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  //background: #fff;
   font-size: 14px;
   font-weight: 600;
   text-align: center;
   word-break: break-word;
+  color: #fffdfd;
 }
-.assoc-pair:nth-child(odd) .assoc-word { border-color: #c6dbf5; }
+
+.assoc-pair:nth-child(odd) .assoc-word { border-color: #f5c6df; }
 .assoc-pair:nth-child(even) .assoc-word { border-color: #f0dfc4; }
 
 .assoc-word-input { display: flex; flex-direction: column; gap: 3px; }
-.assoc-word-input > span { font-size: 11px; color: #0c0101; }
+.assoc-word-input > span { font-size: 11px; color: #fdfbfb; }
 
 .assoc-input {
   width: 100%;
@@ -529,15 +572,15 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: #f2f8ff;
-  border: 1px solid #3a3a4a;
+  background: var(--answer-block);
+  border: 1px solid #f3e7e4;
   border-radius: 10px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 .assoc-edit-card.invalid { border-color: #f87171; background: linear-gradient(180deg, rgba(248, 113, 113, 0.12) 0%, #24242e 100%); }
 .assoc-edit-card-head { display: flex; flex-direction: column; gap: 2px; }
 .assoc-edit-label { font-size: 12px; font-weight: 600; color: #ffffff; }
-.assoc-hint { font-size: 11px; color: #a0a0b0; line-height: 1.3; }
+.assoc-hint { font-size: 11px; color: #fcfcfd; line-height: 1.3; }
 
 .assoc-form-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .assoc-counter { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -577,16 +620,21 @@ body {
 .assoc-saved-hint { margin: -6px 0 14px; color: #a0a0b0; }
 
 /* Режим игрока */
-.assoc-player { display: flex; flex-direction: column; gap: 14px; }
+.assoc-player { display: flex; flex-direction: column; gap: 14px; color: #fdfcfc
+}
 .assoc-player-top {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding: 7px 10px;
+  background-color: #e37c14;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 .assoc-player-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.assoc-player-author { font-size: 12px; color: var(--text-muted); }
+.assoc-player-author { font-size: 12px; color: #fdfdfc; }
 .assoc-player-title { margin: 0; font-size: 20px; }
 .assoc-game-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
 .assoc-game-select select {
@@ -604,8 +652,15 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
-.assoc-board-tip { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+.assoc-start-overlay {
+
+  margin: 15px;
+}
+.assoc-board-tip { margin: 0; font-size: 13px; color: #fafbfb; }
 
 /* таймер прохождения + перезапуск */
 .assoc-board-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -619,6 +674,7 @@ body {
   border: 1px solid #d5e2f2;
   font-variant-numeric: tabular-nums;
 }
+
 .assoc-timer-icon { font-size: 14px; }
 .assoc-timer-value { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: #1d2b45; }
 .assoc-timer-label {
@@ -654,9 +710,10 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 /* состояние: подсказка ещё скрыта */
-.assoc-card.hint-locked { border-style: dashed; }
+.assoc-card.hint-locked {background: var(--answer-block)
+}
 /* состояние: подсказка открыта */
-.assoc-card.hint-open { border-color: #b9d4f0; background: #fbfdff; }
+.assoc-card.hint-open { border-color: #b9d4f0; background: var(--answer-block)}
 /* состояние: неверный ответ */
 .assoc-card.is-wrong {
   border-color: #d64545;
@@ -667,14 +724,14 @@ body {
 .assoc-card.is-solved { border-color: #47a06a; background: #f2fbf5; }
 .assoc-card.is-solved .assoc-input { border-color: #9fd4b1; }
 
-.assoc-card-hint { min-height: 28px; font-size: 11px; line-height: 1.35; color: var(--text-muted); }
+.assoc-card-hint { min-height: 28px; font-size: 11px; line-height: 1.35; color: #fdfdfc; }
 .assoc-card.is-solved .assoc-card-hint { color: #2d8a4e; }
 .assoc-card.is-wrong .assoc-card-hint { color: #a33a3a; }
 .assoc-hint-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-muted);
+  color: #fdfcfc;
 }
 .assoc-answer { display: flex; align-items: center; gap: 6px; }
 .assoc-answer .assoc-input { flex: 1; min-width: 0; }
@@ -683,7 +740,7 @@ body {
 /* Поле с открытыми подсказкой буквами: префикс серый, остальное — обычный текст */
 .assoc-input-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
 .assoc-input-wrap .assoc-input { flex: 1; min-width: 0; }
-.assoc-input-wrap.has-hint-prefix .assoc-input { color: transparent; caret-color: var(--text); }
+.assoc-input-wrap.has-hint-prefix .assoc-input { color: transparent; caret-color: #090909; }
 .assoc-input-live {
   position: absolute;
   inset: 0;
@@ -694,7 +751,7 @@ body {
   border: 1px solid transparent;
   font-size: 14px;
   font-family: inherit;
-  color: var(--text);
+  color: #0c0101;
   pointer-events: none;
   white-space: pre;
   overflow: hidden;
@@ -737,6 +794,8 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .assoc-hint-notice {
+  margin-top: 10px;
+  margin-bottom: 10px;
   padding: 9px 14px;
   border-radius: 10px;
   background: #fff8de;
@@ -781,10 +840,11 @@ body {
 
 /* Таблица результатов */
 .assoc-leaderboard {
-  background: var(--surface);
+  background: #f6792b;
   border-radius: 12px;
   box-shadow: var(--shadow);
   padding: 16px 18px;
+  color: #ffffff;
 }
 .assoc-leaderboard-title { margin: 0 0 10px; font-size: 16px; }
 .assoc-leaderboard-empty { margin: 0; font-size: 13px; color: var(--text-muted); }

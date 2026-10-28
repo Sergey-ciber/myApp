@@ -21,7 +21,7 @@ export default function Navbar() {
       <div className="navbar-left">
         <NavLink
           to="/boards"
-          className={({ isActive }) => `navbar-brand${isActive ? ' is-active' : ''}`}
+          className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
         >
           Мои доски
         </NavLink>

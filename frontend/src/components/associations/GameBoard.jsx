@@ -556,13 +556,13 @@ export default function GameBoard({
 
       <div className="assoc-scroll">
         <div className="assoc-pyramid-wrap">
-          <PyramidHead />
+          {/*<PyramidHead />*/}
 
           {!gameStarted && (
             <div className="assoc-start-overlay">
               <button
                 type="button"
-                className="assoc-start-btn"
+                className="btn-medium"
                 onClick={() => {
                   setGameStarted(true)
                   setClock({ baseElapsed: progress?.elapsedSeconds || 0, loadedAt: Date.now() })
@@ -592,7 +592,7 @@ export default function GameBoard({
                     <span className="assoc-pair-num">{row + 1}</span>
                     {pair.map((word, offset) => (
                       <span className={`assoc-word ${!gameStarted ? 'is-blurred' : ''}`} key={offset}>
-                        {gameStarted ? word : '█████'}
+                        {gameStarted ? word : '*****'}
                       </span>
                     ))}
                   </div>
