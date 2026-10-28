@@ -1,10 +1,10 @@
 :root {
-  --bg: #f4f5f7;
-  --surface: #ffffff;
+  --bg: #232529;
+  --surface: #cf6320;
   --border: #dcdfe4;
-  --text: #fdfdfd;
-  --text-muted: #fdfdfd;
-  --primary: #cc6220;
+  --text: #cc6220;
+  --text-muted: #0c0101;
+  --primary: #c85f19;
   --primary-hover: #fd6a06;
   --danger: #b04632;
   --success: #2d8a4e;
@@ -17,8 +17,8 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  background: #121212;
+  color: #e5e7eb;
 }
 
 .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -148,6 +148,7 @@ body {
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+  color: #cf6320;
 }
 .auth-page-overlay {
   position: absolute;
@@ -170,6 +171,10 @@ body {
   width: 90%;
   max-width: 400px;
 }
+
+.auth-button{
+  color: rgb(18 7 1 / 0.8);
+}
 .auth-card h1 { margin: 0 0 20px; font-size: 24px; text-align: center; }
 .auth-switch { text-align: center; font-size: 14px; color: var(--text-muted); margin-bottom: 0; }
 .auth-switch a { color: var(--primary); }
@@ -190,7 +195,7 @@ body {
   font-size: 14px;
   font-family: inherit;
   background: #fff;
-  color: var(--primary);
+  color: #000000;
 }
 .field input:focus, .field textarea:focus, .field select:focus {
   outline: 2px solid rgba(0, 121, 191, 0.35);
@@ -378,8 +383,9 @@ body {
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  background: #e4e6eb;
+  background: #24242e;
   border-radius: 999px;
+  border: 1px solid #3a3a4a;
 }
 .mode-btn {
   border: none;
@@ -389,21 +395,38 @@ body {
   font-size: 14px;
   font-weight: 600;
   font-family: inherit;
-  color: var(--text-muted);
+  color: #a0a0b0;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.mode-btn:hover { color: var(--text); }
-.mode-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.mode-btn:hover { color: #ffffff; }
+.mode-btn.active { background: #ff8c00; color: #ffffff; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25); }
 
 .assoc-admin { display: flex; flex-direction: column; gap: 26px; }
 .assoc-panel {
-  background: var(--surface);
+  background: #24242e;
   border-radius: 12px;
-  box-shadow: var(--shadow);
-  padding: 16px 18px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  padding: 20px 22px;
   margin-bottom: 16px;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
 }
+.assoc-panel .field > span { color: #e5e7eb; font-weight: 500; }
+.assoc-panel input,
+.assoc-panel select {
+  background: #1a1a24;
+  border: 1px solid #3a3a4a;
+  color: #ffffff;
+  border-radius: 8px;
+}
+.assoc-panel input:focus,
+.assoc-panel select:focus {
+  outline: none;
+  border-color: #ff8c00;
+  box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.25);
+}
+.assoc-panel .hint { color: #a0a0b0; }
 
 /* Горизонтальная прокрутка пирамиды на узких экранах */
 .assoc-scroll { overflow-x: auto; padding-bottom: 8px; }
@@ -486,7 +509,7 @@ body {
   padding: 8px 10px;
   font-size: 14px;
   font-family: inherit;
-  color: var(--text);
+  color: #000000;
   background: #fff;
 }
 .assoc-input:focus { outline: 2px solid rgba(0, 121, 191, 0.35); border-color: var(--primary); }
@@ -503,22 +526,22 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid transparent;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #2d2d3a 0%, #24242e 100%);
+  border: 1px solid #3a3a4a;
   border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.06);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
-.assoc-edit-card.invalid { border-color: #f3bcbc; background: #fff8f8; }
+.assoc-edit-card.invalid { border-color: #f87171; background: linear-gradient(180deg, rgba(248, 113, 113, 0.12) 0%, #24242e 100%); }
 .assoc-edit-card-head { display: flex; flex-direction: column; gap: 2px; }
-.assoc-edit-label { font-size: 12px; font-weight: 600; }
-.assoc-hint { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+.assoc-edit-label { font-size: 12px; font-weight: 600; color: #ffffff; }
+.assoc-hint { font-size: 11px; color: #a0a0b0; line-height: 1.3; }
 
 .assoc-form-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .assoc-counter { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 /* Список сохранённых игр */
-.assoc-saved h2 { margin: 0 0 12px; font-size: 18px; }
+.assoc-saved h2 { margin: 0 0 12px; font-size: 18px; color: #ffffff; }
 .assoc-games { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .assoc-game {
   display: flex;
@@ -526,29 +549,30 @@ body {
   justify-content: space-between;
   gap: 14px;
   padding: 12px 16px;
-  background: var(--surface);
-  border-left: 4px solid transparent;
+  background: linear-gradient(180deg, #2d2d3a 0%, #24242e 100%);
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid transparent;
   border-radius: 10px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   flex-wrap: wrap;
 }
-.assoc-game.active { border-left-color: var(--success); }
+.assoc-game.active { border-left-color: #22c55e; }
 .assoc-game-info { display: flex; flex-direction: column; gap: 4px; }
-.assoc-game-title { font-size: 15px; font-weight: 600; }
-.assoc-game-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.assoc-game-title { font-size: 15px; font-weight: 600; color: #ffffff; }
+.assoc-game-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a0a0b0; }
 .assoc-badge {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #dcfff0;
-  color: #2d8a4e;
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
   font-size: 11px;
   font-weight: 600;
 }
-.assoc-badge.editing { background: #e6f0fb; color: #026aa7; }
+.assoc-badge.editing { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
 .assoc-game-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.assoc-game-author { font-weight: 600; color: var(--text); }
-.assoc-badge.own { background: #eef3fa; color: #1d4f8f; margin-left: 8px; }
-.assoc-saved-hint { margin: -6px 0 14px; }
+.assoc-game-author { font-weight: 600; color: #e5e7eb; }
+.assoc-badge.own { background: rgba(255, 140, 0, 0.2); color: #ff8c00; margin-left: 8px; }
+.assoc-saved-hint { margin: -6px 0 14px; color: #a0a0b0; }
 
 /* Режим игрока */
 .assoc-player { display: flex; flex-direction: column; gap: 14px; }
@@ -1331,3 +1355,4 @@ body {
   .team-detail-joined { display: none; }
   .team-members-head { align-items: flex-start; }
 }
+
