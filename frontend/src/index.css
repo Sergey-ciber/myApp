@@ -18,7 +18,7 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: #121212;
-  color: #e5e7eb;
+  color: #0c0101;
 }
 
 .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -121,7 +121,7 @@ body {
 .page-loader { padding: 48px; text-align: center; color: var(--text-muted); }
 
 .empty-state {
-  background: var(--surface);
+  background: #f2f8ff;
   border: 2px dashed var(--border);
   border-radius: var(--radius);
   padding: 48px;
@@ -162,7 +162,6 @@ body {
 .auth-card {
   position: relative;
   z-index: 1;
-  //background-color: rgb(168 66 16 / 0.7);
   background-color: rgba(20, 20, 20, 0.7);
   backdrop-filter: blur(10px);
   border-radius: 12px;
@@ -170,14 +169,15 @@ body {
   padding: 40px;
   width: 90%;
   max-width: 400px;
+  color: #f6792b;
 }
 
 .auth-button{
   color: rgb(18 7 1 / 0.8);
 }
 .auth-card h1 { margin: 0 0 20px; font-size: 24px; text-align: center; }
-.auth-switch { text-align: center; font-size: 14px; color: var(--text-muted); margin-bottom: 0; }
-.auth-switch a { color: var(--primary); }
+.auth-switch { text-align: center; font-size: 14px; color: #ffffff; margin-bottom: 0; }
+.auth-switch a { color: #f6792b; }
 
 @media (max-width: 480px) {
   .auth-page { padding: 16px; }
@@ -187,7 +187,7 @@ body {
 /* ---------- Forms ---------- */
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.field > span { color: var(--text-muted); font-weight: 500; }
+.field > span { color: #ffffff; font-weight: 500; }
 .field input, .field textarea, .field select {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -333,11 +333,12 @@ body {
   z-index: 100;
 }
 .modal {
-  background: var(--surface);
+  background: #dfc4b2;
   border-radius: 12px;
   width: 100%;
   max-width: 520px;
   box-shadow: 0 8px 30px rgba(9, 30, 66, 0.3);
+  color: #121111;
 }
 .modal-header {
   display: flex;
@@ -404,20 +405,21 @@ body {
 
 .assoc-admin { display: flex; flex-direction: column; gap: 26px; }
 .assoc-panel {
-  background: #24242e;
+  background: #e5e7eb;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
   padding: 20px 22px;
   margin-bottom: 16px;
   border: 1px solid #3a3a4a;
   border-left: 3px solid #ff8c00;
+  color: #0c0101;
 }
-.assoc-panel .field > span { color: #e5e7eb; font-weight: 500; }
+.assoc-panel .field > span { color: rgb(16 6 1 / 0.8); font-weight: 500; }
 .assoc-panel input,
 .assoc-panel select {
-  background: #1a1a24;
+  background: #e0e0f1;
   border: 1px solid #3a3a4a;
-  color: #ffffff;
+  color: #0c0101;
   border-radius: 8px;
 }
 .assoc-panel input:focus,
@@ -500,7 +502,7 @@ body {
 .assoc-pair:nth-child(even) .assoc-word { border-color: #f0dfc4; }
 
 .assoc-word-input { display: flex; flex-direction: column; gap: 3px; }
-.assoc-word-input > span { font-size: 11px; color: var(--text-muted); }
+.assoc-word-input > span { font-size: 11px; color: #0c0101; }
 
 .assoc-input {
   width: 100%;
@@ -527,7 +529,7 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: linear-gradient(180deg, #2d2d3a 0%, #24242e 100%);
+  background: #f2f8ff;
   border: 1px solid #3a3a4a;
   border-radius: 10px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
@@ -921,7 +923,7 @@ body {
 .team-card {
   position: relative;
   width: 100%;
-  background: var(--surface);
+  background: #f2f8ff;
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow);
@@ -1029,7 +1031,7 @@ body {
   justify-content: center;
   flex-shrink: 0;
   font-weight: 700;
-  color: #fff;
+  color: #f2f8ff;
 }
 .team-avatar-sm { width: 32px; height: 32px; font-size: 12px; }
 .team-avatar-md { width: 44px; height: 44px; font-size: 15px; }
@@ -1109,7 +1111,7 @@ body {
   padding: 17px 20px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--surface);
+  background: linear-gradient(135deg, #fffdf5 0%, #fff3cd 100%);
   box-shadow: var(--shadow);
 }
 .team-stat-wins {
@@ -1138,7 +1140,7 @@ body {
   margin-top: 20px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--surface);
+  background: #fffdf5;
   box-shadow: var(--shadow);
   overflow: hidden;
 }
