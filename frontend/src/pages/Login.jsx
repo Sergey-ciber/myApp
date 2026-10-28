@@ -27,6 +27,7 @@ export default function Login() {
 
   return (
     <div className="auth-page">
+      <div className="auth-page-overlay" />
       <form className="auth-card" onSubmit={submit}>
         <h1>Вход</h1>
         {error && <div className="alert alert-error">{error}</div>}

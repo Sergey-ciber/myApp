@@ -40,6 +40,7 @@ export default function Register() {
 
   return (
     <div className="auth-page">
+      <div className="auth-page-overlay" />
       <form className="auth-card" onSubmit={submit}>
         <h1>Регистрация</h1>
         {error && <div className="alert alert-error">{error}</div>}

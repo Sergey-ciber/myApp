@@ -162,9 +162,9 @@ public class GameService {
     }
 
     /**
-     * Выдать следующую подсказку. Доступность считается только по серверному времени:
+     * Выдать следующую подсказку. Доступность считается по серверному времени:
      * 180, 360, 540 и 720 секунд после старта. Подсказка открывает первые буквы
-     * всех ещё не разгаданных ячеек.
+     * только доступных (родители разгаданы) неразгаданных ячеек.
      */
     @Transactional
     public GameProgressDto takeHint(Long gameId, User user) {
@@ -181,7 +181,6 @@ public class GameService {
             throw new BadRequestException("Все подсказки уже получены");
         }
 
-
         int required = switch (level) {
             case 0 -> HINT_LEVEL_ONE_SECONDS;
             case 1 -> HINT_LEVEL_TWO_SECONDS;
@@ -197,20 +196,51 @@ public class GameService {
 
         int newLevel = level + 1;
         Map<String, String> solved = parseSolved(progress);
-        Map<String, String> prefixes = new LinkedHashMap<>();
+        // Найдём доступные поля: колонка >=2, не разгадано, оба родителя из предыдущей колонки разгаданы
+        java.util.List<GameWord> availableWords = new java.util.ArrayList<>();
         for (GameWord word : game.getWords()) {
-            if (word.getColumnNum() < 2) {
+            int columnNum = word.getColumnNum();
+            if (columnNum < 2) {
                 continue;
             }
-            String key = word.getColumnNum() + ":" + word.getPosition();
+            int position = word.getPosition();
+            String key = columnNum + ":" + position;
             if (solved.containsKey(key)) {
                 continue;
             }
+            if (columnNum == 2) {
+                // для второй колонки родители - пара из колонки 1, всегда доступны если не разгаданы
+                availableWords.add(word);
+                continue;
+            }
+            int parentColumn = columnNum - 1;
+            int parentPos1 = (position - 1) * 2 + 1;
+            int parentPos2 = parentPos1 + 1;
+            String p1 = parentColumn + ":" + parentPos1;
+            String p2 = parentColumn + ":" + parentPos2;
+            if (solved.containsKey(p1) && solved.containsKey(p2)) {
+                availableWords.add(word);
+            }
+        }
+        if (availableWords.isEmpty()) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
+        }
+
+        Map<String, String> prefixes = new LinkedHashMap<>();
+        for (GameWord word : availableWords) {
             String value = word.getWord();
             if (value == null || value.isEmpty()) {
                 continue;
             }
-            prefixes.put(key, value.substring(0, Math.min(newLevel, value.length())));
+            String key = word.getColumnNum() + ":" + word.getPosition();
+            int prefixLen = Math.min(newLevel, value.length());
+            if (prefixLen <= 0) {
+                continue;
+            }
+            prefixes.put(key, value.substring(0, prefixLen));
+        }
+        if (prefixes.isEmpty()) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
         }
         progress.setHintLevel(newLevel);
         writePrefixes(progress, prefixes);
