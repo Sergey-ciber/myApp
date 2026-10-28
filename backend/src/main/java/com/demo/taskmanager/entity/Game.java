@@ -3,12 +3,12 @@ package com.demo.taskmanager.entity;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Игра в ассоциации: название + пирамида из 31 слова.
- * Слова хранятся в отдельной таблице game_words (колонка + позиция внутри колонки).
+ * Игра: может содержать несколько уровней.
  */
 @Entity
 @Table(name = "games")
@@ -18,8 +18,11 @@ public class Game {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 150)
     private String title;
+
+    @Column(name = "game_date")
+    private LocalDate gameDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -29,8 +32,8 @@ public class Game {
     private boolean active = false;
 
     /** Лимит времени на прохождение в минутах (может быть дробным, например 2.5). */
-    @Column(name = "time_limit", nullable = false, columnDefinition = "double precision default 10")
-    private double timeLimitMinutes = 10.0;
+    @Column(name = "time_limit", columnDefinition = "double precision default 10")
+    private Double timeLimitMinutes = 10.0;
 
     /** Создатель игры: только он может редактировать и удалять её. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -40,6 +43,10 @@ public class Game {
     @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("columnNum ASC, position ASC")
     private List<GameWord> words = new ArrayList<>();
+
+    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
+    private List<GameLevel> levels = new ArrayList<>();
 
     /** Результаты прохождений: удаляются вместе с игрой. */
     @OneToMany(mappedBy = "game", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -69,19 +76,24 @@ public class Game {
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
 
+    public LocalDate getGameDate() { return gameDate; }
+    public void setGameDate(LocalDate gameDate) { this.gameDate = gameDate; }
+
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
 
-    public double getTimeLimitMinutes() { return timeLimitMinutes; }
-    public void setTimeLimitMinutes(double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
+    public Double getTimeLimitMinutes() { return timeLimitMinutes; }
+    public void setTimeLimitMinutes(Double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
 
     public User getCreator() { return creator; }
     public void setCreator(User creator) { this.creator = creator; }
 
     public List<GameWord> getWords() { return words; }
+    public List<GameLevel> getLevels() { return levels; }
+    public void setLevels(List<GameLevel> levels) { this.levels = levels; }
 
     public List<GameResult> getResults() { return results; }
 

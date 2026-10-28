@@ -267,36 +267,219 @@ public class GameService {
 
     @Transactional
     public GameResponse createGame(GameRequest request, User creator) {
-        List<List<String>> columns = validateAndNormalize(request);
-        double timeLimit = validateTimeLimit(request.timeLimitMinutes());
+        if (request == null) {
+            throw new BadRequestException("Пустой запрос");
+        }
+        String title = request.title() == null ? "" : request.title().trim();
+        if (title.isEmpty()) {
+            throw new BadRequestException("Укажите название игры");
+        }
+        if (title.length() > 150) {
+            throw new BadRequestException("Название игры не должно быть длиннее 150 символов");
+        }
 
         Game game = new Game();
-        game.setTitle(request.title().trim());
+        game.setTitle(title);
+        game.setGameDate(request.gameDate());
+        Double timeLimit = request.timeLimitMinutes() == null ? 10.0 : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
         game.setCreator(creator);
-        // первая игра сразу становится активной — её и откроет игрок
         game.setActive(gameRepository.count() == 0);
-        fillWords(game, columns);
+
+        if (request.columns() != null && !request.columns().isEmpty()) {
+            List<List<String>> columns = validateAndNormalizeColumns(request.columns());
+            fillWords(game, columns);
+        }
+
+        if (request.levels() != null && !request.levels().isEmpty()) {
+            for (int i = 0; i < request.levels().size(); i++) {
+                GameRequest.LevelRequest lr = request.levels().get(i);
+                if (lr == null) {
+                    throw new BadRequestException("Пустой уровень");
+                }
+                String levelTitle = lr.title() == null ? "" : lr.title().trim();
+                if (levelTitle.isEmpty()) {
+                    throw new BadRequestException("Укажите название уровня");
+                }
+                if (lr.type() == null) {
+                    throw new BadRequestException("Укажите тип уровня");
+                }
+                GameLevel level = new GameLevel();
+                level.setGame(game);
+                level.setTitle(levelTitle);
+                double levelTime = lr.timeLimitMinutes() == null ? timeLimit : validateTimeLimit(lr.timeLimitMinutes());
+                level.setTimeLimitMinutes(levelTime);
+                level.setType(lr.type());
+                level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
+                level.setOrderIndex(i);
+                game.getLevels().add(level);
+
+                if (lr.hints() != null) {
+                    for (int h = 0; h < lr.hints().size(); h++) {
+                        GameRequest.HintRequest hr = lr.hints().get(h);
+                        if (hr == null) continue;
+                        if (hr.type() == null) {
+                            throw new BadRequestException("Укажите тип подсказки");
+                        }
+                        LevelHint hint = new LevelHint();
+                        hint.setLevel(level);
+                        hint.setType(hr.type());
+                        hint.setText(hr.text());
+                        hint.setImageUrl(hr.imageUrl());
+                        hint.setTriggerTime(hr.triggerTime());
+                        hint.setOrderIndex(h);
+                        level.getHints().add(hint);
+                    }
+                }
+
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.ASSOCIATIONS && lr.associationColumns() != null) {
+                    List<List<String>> columns = validateAndNormalizeColumns(lr.associationColumns());
+                    for (int columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+                        List<String> words = columns.get(columnIndex);
+                        for (int position = 0; position < words.size(); position++) {
+                            LevelWord lw = new LevelWord();
+                            lw.setLevel(level);
+                            lw.setColumnNum(columnIndex + 1);
+                            lw.setPosition(position + 1);
+                            lw.setWord(words.get(position));
+                            level.getWords().add(lw);
+                        }
+                    }
+                }
+
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL && lr.questions() != null) {
+                    for (int q = 0; q < lr.questions().size(); q++) {
+                        GameRequest.QuestionRequest qr = lr.questions().get(q);
+                        if (qr == null) continue;
+                        if (qr.question() == null || qr.question().trim().isEmpty()) {
+                            throw new BadRequestException("Укажите вопрос");
+                        }
+                        if (qr.answer() == null || qr.answer().trim().isEmpty()) {
+                            throw new BadRequestException("Укажите ответ на вопрос");
+                        }
+                        LevelQuestion lq = new LevelQuestion();
+                        lq.setLevel(level);
+                        lq.setQuestion(qr.question().trim());
+                        lq.setAnswer(qr.answer().trim());
+                        lq.setOrderIndex(q);
+                        level.getQuestions().add(lq);
+                    }
+                }
+            }
+        }
+
         gameRepository.save(game);
         return GameResponse.from(game);
     }
 
     @Transactional
     public GameResponse updateGame(Long id, GameRequest request, User currentUser) {
-        List<List<String>> columns = validateAndNormalize(request);
-        double timeLimit = validateTimeLimit(request.timeLimitMinutes());
+        if (request == null) {
+            throw new BadRequestException("Пустой запрос");
+        }
+        String title = request.title() == null ? "" : request.title().trim();
+        if (title.isEmpty()) {
+            throw new BadRequestException("Укажите название игры");
+        }
+        if (title.length() > 150) {
+            throw new BadRequestException("Название игры не должно быть длиннее 150 символов");
+        }
 
         Game game = findGame(id);
         requireCreator(game, currentUser);
-        game.setTitle(request.title().trim());
+        game.setTitle(title);
+        game.setGameDate(request.gameDate());
+        Double timeLimit = request.timeLimitMinutes() == null ? (game.getTimeLimitMinutes() == null ? 10.0 : game.getTimeLimitMinutes()) : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
         // ответы могли измениться — прогресс игроков по старой версии больше не актуален
         game.getProgressEntries().clear();
-        // сначала удаляем старые слова и фиксируем удаление,
-        // иначе вставка новых слов упрётся в уникальный индекс (game_id, column_num, position)
+
         game.clearWords();
+        if (request.columns() != null && !request.columns().isEmpty()) {
+            List<List<String>> columns = validateAndNormalizeColumns(request.columns());
+            fillWords(game, columns);
+        }
+
+        game.getLevels().clear();
         gameRepository.saveAndFlush(game);
-        fillWords(game, columns);
+
+        if (request.levels() != null && !request.levels().isEmpty()) {
+            for (int i = 0; i < request.levels().size(); i++) {
+                GameRequest.LevelRequest lr = request.levels().get(i);
+                if (lr == null) {
+                    throw new BadRequestException("Пустой уровень");
+                }
+                String levelTitle = lr.title() == null ? "" : lr.title().trim();
+                if (levelTitle.isEmpty()) {
+                    throw new BadRequestException("Укажите название уровня");
+                }
+                if (lr.type() == null) {
+                    throw new BadRequestException("Укажите тип уровня");
+                }
+                GameLevel level = new GameLevel();
+                level.setGame(game);
+                level.setTitle(levelTitle);
+                double levelTime = lr.timeLimitMinutes() == null ? timeLimit : validateTimeLimit(lr.timeLimitMinutes());
+                level.setTimeLimitMinutes(levelTime);
+                level.setType(lr.type());
+                level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
+                level.setOrderIndex(i);
+                game.getLevels().add(level);
+
+                if (lr.hints() != null) {
+                    for (int h = 0; h < lr.hints().size(); h++) {
+                        GameRequest.HintRequest hr = lr.hints().get(h);
+                        if (hr == null) continue;
+                        if (hr.type() == null) {
+                            throw new BadRequestException("Укажите тип подсказки");
+                        }
+                        LevelHint hint = new LevelHint();
+                        hint.setLevel(level);
+                        hint.setType(hr.type());
+                        hint.setText(hr.text());
+                        hint.setImageUrl(hr.imageUrl());
+                        hint.setTriggerTime(hr.triggerTime());
+                        hint.setOrderIndex(h);
+                        level.getHints().add(hint);
+                    }
+                }
+
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.ASSOCIATIONS && lr.associationColumns() != null) {
+                    List<List<String>> columns = validateAndNormalizeColumns(lr.associationColumns());
+                    for (int columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+                        List<String> words = columns.get(columnIndex);
+                        for (int position = 0; position < words.size(); position++) {
+                            LevelWord lw = new LevelWord();
+                            lw.setLevel(level);
+                            lw.setColumnNum(columnIndex + 1);
+                            lw.setPosition(position + 1);
+                            lw.setWord(words.get(position));
+                            level.getWords().add(lw);
+                        }
+                    }
+                }
+
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL && lr.questions() != null) {
+                    for (int q = 0; q < lr.questions().size(); q++) {
+                        GameRequest.QuestionRequest qr = lr.questions().get(q);
+                        if (qr == null) continue;
+                        if (qr.question() == null || qr.question().trim().isEmpty()) {
+                            throw new BadRequestException("Укажите вопрос");
+                        }
+                        if (qr.answer() == null || qr.answer().trim().isEmpty()) {
+                            throw new BadRequestException("Укажите ответ на вопрос");
+                        }
+                        LevelQuestion lq = new LevelQuestion();
+                        lq.setLevel(level);
+                        lq.setQuestion(qr.question().trim());
+                        lq.setAnswer(qr.answer().trim());
+                        lq.setOrderIndex(q);
+                        level.getQuestions().add(lq);
+                    }
+                }
+            }
+        }
+
         gameRepository.save(game);
         return GameResponse.from(game);
     }
@@ -535,23 +718,9 @@ public class GameService {
     }
 
     /**
-     * Проверка игры и нормализация слов (обрезка пробелов).
-     * Требования: название непустое, в колонках ровно 16/8/4/2/1 непустых слов.
+     * Проверка колонок и нормализация слов (обрезка пробелов).
      */
-    private List<List<String>> validateAndNormalize(GameRequest request) {
-        if (request == null) {
-            throw new BadRequestException("Пустой запрос");
-        }
-        String title = request.title() == null ? "" : request.title().trim();
-        if (title.isEmpty()) {
-            throw new BadRequestException("Укажите название игры");
-        }
-        if (title.length() > MAX_TITLE_LENGTH) {
-            throw new BadRequestException("Название игры не должно быть длиннее "
-                    + MAX_TITLE_LENGTH + " символов");
-        }
-
-        List<List<String>> columns = request.columns();
+    private List<List<String>> validateAndNormalizeColumns(List<List<String>> columns) {
         if (columns == null || columns.size() != COLUMN_SIZES.length) {
             throw new BadRequestException("Игра должна состоять из 5 колонок (16 + 8 + 4 + 2 + 1 слово)");
         }
@@ -587,5 +756,28 @@ public class GameService {
                     + (emptyCells.size() > 5 ? " и ещё " + (emptyCells.size() - 5) : ""));
         }
         return normalized;
+    }
+
+    /**
+     * Проверка игры и нормализация слов (обрезка пробелов).
+     * Требования: название непустое, в колонках ровно 16/8/4/2/1 непустых слов.
+     */
+    private List<List<String>> validateAndNormalize(GameRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Пустой запрос");
+        }
+        String title = request.title() == null ? "" : request.title().trim();
+        if (title.isEmpty()) {
+            throw new BadRequestException("Укажите название игры");
+        }
+        if (title.length() > MAX_TITLE_LENGTH) {
+            throw new BadRequestException("Название игры не должно быть длиннее "
+                    + MAX_TITLE_LENGTH + " символов");
+        }
+        List<List<String>> columns = request.columns();
+        if (columns == null || columns.isEmpty()) {
+            throw new BadRequestException("Игра должна состоять из 5 колонок (16 + 8 + 4 + 2 + 1 слово)");
+        }
+        return validateAndNormalizeColumns(columns);
     }
 }

@@ -1,15 +1,40 @@
 package com.demo.taskmanager.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
+import com.demo.taskmanager.entity.HintType;
+import com.demo.taskmanager.entity.LevelType;
 
+import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Запрос на создание/обновление игры.
- * columns — ровно 5 массивов слов: [16, 8, 4, 2, 1].
- * timeLimitMinutes — обязательный лимит времени на прохождение в минутах.
- */
-public record GameRequest(String title,
-                          @JsonAlias("time_limit") Double timeLimitMinutes,
-                          List<List<String>> columns) {
+public record GameRequest(
+        String title,
+        LocalDate gameDate,
+        Double timeLimitMinutes,
+        List<List<String>> columns,
+        List<LevelRequest> levels
+) {
+    public record LevelRequest(
+            String title,
+            Double timeLimitMinutes,
+            LevelType type,
+            Integer hintsCount,
+            List<HintRequest> hints,
+            List<List<String>> associationColumns,
+            List<QuestionRequest> questions
+    ) {
+    }
+
+    public record HintRequest(
+            HintType type,
+            String text,
+            String imageUrl,
+            Double triggerTime
+    ) {
+    }
+
+    public record QuestionRequest(
+            String question,
+            String answer
+    ) {
+    }
 }
