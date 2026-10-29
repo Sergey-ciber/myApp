@@ -50,9 +50,11 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             LevelType type,
             Integer hintsCount,
             Integer orderIndex,
+            Integer passThreshold,
             List<HintResponse> hints,
             List<List<String>> associationColumns,
-            List<QuestionResponse> questions
+            List<QuestionResponse> questions,
+            List<StandardQuestionResponse> standardQuestions
     ) {
         public static LevelResponse from(GameLevel level) {
             List<HintResponse> hints = level.getHints() == null ? List.of() : level.getHints().stream()
@@ -62,6 +64,10 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             List<QuestionResponse> questions = level.getQuestions() == null ? List.of() : level.getQuestions().stream()
                     .sorted(Comparator.comparingInt(LevelQuestion::getOrderIndex))
                     .map(QuestionResponse::from)
+                    .toList();
+            List<StandardQuestionResponse> standardQuestions = level.getStandardQuestions() == null ? List.of() : level.getStandardQuestions().stream()
+                    .sorted(Comparator.comparingInt(StandardQuestion::getOrderIndex))
+                    .map(StandardQuestionResponse::from)
                     .toList();
             List<List<String>> associationColumns = null;
             if (level.getType() == LevelType.ASSOCIATIONS) {
@@ -76,7 +82,7 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 }
             }
             return new LevelResponse(level.getId(), level.getTitle(), level.getTimeLimitMinutes(), level.getType(),
-                    level.getHintsCount(), level.getOrderIndex(), hints, associationColumns, questions);
+                    level.getHintsCount(), level.getOrderIndex(), level.getPassThreshold(), hints, associationColumns, questions, standardQuestions);
         }
     }
 
@@ -89,6 +95,15 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
     public record QuestionResponse(Long id, String question, String answer, Integer orderIndex) {
         public static QuestionResponse from(LevelQuestion question) {
             return new QuestionResponse(question.getId(), question.getQuestion(), question.getAnswer(), question.getOrderIndex());
+        }
+    }
+
+    public record StandardQuestionResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> answers) {
+        public static StandardQuestionResponse from(StandardQuestion question) {
+            List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
+                    .map(StandardAnswer::getAnswerText)
+                    .toList();
+            return new StandardQuestionResponse(question.getId(), question.getQuestionText(), question.getMediaType(), question.getMediaUrl(), question.getOrderIndex(), answers);
         }
     }
 }

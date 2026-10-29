@@ -18,9 +18,11 @@ public record GameRequest(
             Double timeLimitMinutes,
             LevelType type,
             Integer hintsCount,
+            Integer passThreshold,
             List<HintRequest> hints,
             List<List<String>> associationColumns,
-            List<QuestionRequest> questions
+            List<QuestionRequest> questions,
+            List<StandardQuestionRequest> standardQuestions
     ) {
     }
 
@@ -35,6 +37,14 @@ public record GameRequest(
     public record QuestionRequest(
             String question,
             String answer
+    ) {
+    }
+
+    public record StandardQuestionRequest(
+            String questionText,
+            String mediaType,
+            String mediaUrl,
+            List<String> answers
     ) {
     }
 }

@@ -33,6 +33,9 @@ public class GameLevel {
     @Column(name = "order_index", nullable = false)
     private int orderIndex = 0;
 
+    @Column(name = "pass_threshold")
+    private Integer passThreshold;
+
     @OneToMany(mappedBy = "level", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
     private List<LevelHint> hints = new ArrayList<>();
@@ -42,7 +45,12 @@ public class GameLevel {
     private List<LevelWord> words = new ArrayList<>();
 
     @OneToMany(mappedBy = "level", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
     private List<LevelQuestion> questions = new ArrayList<>();
+
+    @OneToMany(mappedBy = "level", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
+    private List<StandardQuestion> standardQuestions = new ArrayList<>();
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -58,7 +66,10 @@ public class GameLevel {
     public void setHintsCount(int hintsCount) { this.hintsCount = hintsCount; }
     public int getOrderIndex() { return orderIndex; }
     public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public Integer getPassThreshold() { return passThreshold; }
+    public void setPassThreshold(Integer passThreshold) { this.passThreshold = passThreshold; }
     public List<LevelHint> getHints() { return hints; }
     public List<LevelWord> getWords() { return words; }
     public List<LevelQuestion> getQuestions() { return questions; }
+    public List<StandardQuestion> getStandardQuestions() { return standardQuestions; }
 }

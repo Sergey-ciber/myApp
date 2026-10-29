@@ -251,9 +251,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         setError(`Уровень ${i + 1}: укажите количество подсказок`)
         return
       }
-      if (level.hints && level.hints.length !== hc) {
-        // allow creating up to hintsCount
-      }
       if (level.type === 'ASSOCIATIONS') {
         const cols = level.associationColumns || []
         let empty = 0
@@ -264,20 +261,40 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         }
         if (empty > 0) {
           setShowErrors(true)
-          setError(`Уровень ${i + 1}: заполните пирамиду из 31 слова`)
+          setError(`Заполните все 31 слово для уровня-ассоциации (Уровень ${i + 1})`)
           return
         }
       }
       if (level.type === 'NORMAL') {
-        if (!level.questions || level.questions.length === 0) {
+        const questions = level.standardQuestions || []
+        if (questions.length === 0) {
           setShowErrors(true)
-          setError(`Уровень ${i + 1}: добавьте хотя бы один вопрос`)
+          setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
           return
         }
-        for (let q = 0; q < level.questions.length; q++) {
-          if (!level.questions[q].question?.trim() || !level.questions[q].answer?.trim()) {
+        const passThreshold = Number(level.passThreshold)
+        if (!level.passThreshold?.toString().trim() || !Number.isFinite(passThreshold) || passThreshold < 0) {
+          setShowErrors(true)
+          setError(`Уровень ${i + 1}: укажите порог прохождения`)
+          return
+        }
+        if (passThreshold > questions.length) {
+          setShowErrors(true)
+          setError(`Порог прохождения не может быть больше количества вопросов (Уровень ${i + 1})`)
+          return
+        }
+        for (let q = 0; q < questions.length; q++) {
+          const question = questions[q]
+          if (!question.questionText?.trim()) {
             setShowErrors(true)
-            setError(`Уровень ${i + 1}: заполните вопрос и ответ`)
+            setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
+            return
+          }
+          const answers = question.answers || []
+          const validAnswers = answers.filter((a) => (a || '').trim())
+          if (validAnswers.length === 0) {
+            setShowErrors(true)
+            setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
             return
           }
         }
@@ -320,6 +337,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           timeLimitMinutes: Number(level.timeLimitMinutes),
           type: level.type,
           hintsCount: Number(level.hintsCount) || 0,
+          passThreshold: level.type === 'NORMAL' ? Number(level.passThreshold) : null,
           hints: (level.hints || []).map((hint) => ({
             type: hint.type,
             text: hint.text?.trim() || null,
@@ -327,9 +345,15 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
             triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
           })),
           associationColumns: level.type === 'ASSOCIATIONS' ? (level.associationColumns || []).map((words) => words.map((word) => word.trim())) : null,
-          questions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
+          questions: level.type === 'NORMAL' ? null : (level.questions || []).map((q) => ({
             question: q.question.trim(),
             answer: q.answer.trim(),
+          })),
+          standardQuestions: level.type === 'NORMAL' ? (level.standardQuestions || []).map((q) => ({
+            questionText: q.questionText?.trim(),
+            mediaType: q.mediaType || null,
+            mediaUrl: q.mediaUrl?.trim() || null,
+            answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
           })) : null,
         })),
       }
