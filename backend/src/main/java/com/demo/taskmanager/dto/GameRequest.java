@@ -36,7 +36,7 @@ public record GameRequest(
 
     public record QuestionRequest(
             String question,
-            String answer
+            List<String> answers
     ) {
     }
 

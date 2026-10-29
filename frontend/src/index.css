@@ -805,6 +805,46 @@ body {
   font-weight: 600;
 }
 
+/* ---------- Уровень «Обычный»: вопрос, медиа, ответ, прогресс ---------- */
+.assoc-normal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 15px;
+  padding: 18px;
+  background: #1c1c26;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
+  border-radius: 14px;
+}
+.assoc-normal-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+  padding: 22px;
+  background: #24242e;
+  border: 1px solid #3a3a4a;
+  border-radius: 14px;
+}
+.assoc-normal-media { display: flex; justify-content: center; align-items: center; width: 100%; }
+.assoc-normal-media img { max-width: 100%; max-height: 320px; border-radius: 10px; }
+.assoc-normal-media audio,
+.assoc-normal-media video { max-width: 100%; }
+.assoc-normal-question { margin: 0; font-size: 20px; color: #ffffff; text-align: center; }
+.assoc-normal-progress { margin: 0; font-size: 13px; color: #a0a0b0; }
+.assoc-normal-progress strong { color: #ff8c00; }
+.assoc-normal-answer { display: flex; gap: 10px; width: 100%; align-items: center; }
+.assoc-normal-answer .assoc-input {
+  background: #12121a;
+  color: #ffffff;
+  border-color: #3a3a4a;
+  font-size: 16px;
+}
+
 /* Победа */
 .assoc-win { text-align: center; }
 .assoc-win-emoji { font-size: 56px; line-height: 1; }

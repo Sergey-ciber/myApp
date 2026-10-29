@@ -61,14 +61,43 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                     .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
                     .map(HintResponse::from)
                     .toList();
-            List<QuestionResponse> questions = level.getQuestions() == null ? List.of() : level.getQuestions().stream()
-                    .sorted(Comparator.comparingInt(LevelQuestion::getOrderIndex))
-                    .map(QuestionResponse::from)
-                    .toList();
-            List<StandardQuestionResponse> standardQuestions = level.getStandardQuestions() == null ? List.of() : level.getStandardQuestions().stream()
-                    .sorted(Comparator.comparingInt(StandardQuestion::getOrderIndex))
-                    .map(StandardQuestionResponse::from)
-                    .toList();
+            List<QuestionResponse> questions = new ArrayList<>();
+            List<StandardQuestionResponse> standardQuestions = level.getStandardQuestions() == null
+                    ? List.of()
+                    : level.getStandardQuestions().stream()
+                        .sorted(Comparator.comparingInt(StandardQuestion::getOrderIndex))
+                        .map(StandardQuestionResponse::from)
+                        .toList();
+            if (level.getType() == LevelType.NORMAL) {
+                // вопросы обычного уровня: правильные ответы — это список вариантов ответа у вопроса
+                List<StandardQuestion> source = new ArrayList<>();
+                if (level.getStandardQuestions() != null && !level.getStandardQuestions().isEmpty()) {
+                    for (StandardQuestion q : level.getStandardQuestions()) {
+                        source.add(q);
+                    }
+                } else if (level.getQuestions() != null) {
+                    for (com.demo.taskmanager.entity.LevelQuestion q : level.getQuestions()) {
+                        source.add(toStandardQuestion(level, q));
+                    }
+                }
+                for (StandardQuestion q : source) {
+                    List<String> answers = new ArrayList<>();
+                    if (q.getAnswers() != null) {
+                        for (com.demo.taskmanager.entity.StandardAnswer a : q.getAnswers()) {
+                            String answerText = a.getAnswerText();
+                            if (answerText != null && !answerText.trim().isEmpty()) {
+                                answers.add(answerText);
+                            }
+                        }
+                    }
+                    questions.add(new QuestionResponse(q.getId(), q.getQuestionText(), answers, q.getOrderIndex()));
+                }
+            } else {
+                questions = level.getQuestions() == null ? List.of() : level.getQuestions().stream()
+                        .sorted(Comparator.comparingInt(com.demo.taskmanager.entity.LevelQuestion::getOrderIndex))
+                        .map(QuestionResponse::from)
+                        .toList();
+            }
             List<List<String>> associationColumns = null;
             if (level.getType() == LevelType.ASSOCIATIONS) {
                 associationColumns = new ArrayList<>(COLUMN_SIZES.length);
@@ -84,17 +113,33 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             return new LevelResponse(level.getId(), level.getTitle(), level.getTimeLimitMinutes(), level.getType(),
                     level.getHintsCount(), level.getOrderIndex(), level.getPassThreshold(), hints, associationColumns, questions, standardQuestions);
         }
+
+        private static com.demo.taskmanager.entity.StandardQuestion toStandardQuestion(GameLevel level,
+                                                                                          com.demo.taskmanager.entity.LevelQuestion q) {
+            com.demo.taskmanager.entity.StandardQuestion standard = new com.demo.taskmanager.entity.StandardQuestion();
+            standard.setLevel(level);
+            standard.setQuestionText(q.getQuestion());
+            standard.setOrderIndex(q.getOrderIndex());
+            if (q.getAnswer() != null && !q.getAnswer().trim().isEmpty()) {
+                com.demo.taskmanager.entity.StandardAnswer answer = new com.demo.taskmanager.entity.StandardAnswer();
+                answer.setQuestion(standard);
+                answer.setAnswerText(q.getAnswer());
+                standard.getAnswers().add(answer);
+            }
+            return standard;
+        }
     }
 
     public record HintResponse(Long id, HintType type, String text, String imageUrl, Double triggerTime, Integer orderIndex) {
-        public static HintResponse from(LevelHint hint) {
+        public static HintResponse from(com.demo.taskmanager.entity.LevelHint hint) {
             return new HintResponse(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(), hint.getOrderIndex());
         }
     }
 
-    public record QuestionResponse(Long id, String question, String answer, Integer orderIndex) {
-        public static QuestionResponse from(LevelQuestion question) {
-            return new QuestionResponse(question.getId(), question.getQuestion(), question.getAnswer(), question.getOrderIndex());
+    public record QuestionResponse(Long id, String question, List<String> answers, Integer orderIndex) {
+        public static QuestionResponse from(com.demo.taskmanager.entity.LevelQuestion question) {
+            return new QuestionResponse(question.getId(), question.getQuestion(), question.getAnswer() == null
+                    ? List.of() : List.of(question.getAnswer()), question.getOrderIndex());
         }
     }
 
@@ -102,6 +147,7 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
         public static StandardQuestionResponse from(StandardQuestion question) {
             List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
                     .map(StandardAnswer::getAnswerText)
+                    .filter(a -> a != null && !a.trim().isEmpty())
                     .toList();
             return new StandardQuestionResponse(question.getId(), question.getQuestionText(), question.getMediaType(), question.getMediaUrl(), question.getOrderIndex(), answers);
         }

@@ -47,7 +47,7 @@ function createEmptyHint(index) {
 function createEmptyQuestion() {
   return {
     question: '',
-    answer: '',
+    answers: [''],
   }
 }
 
@@ -110,7 +110,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         questions: (level.questions || []).map((q) => ({
           id: q.id,
           question: q.question || '',
-          answer: q.answer || '',
+          answers: Array.isArray(q.answers) ? q.answers : (q.answer ? [q.answer] : ['']),
         })),
       })))
     } else {
@@ -189,6 +189,50 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setLevels((prev) => prev.map((level, i) => {
       if (i !== levelIndex) return level
       const questions = (level.questions || []).map((q, idx) => (idx === qIndex ? { ...q, ...patch } : q))
+      return { ...level, questions }
+    }))
+  }
+
+  /** Обновить отдельный вариант ответа вопроса (массив answers). */
+  const updateAnswer = (levelIndex, qIndex, answerIndex, value) => {
+    setLevels((prev) => prev.map((level, i) => {
+      if (i !== levelIndex) return level
+      const questions = (level.questions || []).map((q, idx) => {
+        if (idx !== qIndex) return q
+        const answers = Array.isArray(q.answers) ? [...q.answers] : [q.answer || '']
+        answers[answerIndex] = value
+        return { ...q, answers }
+      })
+      return { ...level, questions }
+    }))
+  }
+
+  /** Добавить новый вариант ответа к вопросу. */
+  const addAnswer = (levelIndex, qIndex) => {
+    setLevels((prev) => prev.map((level, i) => {
+      if (i !== levelIndex) return level
+      const questions = (level.questions || []).map((q, idx) => {
+        if (idx !== qIndex) return q
+        const answers = Array.isArray(q.answers) ? [...q.answers] : [q.answer || '']
+        answers.push('')
+        return { ...q, answers }
+      })
+      return { ...level, questions }
+    }))
+  }
+
+  /** Удалить лишний вариант ответа (первый вариант всегда остаётся). */
+  const removeAnswer = (levelIndex, qIndex, answerIndex) => {
+    setLevels((prev) => prev.map((level, i) => {
+      if (i !== levelIndex) return level
+      const questions = (level.questions || []).map((q, idx) => {
+        if (idx !== qIndex) return q
+        const answers = Array.isArray(q.answers) ? [...q.answers] : [q.answer || '']
+        if (answers.length > 1) {
+          answers.splice(answerIndex, 1)
+        }
+        return { ...q, answers }
+      })
       return { ...level, questions }
     }))
   }
@@ -282,8 +326,9 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           if (!(question.question || '').trim()) {
             levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: заполните текст вопроса`)
           }
-          if (!(question.answer || '').trim()) {
-            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: заполните правильный ответ`)
+          const answers = (question.answers || []).map((a) => (a || '').trim()).filter((a) => a)
+          if (answers.length === 0) {
+            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: добавьте хотя бы один правильный ответ`)
           }
         }
         if (levelErrors.length > 0) {
@@ -344,13 +389,13 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           associationColumns: level.type === 'ASSOCIATIONS' ? (level.associationColumns || []).map((words) => words.map((word) => word.trim())) : null,
           questions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
             question: q.question?.trim(),
-            answer: q.answer?.trim(),
+            answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
           })) : null,
           standardQuestions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
             questionText: q.question?.trim(),
             mediaType: null,
             mediaUrl: null,
-            answers: [(q.answer || '').trim()].filter((a) => a),
+            answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
           })) : null,
         })),
       }
@@ -657,24 +702,41 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                         <span style={{ color: '#ffffff' }}>Вопрос {qIndex + 1}</span>
                         <button type="button" className="btn btn-small btn-danger" onClick={() => removeQuestion(levelIndex, qIndex)}>Удалить</button>
                       </div>
-                      <div className="field-row">
+                      <label className="field" style={{ marginBottom: 12 }}>
+                        <span>Вопрос *</span>
+                        <input
+                          value={q.question || ''}
+                          onChange={(event) => updateQuestion(levelIndex, qIndex, { question: event.target.value })}
+                          className={showErrors && !(q.question || '').trim() ? 'input-invalid' : ''}
+                        />
+                      </label>
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Варианты ответов</span>
+                      </div>
+                      <div className="field-row" style={{ alignItems: 'flex-start', marginBottom: (q.answers || []).length > 1 ? 8 : 0 }}>
                         <label className="field">
-                          <span>Вопрос *</span>
+                          <span>Вариант ответа 1 *</span>
                           <input
-                            value={q.question || ''}
-                            onChange={(event) => updateQuestion(levelIndex, qIndex, { question: event.target.value })}
-                            className={showErrors && !(q.question || '').trim() ? 'input-invalid' : ''}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Ответ *</span>
-                          <input
-                            value={q.answer || ''}
-                            onChange={(event) => updateQuestion(levelIndex, qIndex, { answer: event.target.value })}
-                            className={showErrors && !(q.answer || '').trim() ? 'input-invalid' : ''}
+                            value={q.answers?.[0] || ''}
+                            onChange={(event) => updateAnswer(levelIndex, qIndex, 0, event.target.value)}
+                            className={showErrors && !(q.answers?.[0] || '').trim() ? 'input-invalid' : ''}
                           />
                         </label>
                       </div>
+                      {(q.answers || []).map((answer, answerIndex) => answerIndex > 0 ? (
+                        <div key={answerIndex} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                          <label className="field" style={{ flex: 1 }}>
+                            <span>Вариант ответа {answerIndex + 1}</span>
+                            <input
+                              value={answer || ''}
+                              onChange={(event) => updateAnswer(levelIndex, qIndex, answerIndex, event.target.value)}
+                              className={showErrors && !(answer || '').trim() ? 'input-invalid' : ''}
+                            />
+                          </label>
+                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeAnswer(levelIndex, qIndex, answerIndex)}>Удалить</button>
+                        </div>
+                      ) : null)}
+                      <button type="button" className="btn btn-small btn-secondary" onClick={() => addAnswer(levelIndex, qIndex)}>+ Добавить вариант ответа</button>
                     </div>
                   ))}
                 </div>

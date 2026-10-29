@@ -18,6 +18,8 @@ import com.demo.taskmanager.entity.GameWord;
 import com.demo.taskmanager.entity.LevelHint;
 import com.demo.taskmanager.entity.LevelQuestion;
 import com.demo.taskmanager.entity.LevelWord;
+import com.demo.taskmanager.entity.StandardAnswer;
+import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.entity.UserProgress;
 import com.demo.taskmanager.exception.BadRequestException;
@@ -25,6 +27,7 @@ import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
 import com.demo.taskmanager.repository.GameRepository;
 import com.demo.taskmanager.repository.GameResultRepository;
+import com.demo.taskmanager.repository.StandardQuestionRepository;
 import com.demo.taskmanager.repository.UserProgressRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -64,17 +67,20 @@ public class GameService {
     private final UserProgressRepository progressRepository;
     private final TeamService teamService;
     private final ObjectMapper objectMapper;
+    private final StandardQuestionRepository standardQuestionRepository;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
                        UserProgressRepository progressRepository,
                        TeamService teamService,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       StandardQuestionRepository standardQuestionRepository) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
         this.teamService = teamService;
         this.objectMapper = objectMapper;
+        this.standardQuestionRepository = standardQuestionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -122,7 +128,14 @@ public class GameService {
     @Transactional
     public CheckAnswerResponse checkAnswer(Long gameId, User user, CheckAnswerRequest request) {
         Game game = findGame(gameId);
-        if (request == null || request.column() == null || request.position() == null) {
+        if (request == null) {
+            throw new BadRequestException("Пустой запрос");
+        }
+        // уровень обычный: проверяем текст ответа против всех вариантов ответа вопроса
+        if (request.questionId() != null) {
+            return checkStandardAnswer(game, user, request);
+        }
+        if (request.column() == null || request.position() == null) {
             throw new BadRequestException("Укажите колонку и номер ответа");
         }
         int column = request.column();
@@ -163,6 +176,72 @@ public class GameService {
             progressRepository.save(progress);
         }
         return new CheckAnswerResponse(correct, toDto(progress));
+    }
+
+    /**
+     * Проверка вопроса обычного уровня: введённый ответ сравнивается со ВСЕМИ вариантами
+     * ответа вопроса (регистр и пробелы по краям не учитываются). Совпадение с любым
+     * вариантом засчитывается как правильный ответ.
+     */
+    private CheckAnswerResponse checkStandardAnswer(Game game, User user, CheckAnswerRequest request) {
+        StandardQuestion question = standardQuestionRepository.findById(request.questionId())
+                .orElseThrow(() -> new NotFoundException("Вопрос не найден"));
+        if (question.getLevel() == null || question.getLevel().getGame() == null
+                || !question.getLevel().getGame().getId().equals(game.getId())) {
+            throw new NotFoundException("Вопрос не найден");
+        }
+        UserProgress progress = findOrCreateProgress(game, user);
+        if (progress.getFinishedSeconds() != null) {
+            throw new BadRequestException("Игра уже пройдена");
+        }
+        if (isTimeUp(game, progress)) {
+            throw new BadRequestException("Время вышло — игра окончена");
+        }
+
+        List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
+                .map(StandardAnswer::getAnswerText)
+                .map(String::trim)
+                .filter(text -> !text.isEmpty())
+                .toList();
+        String normalizedAnswer = normalize(request.answer());
+        String matched = null;
+        for (String answer : answers) {
+            if (normalize(answer).equals(normalizedAnswer)) {
+                matched = answer;
+                break;
+            }
+        }
+        boolean correct = matched != null;
+
+        if (correct) {
+            String key = "l" + question.getLevel().getId() + ":q" + question.getId();
+            Map<String, String> solved = parseSolved(progress);
+            solved.put(key, matched);
+            writeSolved(progress, solved);
+            Map<String, String> prefixes = parsePrefixes(progress);
+            if (prefixes.remove(key) != null) {
+                writePrefixes(progress, prefixes);
+            }
+            GameLevel level = question.getLevel();
+            if (level.getPassThreshold() != null
+                    && solvedCountForLevel(progress, level.getId()) >= level.getPassThreshold()) {
+                long elapsed = elapsedSeconds(progress);
+                if (elapsed > limitSeconds(game)) {
+                    throw new BadRequestException("Время вышло — результат не засчитывается");
+                }
+                progress.setFinishedSeconds((int) Math.max(1, elapsed));
+            }
+            progress.setUpdatedAt(Instant.now());
+            progressRepository.save(progress);
+        }
+        return new CheckAnswerResponse(correct, toDto(progress));
+    }
+
+    /** Сколько вопросов обычного уровня уже разгадано данным игроком. */
+    private int solvedCountForLevel(UserProgress progress, Long levelId) {
+        Map<String, String> solved = parseSolved(progress);
+        String prefix = "l" + levelId + ":";
+        return (int) solved.keySet().stream().filter(key -> key != null && key.startsWith(prefix)).count();
     }
 
     /**
@@ -319,6 +398,7 @@ public class GameService {
                 level.setType(lr.type());
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
+                level.setPassThreshold(lr.passThreshold());
                 game.getLevels().add(level);
 
                 if (lr.hints() != null) {
@@ -354,22 +434,57 @@ public class GameService {
                     }
                 }
 
-                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL && lr.questions() != null) {
-                    for (int q = 0; q < lr.questions().size(); q++) {
-                        GameRequest.QuestionRequest qr = lr.questions().get(q);
-                        if (qr == null) continue;
-                        if (qr.question() == null || qr.question().trim().isEmpty()) {
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL) {
+                    List<GameRequest.StandardQuestionRequest> standardQuestions = new ArrayList<>();
+                    List<Integer> questionIndexes = new ArrayList<>();
+                    if (lr.standardQuestions() != null) {
+                        for (int q = 0; q < lr.standardQuestions().size(); q++) {
+                            GameRequest.StandardQuestionRequest sq = lr.standardQuestions().get(q);
+                            if (sq == null) continue;
+                            standardQuestions.add(sq);
+                            questionIndexes.add(q);
+                        }
+                    } else if (lr.questions() != null) {
+                        for (int q = 0; q < lr.questions().size(); q++) {
+                            GameRequest.QuestionRequest qr = lr.questions().get(q);
+                            if (qr == null) continue;
+                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers());
+                            standardQuestions.add(sq);
+                            questionIndexes.add(q);
+                        }
+                    }
+                    for (int q = 0; q < standardQuestions.size(); q++) {
+                        GameRequest.StandardQuestionRequest sq = standardQuestions.get(q);
+                        String questionText = sq.questionText() == null ? "" : sq.questionText().trim();
+                        if (questionText.isEmpty()) {
                             throw new BadRequestException("Укажите вопрос");
                         }
-                        if (qr.answer() == null || qr.answer().trim().isEmpty()) {
-                            throw new BadRequestException("Укажите ответ на вопрос");
+                        List<String> answers = new ArrayList<>();
+                        if (sq.answers() != null) {
+                            for (String answer : sq.answers()) {
+                                if (answer == null) continue;
+                                String trimmed = answer.trim();
+                                if (!trimmed.isEmpty()) {
+                                    answers.add(trimmed);
+                                }
+                            }
                         }
-                        LevelQuestion lq = new LevelQuestion();
-                        lq.setLevel(level);
-                        lq.setQuestion(qr.question().trim());
-                        lq.setAnswer(qr.answer().trim());
-                        lq.setOrderIndex(q);
-                        level.getQuestions().add(lq);
+                        if (answers.isEmpty()) {
+                            throw new BadRequestException("Уровень " + (i + 1) + ", Вопрос " + (questionIndexes.get(q) + 1) + ": добавьте хотя бы один правильный ответ");
+                        }
+                        StandardQuestion standardQuestion = new StandardQuestion();
+                        standardQuestion.setLevel(level);
+                        standardQuestion.setQuestionText(questionText);
+                        standardQuestion.setMediaType(sq.mediaType());
+                        standardQuestion.setMediaUrl(sq.mediaUrl());
+                        standardQuestion.setOrderIndex(q);
+                        for (String answer : answers) {
+                            StandardAnswer standardAnswer = new StandardAnswer();
+                            standardAnswer.setQuestion(standardQuestion);
+                            standardAnswer.setAnswerText(answer);
+                            standardQuestion.getAnswers().add(standardAnswer);
+                        }
+                        level.getStandardQuestions().add(standardQuestion);
                     }
                 }
             }
@@ -434,6 +549,7 @@ public class GameService {
                 level.setType(lr.type());
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
+                level.setPassThreshold(lr.passThreshold());
                 game.getLevels().add(level);
 
                 if (lr.hints() != null) {
@@ -469,22 +585,57 @@ public class GameService {
                     }
                 }
 
-                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL && lr.questions() != null) {
-                    for (int q = 0; q < lr.questions().size(); q++) {
-                        GameRequest.QuestionRequest qr = lr.questions().get(q);
-                        if (qr == null) continue;
-                        if (qr.question() == null || qr.question().trim().isEmpty()) {
+                if (lr.type() == com.demo.taskmanager.entity.LevelType.NORMAL) {
+                    List<GameRequest.StandardQuestionRequest> standardQuestions = new ArrayList<>();
+                    List<Integer> questionIndexes = new ArrayList<>();
+                    if (lr.standardQuestions() != null) {
+                        for (int q = 0; q < lr.standardQuestions().size(); q++) {
+                            GameRequest.StandardQuestionRequest sq = lr.standardQuestions().get(q);
+                            if (sq == null) continue;
+                            standardQuestions.add(sq);
+                            questionIndexes.add(q);
+                        }
+                    } else if (lr.questions() != null) {
+                        for (int q = 0; q < lr.questions().size(); q++) {
+                            GameRequest.QuestionRequest qr = lr.questions().get(q);
+                            if (qr == null) continue;
+                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers());
+                            standardQuestions.add(sq);
+                            questionIndexes.add(q);
+                        }
+                    }
+                    for (int q = 0; q < standardQuestions.size(); q++) {
+                        GameRequest.StandardQuestionRequest sq = standardQuestions.get(q);
+                        String questionText = sq.questionText() == null ? "" : sq.questionText().trim();
+                        if (questionText.isEmpty()) {
                             throw new BadRequestException("Укажите вопрос");
                         }
-                        if (qr.answer() == null || qr.answer().trim().isEmpty()) {
-                            throw new BadRequestException("Укажите ответ на вопрос");
+                        List<String> answers = new ArrayList<>();
+                        if (sq.answers() != null) {
+                            for (String answer : sq.answers()) {
+                                if (answer == null) continue;
+                                String trimmed = answer.trim();
+                                if (!trimmed.isEmpty()) {
+                                    answers.add(trimmed);
+                                }
+                            }
                         }
-                        LevelQuestion lq = new LevelQuestion();
-                        lq.setLevel(level);
-                        lq.setQuestion(qr.question().trim());
-                        lq.setAnswer(qr.answer().trim());
-                        lq.setOrderIndex(q);
-                        level.getQuestions().add(lq);
+                        if (answers.isEmpty()) {
+                            throw new BadRequestException("Уровень " + (i + 1) + ", Вопрос " + (questionIndexes.get(q) + 1) + ": добавьте хотя бы один правильный ответ");
+                        }
+                        StandardQuestion standardQuestion = new StandardQuestion();
+                        standardQuestion.setLevel(level);
+                        standardQuestion.setQuestionText(questionText);
+                        standardQuestion.setMediaType(sq.mediaType());
+                        standardQuestion.setMediaUrl(sq.mediaUrl());
+                        standardQuestion.setOrderIndex(q);
+                        for (String answer : answers) {
+                            StandardAnswer standardAnswer = new StandardAnswer();
+                            standardAnswer.setQuestion(standardQuestion);
+                            standardAnswer.setAnswerText(answer);
+                            standardQuestion.getAnswers().add(standardAnswer);
+                        }
+                        level.getStandardQuestions().add(standardQuestion);
                     }
                 }
             }

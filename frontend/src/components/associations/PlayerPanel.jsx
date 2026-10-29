@@ -86,7 +86,9 @@ export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId
     <div className="assoc-player">
       <div className="assoc-player-top">
         <div className="assoc-player-heading">
-          <h2 className="assoc-player-title">Игра в ассоциации — {game.title}</h2>
+          <h2 className="assoc-player-title">
+            {game.levelType === 'NORMAL' ? 'Обычный уровень' : 'Игра в ассоциации'} — {game.title}
+          </h2>
           <span className="assoc-player-author">
             автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
           </span>

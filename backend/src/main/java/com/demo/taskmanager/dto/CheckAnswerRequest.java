@@ -1,5 +1,5 @@
 package com.demo.taskmanager.dto;
 
-/** Проверка ответа на сервере: клиент присылает слово, но не знает правильное. */
-public record CheckAnswerRequest(Integer column, Integer position, String answer) {
+/** Проверка ответа на сервере: клиент присылает текст ответа, правильные варианты не отдаются игроку. */
+public record CheckAnswerRequest(Integer column, Integer position, String answer, Long questionId) {
 }

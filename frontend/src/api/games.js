@@ -13,8 +13,8 @@ export const fetchGameForEdit = (id) => api.get(`/games/${id}/edit`).then((res) 
 export const startGame = (id) => api.post(`/games/${id}/start`).then((res) => res.data)
 
 /** Проверка ответа на сервере: { column (1..5), position (1..N), answer } → { correct, progress }. */
-export const checkAnswer = (gameId, column, position, answer) =>
-  api.post(`/games/${gameId}/check`, { column, position, answer }).then((res) => res.data)
+export const checkAnswer = (gameId, column, position, answer, questionId) =>
+  api.post(`/games/${gameId}/check`, { column, position, answer, questionId }).then((res) => res.data)
 
 /** Начать заново: обнуляет прогресс только текущего пользователя. */
 export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) => res.data)

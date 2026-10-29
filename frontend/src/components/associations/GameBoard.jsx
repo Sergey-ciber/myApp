@@ -110,6 +110,8 @@ export default function GameBoard({
   const [timeoutError, setTimeoutError] = useState('')
   const [actionError, setActionError] = useState('')
   const [restarting, setRestarting] = useState(false)
+  // текст ответа текущего вопроса уровня «Обычный»
+  const [normalAnswer, setNormalAnswer] = useState('')
   // защита от двойной отправки результата при победе
   const finishedRef = useRef(progress?.finishedSeconds != null)
   const [gameStarted, setGameStarted] = useState(() => {
@@ -270,6 +272,41 @@ export default function GameBoard({
     setWin(true)
     setActionError('')
     if (onWin) Promise.resolve(onWin(seconds)).catch(() => {})
+  }
+
+  /** Уровень «Обычный»: текущий вопрос и счётчик решённых. */
+  const normalQuestions = game.levelType === 'NORMAL' ? (game.questions || []) : []
+  const normalKey = (question) => `l${game.levelId}:q${question.id}`
+  const currentNormalQuestion = normalQuestions.find((q) => !solved[normalKey(q)]) || normalQuestions[0]
+  const normalSolvedCount = normalQuestions.filter((q) => solved[normalKey(q)]).length
+  const normalPassThreshold = Number(game.passThreshold) > 0 ? Number(game.passThreshold) : normalQuestions.length
+
+  /** Ответить на вопрос обычного уровня: сравниваем с любым вариантом из массива answers. */
+  const submitNormalAnswer = async () => {
+    const question = currentNormalQuestion
+    if (!question || timeUp || finishedTime != null) return
+    const text = (normalAnswer || '').trim()
+    if (!text) return
+    setChecking((prev) => ({ ...prev, normal: true }))
+    try {
+      const result = await checkAnswer(game.id, null, null, text, question.id)
+      setSolved(result.progress?.solved || {})
+      if (result.correct) {
+        if (result.progress?.finishedSeconds != null) {
+          finish(result.progress.finishedSeconds)
+        }
+      } else {
+        setActionError('Неверный ответ. Попробуйте ещё раз.')
+      }
+    } catch (err) {
+      setActionError(apiMessage(err))
+    } finally {
+      setChecking((prev) => {
+        const next = { ...prev }
+        delete next.normal
+        return next
+      })
+    }
   }
 
   /** Проверка ответа на сервере: правильное слово клиенту неизвестно. */
@@ -555,7 +592,68 @@ export default function GameBoard({
       {actionError && <div className="alert alert-error">{actionError}</div>}
 
       <div className="assoc-scroll">
-        <div className="assoc-pyramid-wrap">
+        {game.levelType === 'NORMAL' ? (
+          <div className="assoc-normal">
+            {!gameStarted && (
+            <div className="assoc-start-overlay">
+              <button
+                type="button"
+                className="btn-medium"
+                onClick={() => {
+                  setGameStarted(true)
+                  setClock({ baseElapsed: progress?.elapsedSeconds || 0, loadedAt: Date.now() })
+                  setElapsed(progress?.elapsedSeconds || 0)
+                  setTimeoutMessageShown(false)
+                  timeUpTriggered.current = false
+                  try {
+                    localStorage.removeItem(timeoutMessageShownKey)
+                  } catch {}
+                }}
+              >
+                Начать игру
+              </button>
+            </div>
+          )}
+            {gameStarted && !finishedTime && !timeUp && currentNormalQuestion ? (
+              <div className="assoc-normal-card">
+                <div className="assoc-normal-media">
+                  {currentNormalQuestion.mediaType === 'image' && currentNormalQuestion.mediaUrl ? (
+                    <img src={currentNormalQuestion.mediaUrl} alt="Изображение к вопросу" />
+                  ) : currentNormalQuestion.mediaType === 'audio' && currentNormalQuestion.mediaUrl ? (
+                    <audio controls src={currentNormalQuestion.mediaUrl} />
+                  ) : currentNormalQuestion.mediaType === 'video' && currentNormalQuestion.mediaUrl ? (
+                    <video controls src={currentNormalQuestion.mediaUrl} />
+                  ) : null}
+                </div>
+                <h3 className="assoc-normal-question">{currentNormalQuestion.questionText}</h3>
+                <p className="assoc-normal-progress">
+                  Отгадано: <strong>{normalSolvedCount}</strong> / {normalPassThreshold}
+                </p>
+                <div className="assoc-normal-answer">
+                  <input
+                    className="assoc-input"
+                    value={normalAnswer}
+                    onChange={(event) => setNormalAnswer(event.target.value)}
+                    disabled={Boolean(checking.normal) || timeUp}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') submitNormalAnswer()
+                    }}
+                    placeholder="Ваш ответ"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={submitNormalAnswer}
+                    disabled={Boolean(checking.normal) || timeUp || finishedTime != null}
+                  >
+                    {Boolean(checking.normal) ? 'Проверяем…' : 'Ответить'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="assoc-pyramid-wrap">
           {/*<PyramidHead />*/}
 
           {!gameStarted && (
@@ -627,6 +725,7 @@ export default function GameBoard({
             })}
           </div>
         </div>
+        )}
       </div>
 
       {win && (
