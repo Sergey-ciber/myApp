@@ -267,36 +267,35 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
       }
       if (level.type === 'NORMAL') {
         const questions = level.standardQuestions || []
+        const levelErrors = []
         if (questions.length === 0) {
-          setShowErrors(true)
-          setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
-          return
+          levelErrors.push(`Уровень ${i + 1}: не добавлено ни одного вопроса`)
         }
         const passThreshold = Number(level.passThreshold)
-        if (!level.passThreshold?.toString().trim() || !Number.isFinite(passThreshold) || passThreshold < 0) {
-          setShowErrors(true)
-          setError(`Уровень ${i + 1}: укажите порог прохождения`)
-          return
-        }
-        if (passThreshold > questions.length) {
-          setShowErrors(true)
-          setError(`Порог прохождения не может быть больше количества вопросов (Уровень ${i + 1})`)
-          return
+        if (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold?.toString().trim() === '' || !Number.isFinite(passThreshold) || passThreshold < 0) {
+          levelErrors.push(`Уровень ${i + 1}: не указан порог прохождения`)
+        } else if (questions.length > 0 && passThreshold > questions.length) {
+          levelErrors.push(`Уровень ${i + 1}: порог прохождения не может быть больше количества вопросов`)
         }
         for (let q = 0; q < questions.length; q++) {
           const question = questions[q]
-          if (!question.questionText?.trim()) {
-            setShowErrors(true)
-            setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
-            return
+          if (!(question.questionText || '').trim()) {
+            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: не заполнен текст вопроса`)
           }
           const answers = question.answers || []
           const validAnswers = answers.filter((a) => (a || '').trim())
           if (validAnswers.length === 0) {
-            setShowErrors(true)
-            setError(`Заполните вопросы и ответы для обычного уровня (Уровень ${i + 1})`)
-            return
+            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: не добавлен ни один правильный ответ`)
           }
+        }
+        if (levelErrors.length > 0) {
+          setShowErrors(true)
+          setError(`Ошибка сохранения. Проверьте следующие поля:\n- ${levelErrors.join('\n- ')}`)
+          setTimeout(() => {
+            const el = document.querySelectorAll('.assoc-panel')[i + 1]
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 50)
+          return
         }
       }
       if (level.hints) {
