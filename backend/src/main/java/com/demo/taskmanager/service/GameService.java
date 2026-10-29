@@ -290,9 +290,12 @@ public class GameService {
         game.setCreator(creator);
         game.setActive(gameRepository.count() == 0);
 
-        if (request.columns() != null && !request.columns().isEmpty()) {
+        boolean hasAssociationLevel = request.levels() != null && request.levels().stream().anyMatch(l -> l != null && l.type() == com.demo.taskmanager.entity.LevelType.ASSOCIATIONS);
+        if (hasAssociationLevel && request.columns() != null && !request.columns().isEmpty()) {
             List<List<String>> columns = validateAndNormalizeColumns(request.columns());
             fillWords(game, columns);
+        } else if (hasAssociationLevel && (request.columns() == null || request.columns().isEmpty())) {
+            throw new BadRequestException("Для уровня типа «Игра в ассоциации» необходимо заполнить пирамиду из 31 слова");
         }
 
         if (request.levels() != null && !request.levels().isEmpty()) {
@@ -399,9 +402,12 @@ public class GameService {
         game.getProgressEntries().clear();
 
         game.clearWords();
-        if (request.columns() != null && !request.columns().isEmpty()) {
+        boolean hasAssociationLevel = request.levels() != null && request.levels().stream().anyMatch(l -> l != null && l.type() == com.demo.taskmanager.entity.LevelType.ASSOCIATIONS);
+        if (hasAssociationLevel && request.columns() != null && !request.columns().isEmpty()) {
             List<List<String>> columns = validateAndNormalizeColumns(request.columns());
             fillWords(game, columns);
+        } else if (hasAssociationLevel && (request.columns() == null || request.columns().isEmpty())) {
+            throw new BadRequestException("Для уровня типа «Игра в ассоциации» необходимо заполнить пирамиду из 31 слова");
         }
 
         game.getLevels().clear();
