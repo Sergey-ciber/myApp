@@ -266,34 +266,32 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         }
       }
       if (level.type === 'NORMAL') {
-        const questions = level.standardQuestions || []
+        const questions = level.questions || []
         const levelErrors = []
-        if (questions.length === 0) {
-          levelErrors.push(`Уровень ${i + 1}: не добавлено ни одного вопроса`)
-        }
         const passThreshold = Number(level.passThreshold)
-        if (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold?.toString().trim() === '' || !Number.isFinite(passThreshold) || passThreshold < 0) {
-          levelErrors.push(`Уровень ${i + 1}: не указан порог прохождения`)
+        if (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold?.toString().trim() === '' || !Number.isFinite(passThreshold) || passThreshold <= 0) {
+          levelErrors.push(`Уровень ${i + 1}: укажите порог прохождения`)
         } else if (questions.length > 0 && passThreshold > questions.length) {
           levelErrors.push(`Уровень ${i + 1}: порог прохождения не может быть больше количества вопросов`)
         }
+        if (questions.length === 0) {
+          levelErrors.push(`Уровень ${i + 1}: добавьте хотя бы один вопрос`)
+        }
         for (let q = 0; q < questions.length; q++) {
           const question = questions[q]
-          if (!(question.questionText || '').trim()) {
-            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: не заполнен текст вопроса`)
+          if (!(question.question || '').trim()) {
+            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: заполните текст вопроса`)
           }
-          const answers = question.answers || []
-          const validAnswers = answers.filter((a) => (a || '').trim())
-          if (validAnswers.length === 0) {
-            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: не добавлен ни один правильный ответ`)
+          if (!(question.answer || '').trim()) {
+            levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: заполните правильный ответ`)
           }
         }
         if (levelErrors.length > 0) {
           setShowErrors(true)
           setError(`Ошибка сохранения. Проверьте следующие поля:\n- ${levelErrors.join('\n- ')}`)
           setTimeout(() => {
-            const el = document.querySelectorAll('.assoc-panel')[i + 1]
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            const panels = document.querySelectorAll('.assoc-panel')
+            if (panels[i + 1]) panels[i + 1].scrollIntoView({ behavior: 'smooth', block: 'center' })
           }, 50)
           return
         }
@@ -344,15 +342,15 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
             triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
           })),
           associationColumns: level.type === 'ASSOCIATIONS' ? (level.associationColumns || []).map((words) => words.map((word) => word.trim())) : null,
-          questions: level.type === 'NORMAL' ? null : (level.questions || []).map((q) => ({
-            question: q.question.trim(),
-            answer: q.answer.trim(),
-          })),
-          standardQuestions: level.type === 'NORMAL' ? (level.standardQuestions || []).map((q) => ({
-            questionText: q.questionText?.trim(),
-            mediaType: q.mediaType || null,
-            mediaUrl: q.mediaUrl?.trim() || null,
-            answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
+          questions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
+            question: q.question?.trim(),
+            answer: q.answer?.trim(),
+          })) : null,
+          standardQuestions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
+            questionText: q.question?.trim(),
+            mediaType: null,
+            mediaUrl: null,
+            answers: [(q.answer || '').trim()].filter((a) => a),
           })) : null,
         })),
       }
@@ -637,6 +635,18 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
               {level.type === 'NORMAL' && (
                 <div style={{ marginTop: 18 }}>
+                  <div className="field-row" style={{ marginBottom: 12 }}>
+                    <label className="field">
+                      <span>Порог прохождения (кол-во верных ответов) *</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={level.passThreshold ?? ''}
+                        onChange={(event) => updateLevel(levelIndex, { passThreshold: event.target.value })}
+                        className={showErrors && (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold.toString().trim() === '') ? 'input-invalid' : ''}
+                      />
+                    </label>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Вопросы и ответы</span>
                     <button type="button" className="btn btn-small btn-secondary" onClick={() => addQuestion(levelIndex)}>Добавить вопрос</button>
@@ -650,11 +660,19 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       <div className="field-row">
                         <label className="field">
                           <span>Вопрос *</span>
-                          <input value={q.question} onChange={(event) => updateQuestion(levelIndex, qIndex, { question: event.target.value })} />
+                          <input
+                            value={q.question || ''}
+                            onChange={(event) => updateQuestion(levelIndex, qIndex, { question: event.target.value })}
+                            className={showErrors && !(q.question || '').trim() ? 'input-invalid' : ''}
+                          />
                         </label>
                         <label className="field">
                           <span>Ответ *</span>
-                          <input value={q.answer} onChange={(event) => updateQuestion(levelIndex, qIndex, { answer: event.target.value })} />
+                          <input
+                            value={q.answer || ''}
+                            onChange={(event) => updateQuestion(levelIndex, qIndex, { answer: event.target.value })}
+                            className={showErrors && !(q.answer || '').trim() ? 'input-invalid' : ''}
+                          />
                         </label>
                       </div>
                     </div>
