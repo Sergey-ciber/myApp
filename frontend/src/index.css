@@ -617,7 +617,41 @@ body {
 .assoc-game-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .assoc-game-author { font-weight: 600; color: #e5e7eb; }
 .assoc-badge.own { background: rgba(255, 140, 0, 0.2); color: #ff8c00; margin-left: 8px; }
+.assoc-badge.difficulty { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
 .assoc-saved-hint { margin: -6px 0 14px; color: #a0a0b0; }
+
+/* Вкладки раздела «Игры» */
+.assoc-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.assoc-tab {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid #3a3a4a;
+  background: #24242e;
+  color: #c8c8d4;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.assoc-tab:hover { background: #2d2d3a; }
+.assoc-tab.active {
+  background: #ff8c00;
+  border-color: #ff8c00;
+  color: #1a1a1a;
+}
+
+/* Фильтр и сортировка списка игр */
+.assoc-list-controls { display: flex; gap: 12px; flex-wrap: wrap; }
+.assoc-list-controls .field { min-width: 160px; }
+.assoc-list-controls select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+}
 
 /* Режим игрока */
 .assoc-player { display: flex; flex-direction: column; gap: 14px; color: #fdfcfc

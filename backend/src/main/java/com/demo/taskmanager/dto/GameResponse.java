@@ -14,6 +14,7 @@ import java.util.List;
 public record GameResponse(Long id, String title, LocalDate gameDate, Instant createdAt, boolean active,
                            Long creatorId, String creatorUsername,
                            Double timeLimitMinutes,
+                           String difficulty,
                            List<List<String>> columns,
                            List<LevelResponse> levels) {
 
@@ -39,6 +40,7 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 creator == null ? null : creator.getId(),
                 creator == null ? null : creator.getUsername(),
                 game.getTimeLimitMinutes(),
+                game.getDifficulty(),
                 columns,
                 levelResponses);
     }

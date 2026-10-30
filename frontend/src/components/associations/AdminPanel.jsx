@@ -23,6 +23,14 @@ const HINT_TYPES = [
   { value: 'GENERAL', label: 'Общая подсказка' },
 ]
 
+const DIFFICULTIES = [
+  { value: 'EASY', label: 'Легкий', order: 0 },
+  { value: 'MEDIUM', label: 'Средний', order: 1 },
+  { value: 'HARD', label: 'Сложный', order: 2 },
+]
+
+const difficultyLabel = (value) => DIFFICULTIES.find((d) => d.value === value)?.label || '—'
+
 function createEmptyLevel(index) {
   return {
     title: `Уровень ${index + 1}`,
@@ -53,10 +61,11 @@ function createEmptyQuestion() {
 }
 
 export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
-  const [view, setView] = useState('list')
+  const [view, setView] = useState('all')
   const [title, setTitle] = useState('')
   const [gameDate, setGameDate] = useState('')
   const [timeLimit, setTimeLimit] = useState('10')
+  const [difficulty, setDifficulty] = useState('MEDIUM')
   const [columns, setColumns] = useState(emptyColumns())
   const [levels, setLevels] = useState([])
   const [editingId, setEditingId] = useState(null)
@@ -66,32 +75,59 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [loadingGame, setLoadingGame] = useState(false)
+  const [difficultyFilter, setDifficultyFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('date')
 
   const isOwn = (game) => game.creatorId != null && game.creatorId === currentUserId
   const myGames = useMemo(() => games.filter(isOwn), [games, currentUserId])
+
+  const visibleGames = useMemo(() => {
+    const source = view === 'mine' ? myGames : games
+    let result = [...source]
+    if (difficultyFilter !== 'all') {
+      result = result.filter((game) => (game.difficulty || 'MEDIUM') === difficultyFilter)
+    }
+    const difficultyOrder = (game) =>
+      DIFFICULTIES.find((d) => d.value === (game.difficulty || 'MEDIUM'))?.order ?? 1
+    if (sortBy === 'title') {
+      result.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
+    } else if (sortBy === 'difficulty') {
+      result.sort((a, b) => difficultyOrder(a) - difficultyOrder(b)
+        || (a.title || '').localeCompare(b.title || '', 'ru'))
+    } else {
+      result.sort((a, b) => {
+        const da = a.gameDate ? new Date(a.gameDate).getTime() : -Infinity
+        const db = b.gameDate ? new Date(b.gameDate).getTime() : -Infinity
+        return db - da
+      })
+    }
+    return result
+  }, [view, games, myGames, difficultyFilter, sortBy])
 
   const resetForm = () => {
     setTitle('')
     setGameDate('')
     setTimeLimit('10')
+    setDifficulty('MEDIUM')
     setColumns(emptyColumns())
     setLevels([])
     setEditingId(null)
     setShowErrors(false)
     setError('')
     setMessage('')
-    setView('list')
+    setView('all')
   }
 
   const startCreate = () => {
     resetForm()
-    setView('form')
+    setView('create')
   }
 
   const applyGame = (game) => {
     setTitle(game.title || '')
     setGameDate(game.gameDate || '')
     setTimeLimit(formatMinutes(game.timeLimitMinutes ?? 10))
+    setDifficulty(game.difficulty || 'MEDIUM')
     setColumns(game.columns ? cloneColumns(game.columns) : emptyColumns())
     if (game.levels && game.levels.length > 0) {
       setLevels(game.levels.map((level, idx) => ({
@@ -121,7 +157,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setEditingId(game.id)
     setShowErrors(false)
     setError('')
-    setView('form')
+    setView('create')
   }
 
   const startEdit = async (game) => {
@@ -375,6 +411,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         title: title.trim(),
         gameDate: gameDate || null,
         timeLimitMinutes: timeLimitValue || 10,
+        difficulty,
         columns: columns.map((words) => words.map((word) => word.trim())),
         levels: levels.map((level, idx) => ({
           title: level.title.trim(),
@@ -513,49 +550,83 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     )
   }
 
-  if (view === 'list') {
+  const renderTabs = () => (
+    <div className="assoc-tabs">
+      <button type="button" className={`assoc-tab ${view === 'all' ? 'active' : ''}`} onClick={() => { setError(''); setMessage(''); setView('all') }}>Все игры</button>
+      <button type="button" className={`assoc-tab ${view === 'create' ? 'active' : ''}`} onClick={startCreate}>Создать игру</button>
+      <button type="button" className={`assoc-tab ${view === 'mine' ? 'active' : ''}`} onClick={() => { setError(''); setMessage(''); setView('mine') }}>Мои игры</button>
+      <button type="button" className={`assoc-tab ${view === 'registered' ? 'active' : ''}`} onClick={() => { setError(''); setMessage(''); setView('registered') }}>Зарегистрирован на игры</button>
+    </div>
+  )
+
+  if (view === 'all' || view === 'mine') {
     return (
       <div className="assoc-admin">
-        <div className="assoc-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        {renderTabs()}
+
+        <div className="assoc-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h2 style={{ margin: 0, color: '#ffffff' }}>Мои игры</h2>
-            <p className="hint" style={{ margin: '4px 0 0' }}>Список игр, созданных вами</p>
+            <h2 style={{ margin: 0, color: '#ffffff' }}>{view === 'mine' ? 'Мои игры' : 'Все игры'}</h2>
+            <p className="hint" style={{ margin: '4px 0 0' }}>
+              {view === 'mine' ? 'Игры, созданные под вашей учётной записью' : 'Список всех созданных игр'}
+            </p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={startCreate}>
-            Создать новую игру
-          </button>
+          <div className="assoc-list-controls">
+            <label className="field">
+              <span>Сложность</span>
+              <select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)}>
+                <option value="all">Все</option>
+                {DIFFICULTIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Сортировка</span>
+              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                <option value="date">По дате</option>
+                <option value="title">По названию</option>
+                <option value="difficulty">По сложности</option>
+              </select>
+            </label>
+          </div>
         </div>
+
         {error && <div className="alert alert-error">{error}</div>}
         {message && <div className="alert alert-success">{message}</div>}
+
         <section className="assoc-saved">
-          {myGames.length === 0 ? (
-            <div className="empty-state">У вас пока нет игр. Нажмите «Создать новую игру».</div>
+          {visibleGames.length === 0 ? (
+            <div className="empty-state">Игр не найдено.</div>
           ) : (
             <ul className="assoc-games">
-              {myGames.map((game) => (
+              {visibleGames.map((game) => (
                 <li key={game.id} className={`assoc-game ${game.active ? 'active' : ''}`}>
                   <div className="assoc-game-info">
                     <span className="assoc-game-title">
                       {game.title}
-                      <span className="assoc-badge own">моя игра</span>
+                      {isOwn(game) && <span className="assoc-badge own">моя игра</span>}
                     </span>
                     <span className="assoc-game-meta">
-                      <span>Дата проведения: {game.gameDate || 'не указана'}</span>
-                      <span>Уровней: {game.levelsCount ?? 0}</span>
-                      <span>Создана: {new Date(game.createdAt).toLocaleString('ru-RU')}</span>
+                      <span>Дата: {game.gameDate || 'не указана'}</span>
+                      <span>Автор: {game.creatorUsername || 'неизвестен'}</span>
+                      <span>Сложность: <span className="assoc-badge difficulty">{difficultyLabel(game.difficulty || 'MEDIUM')}</span></span>
                       {game.active && <span className="assoc-badge">по умолчанию</span>}
                     </span>
                   </div>
                   <div className="assoc-game-actions">
                     <button type="button" className="btn btn-small btn-primary" onClick={() => playGame(game)}>Играть</button>
-                    <button type="button" className="btn btn-small btn-secondary" onClick={() => startEdit(game)} disabled={loadingGame}>Редактировать</button>
-                    <button type="button" className="btn btn-small btn-danger" onClick={() => setDeleting(game)}>Удалить</button>
+                    {isOwn(game) && (
+                      <>
+                        <button type="button" className="btn btn-small btn-secondary" onClick={() => startEdit(game)} disabled={loadingGame}>Редактировать</button>
+                        <button type="button" className="btn btn-small btn-danger" onClick={() => setDeleting(game)}>Удалить</button>
+                      </>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
         {deleting && (
           <ConfirmDialog
             title="Удаление игры"
@@ -572,8 +643,19 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     )
   }
 
+  if (view === 'registered') {
+    return (
+      <div className="assoc-admin">
+        {renderTabs()}
+        <div className="empty-state">Раздел «Зарегистрирован на игры» находится в разработке.</div>
+      </div>
+    )
+  }
+
   return (
     <div className="assoc-admin">
+      {renderTabs()}
+
       <div className="assoc-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h2 style={{ margin: 0, color: '#ffffff' }}>{editingId ? 'Редактирование игры' : 'Создание новой игры'}</h2>
@@ -596,6 +678,12 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
             <label className="field">
               <span>Время на прохождение (мин.)</span>
               <input type="number" min="0.1" step="any" value={timeLimit} onChange={(event) => setTimeLimit(event.target.value)} placeholder="10" />
+            </label>
+            <label className="field">
+              <span>Сложность</span>
+              <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
+                {DIFFICULTIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
             </label>
           </div>
         </div>

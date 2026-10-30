@@ -380,6 +380,7 @@ public class GameService {
         game.setGameDate(request.gameDate());
         Double timeLimit = request.timeLimitMinutes() == null ? 10.0 : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
+        game.setDifficulty(normalizeDifficulty(request.difficulty()));
         game.setCreator(creator);
         game.setActive(gameRepository.count() == 0);
 
@@ -528,6 +529,7 @@ public class GameService {
         game.setGameDate(request.gameDate());
         Double timeLimit = request.timeLimitMinutes() == null ? (game.getTimeLimitMinutes() == null ? 10.0 : game.getTimeLimitMinutes()) : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
+        game.setDifficulty(normalizeDifficulty(request.difficulty()));
         // ответы могли измениться — прогресс игроков по старой версии больше не актуален
         game.getProgressEntries().clear();
 
@@ -878,6 +880,16 @@ public class GameService {
     /** Сравнение слов: без учёта регистра и пробелов по краям. */
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /** Нормализация сложности игры: только EASY, MEDIUM, HARD. */
+    private String normalizeDifficulty(String difficulty) {
+        if (difficulty == null || difficulty.trim().isEmpty()) return "MEDIUM";
+        String value = difficulty.trim().toUpperCase(Locale.ROOT);
+        return switch (value) {
+            case "EASY", "MEDIUM", "HARD" -> value;
+            default -> "MEDIUM";
+        };
     }
 
     /** Раскладывает колонки по строкам таблицы game_words. */

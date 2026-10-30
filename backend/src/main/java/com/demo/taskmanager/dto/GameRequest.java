@@ -10,6 +10,7 @@ public record GameRequest(
         String title,
         LocalDate gameDate,
         Double timeLimitMinutes,
+        String difficulty,
         List<List<String>> columns,
         List<LevelRequest> levels
 ) {

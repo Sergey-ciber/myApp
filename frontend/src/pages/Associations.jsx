@@ -125,7 +125,7 @@ export default function Associations() {
   return (
     <div className="page assoc-page">
       <div className="page-header">
-        <h1>Игра в ассоциации</h1>
+        <h1>Игры</h1>
         <div className="mode-switch" role="tablist" aria-label="Режим игры">
           <button
             type="button"

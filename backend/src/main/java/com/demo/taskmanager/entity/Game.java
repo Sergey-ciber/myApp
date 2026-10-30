@@ -35,6 +35,10 @@ public class Game {
     @Column(name = "time_limit", columnDefinition = "double precision default 10")
     private Double timeLimitMinutes = 10.0;
 
+    /** Сложность игры: EASY, MEDIUM, HARD. */
+    @Column(length = 20)
+    private String difficulty = "MEDIUM";
+
     /** Создатель игры: только он может редактировать и удалять её. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "creator_id", nullable = false)
@@ -87,6 +91,9 @@ public class Game {
 
     public Double getTimeLimitMinutes() { return timeLimitMinutes; }
     public void setTimeLimitMinutes(Double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
+
+    public String getDifficulty() { return difficulty; }
+    public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
 
     public User getCreator() { return creator; }
     public void setCreator(User creator) { this.creator = creator; }

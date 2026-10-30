@@ -31,7 +31,7 @@ export default function Navbar() {
               to="/associations"
               className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
             >
-              Игра в ассоциации
+              Игры
             </NavLink>
             <NavLink
               to="/teams"
