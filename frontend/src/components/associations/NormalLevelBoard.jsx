@@ -183,25 +183,10 @@ export default function NormalLevelBoard({
 
       <div className="assoc-normal">
         <div className="assoc-normal-card">
-          {/* Блок вопроса */}
-          {currentQuestion?.mediaType && currentQuestion?.mediaUrl ? (
-            <div className="assoc-normal-media">
-              {currentQuestion.mediaType === 'image' ? (
-                <img src={currentQuestion.mediaUrl} alt="Изображение к вопросу" />
-              ) : currentQuestion.mediaType === 'audio' ? (
-                <audio controls src={currentQuestion.mediaUrl} />
-              ) : currentQuestion.mediaType === 'video' ? (
-                <video controls src={currentQuestion.mediaUrl} />
-              ) : null}
-            </div>
-          ) : null}
-
-          <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
-
-          {/* Навигация и индикаторы */}
+          {/* Навигация — выпадающий список вопроса в верхней левой части */}
           {questions.length > 1 && (
             <div className="assoc-normal-nav">
-              <label className="field">
+              <label className="field assoc-normal-select">
                 <span>Вопрос</span>
                 <select
                   value={currentQuestionIndex}
@@ -218,6 +203,21 @@ export default function NormalLevelBoard({
               <span className="assoc-normal-indicator">Правильно: {solvedCount} из {questions.length}</span>
             </div>
           )}
+
+          {/* Блок вопроса */}
+          {currentQuestion?.mediaType && currentQuestion?.mediaUrl ? (
+            <div className="assoc-normal-media">
+              {currentQuestion.mediaType === 'image' ? (
+                <img src={currentQuestion.mediaUrl} alt="Изображение к вопросу" />
+              ) : currentQuestion.mediaType === 'audio' ? (
+                <audio controls src={currentQuestion.mediaUrl} />
+              ) : currentQuestion.mediaType === 'video' ? (
+                <video controls src={currentQuestion.mediaUrl} />
+              ) : null}
+            </div>
+          ) : null}
+
+          <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
 
           {/* Блок подсказок (всегда виден) */}
           <div className="assoc-normal-hints">

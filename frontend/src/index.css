@@ -809,9 +809,9 @@ body {
 .assoc-normal {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 14px;
-  margin: 15px;
+  margin-top: 14px;
   padding: 18px;
   background: #1c1c26;
   border: 1px solid #3a3a4a;
@@ -821,10 +821,9 @@ body {
 .assoc-normal-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 12px;
   width: 100%;
-  max-width: 720px;
   padding: 22px;
   background: #24242e;
   border: 1px solid #3a3a4a;
@@ -852,8 +851,9 @@ body {
   gap: 14px;
   flex-wrap: wrap;
   width: 100%;
+  justify-content: flex-start;
 }
-.assoc-normal-nav .field { flex: 1; min-width: 180px; }
+.assoc-normal-nav .field { flex: 0 0 auto; min-width: 180px; }
 .assoc-normal-indicator { font-size: 13px; color: #c8c8d4; }
 
 /* Блок подсказок обычного уровня */
