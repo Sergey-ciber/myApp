@@ -1,10 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import Modal from '../Modal'
-import Leaderboard from './Leaderboard'
-import PyramidHead from './PyramidHead'
 import { apiMessage } from '../../api/client'
-import { checkAnswer, requestHint, requestTimeout, restartGame } from '../../api/games'
-import { COLUMN_SIZES, COLUMN_SPANS, formatMinutes, formatTime, toPairs } from './constants'
+import { checkAnswer, requestHint } from '../../api/games'
+import { COLUMN_SIZES, COLUMN_SPANS, formatTime, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 
@@ -13,10 +10,7 @@ const emptyValues = () => COLUMN_SIZES.map((size) => Array(size).fill(''))
 /** Ключ ячейки на сервере: колонка и позиция нумеруются с 1. */
 const cellKey = (columnIndex, position) => `${columnIndex + 1}:${position + 1}`
 
-/**
- * Защита букв подсказки: префикс всегда остаётся в начале значения.
- * Если игрок пытается стереть подсказанные буквы, возвращаем их обратно.
- */
+/** Защита букв подсказки: префикс всегда остаётся в начале значения. */
 const protectValue = (text, prefix) => {
   if (!prefix) return text
   const value = text || ''
@@ -25,7 +19,6 @@ const protectValue = (text, prefix) => {
   if (lowerValue.startsWith(lowerPrefix)) {
     return prefix + value.slice(prefix.length)
   }
-  // текст стал короче подсказки или это её часть — восстанавливаем префикс
   if (lowerPrefix.includes(lowerValue)) return prefix
   return prefix + value
 }
@@ -49,22 +42,13 @@ const withPrefix = (value, prefix, oldPrefix = '') => {
   return prefix + text
 }
 
-
 /**
- * Игровое поле-пирамида.
- *
- * Раскладка: CSS Grid из 8 строк (по числу пар слов в первой колонке).
- * - Колонка 1: 8 пар, каждая занимает одну строку.
- * - Колонка 2: 8 ответов, каждый стоит на одной строке со своей парой.
- * - Колонки 3-5: ответ занимает 2, 4 и 8 строк и центрируется по двум
- *   подсказкам предыдущей колонки (2^(N-1) строк).
- *
- * Ответы колонок 2-5 на клиент не приходят: каждое слово проверяется
- * запросом POST /api/games/{id}/check. В прогрессе (progress) лежат только
- * слова, которые угадал текущий пользователь; чужие ответы недоступны.
+ * Игровое поле-пирамида для уровня типа «Игра в ассоциации».
+ * Логика без изменений: пирамида 16/8/4/2/1, ответы проверяет сервер,
+ * подсказки открывают первые буквы доступных неразгаданных ячеек.
  */
 export default function GameBoard({
-  game, progress, onWin, leaderboard, leaderboardLoading, currentUserId, resultError,
+  game, level, progress, onLevelComplete,
 }) {
   const [values, setValues] = useState(() => {
     const cells = emptyValues()
@@ -72,101 +56,84 @@ export default function GameBoard({
       if (columnIndex === 0) return
       for (let position = 0; position < size; position++) {
         const key = cellKey(columnIndex, position)
-        const word = progress?.solved?.[key]
-        // сохранённые подсказки возвращаются в поля после перезагрузки
-        cells[columnIndex][position] = word || progress?.hintPrefixes?.[key] || ''
+        cells[columnIndex][position] = progress?.solved?.[key] || progress?.hintPrefixes?.[key] || ''
       }
     })
     return cells
   })
-  // разгаданные ячейки этого пользователя: { "2:1": "слон" }
   const [solved, setSolved] = useState(() => progress?.solved || {})
-  // уровень подсказок (0..2) и открытые буквы неразгаданных ячеек
   const [hintLevel, setHintLevel] = useState(progress?.hintLevel || 0)
   const [hintPrefixes, setHintPrefixes] = useState(() => progress?.hintPrefixes || {})
   const [takingHint, setTakingHint] = useState(false)
   const [hintNotice, setHintNotice] = useState(false)
   const hintWasAvailable = useRef(false)
-  // отсчёт таймера: базовое время из прогресса + время с момента загрузки
   const [clock, setClock] = useState(() => ({
-    baseElapsed: progress?.elapsedSeconds || 0,
+    baseElapsed: 0,
     loadedAt: Date.now(),
   }))
-  const [finishedTime, setFinishedTime] = useState(progress?.finishedSeconds ?? null)
-  const [elapsed, setElapsed] = useState(progress?.finishedSeconds ?? progress?.elapsedSeconds ?? 0)
+  const [elapsed, setElapsed] = useState(0)
   const [wrong, setWrong] = useState({})
   const [checking, setChecking] = useState({})
-  const [win, setWin] = useState(false)
-  // время вышло: игра остановлена, поля заблокированы, результат не отправляется
   const [timeUp, setTimeUp] = useState(false)
-  const [showTimeout, setShowTimeout] = useState(false)
-  const [timeoutAnswer, setTimeoutAnswer] = useState('')
-  const [timeoutError, setTimeoutError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [restarting, setRestarting] = useState(false)
-  // текст ответа текущего вопроса уровня «Обычный»
-  const [normalAnswer, setNormalAnswer] = useState('')
-  // защита от двойной отправки результата при победе
-  const finishedRef = useRef(progress?.finishedSeconds != null)
-  const [gameStarted, setGameStarted] = useState(() => {
-    const hasProgress = progress && (progress.elapsedSeconds > 0 || progress.finishedSeconds != null || (progress.solved && Object.keys(progress.solved).length > 0))
-    if (hasProgress) return true
-    return false
-  })
-  const timeoutMessageShownKey = `assoc:timeoutShown:${game?.id}:${currentUserId ?? 'anon'}`
-  const [timeoutMessageShown, setTimeoutMessageShown] = useState(() => {
-    try {
-      return localStorage.getItem(timeoutMessageShownKey) === '1'
-    } catch {
-      return false
-    }
-  })
-  const timeUpTriggered = useRef(false)
+  const completedRef = useRef(false)
 
-  // лимит времени задаёт администратор; сервер прислал его в минутах
-  const limitSeconds = Math.max(1, Math.round((Number(game.timeLimitMinutes) || 10) * 60))
+  const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
   const remainingSeconds = Math.max(0, limitSeconds - elapsed)
 
   const elapsedSeconds = () =>
     clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
 
-  // тикающий таймер; после победы или истечения времени он замирает
+  // тикающий таймер
   useEffect(() => {
-    if (!gameStarted) return undefined
-    if (finishedTime != null || timeUp) {
-      if (finishedTime != null) setElapsed(finishedTime)
-      return undefined
-    }
+    if (timeUp) return undefined
     const tick = () => setElapsed(elapsedSeconds())
     tick()
     const timer = setInterval(tick, 250)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clock, finishedTime, timeUp, gameStarted])
+  }, [clock, timeUp])
+
+  const completeLevel = (payload) => {
+    if (completedRef.current) return
+    completedRef.current = true
+    setTimeUp(true)
+    if (onLevelComplete) onLevelComplete(payload)
+  }
+
+  // истечение времени уровня — переходим к следующему уровню
+  useEffect(() => {
+    if (completedRef.current || elapsed < limitSeconds) return
+    completeLevel({ netTime: limitSeconds, timedOut: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed, limitSeconds])
+
+  // если пирамида уже разгадана (восстановление прогресса) — сразу завершаем уровень
+  useEffect(() => {
+    if (solved[cellKey(LAST_COLUMN, 0)]) {
+      completeLevel({ netTime: 0, timedOut: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const isSolved = (columnIndex, position) =>
     columnIndex === 0 || Boolean(solved[cellKey(columnIndex, position)])
 
-  /** Префикс, открытый подсказкой; разгаданным ячейкам подсказки не нужны. */
   const prefixFor = (columnIndex, position) => {
     if (columnIndex === 0 || isSolved(columnIndex, position)) return ''
     return hintPrefixes[cellKey(columnIndex, position)] || ''
   }
 
-  // время до каждой подсказки берётся из настроек уровня (triggerTime, в минутах)
-  const hintTriggerMinutes = game.hintTriggerMinutes || []
+  // время до каждой подсказки — из настроек уровня
+  const hintTriggerMinutes = (level.hints || []).map((hint) => hint.triggerTime)
   const maxHintLevel = hintTriggerMinutes.length
   const nextHintAt = hintLevel >= maxHintLevel
     ? null
     : Math.round(Number(hintTriggerMinutes[hintLevel]) * 60)
-  const hintAvailable = gameStarted && !timeUp && finishedTime == null && nextHintAt != null
-    && nextHintAt < limitSeconds && elapsed >= nextHintAt
+  const hintAvailable = !timeUp && nextHintAt != null && nextHintAt < limitSeconds && elapsed >= nextHintAt
   const hintSecondsLeft = nextHintAt == null ? 0 : Math.max(0, nextHintAt - elapsed)
-  // подсказка, которая не успеет появиться до конца игры, не показывается вовсе
-  const hintScheduled = gameStarted && !timeUp && finishedTime == null && nextHintAt != null
-    && nextHintAt < limitSeconds
+  const hintScheduled = !timeUp && nextHintAt != null && nextHintAt < limitSeconds
 
-  // уведомление в момент, когда подсказка становится доступна
   useEffect(() => {
     if (hintAvailable && !hintWasAvailable.current) {
       setHintNotice(true)
@@ -178,65 +145,8 @@ export default function GameBoard({
     return undefined
   }, [hintAvailable])
 
-  // лимит времени истёк: останавливаем игру и не отправляем результат
-  useEffect(() => {
-    if (!gameStarted) return
-    if (finishedTime != null || timeUp || elapsed < limitSeconds) return
-    if (timeUpTriggered.current) return
-    timeUpTriggered.current = true
-    setTimeUp(true)
-    if (!timeoutMessageShown) {
-      setShowTimeout(true)
-      try {
-        localStorage.setItem(timeoutMessageShownKey, '1')
-        setTimeoutMessageShown(true)
-      } catch {
-        setTimeoutMessageShown(true)
-      }
-    }
-    setWin(false)
-    setActionError('')
-    setWrong({})
-    setHintNotice(false)
-  }, [elapsed, finishedTime, limitSeconds, timeUp, gameStarted, timeoutMessageShown, timeoutMessageShownKey])
-
-  // после таймаута сервер раскрывает правильный ответ колонки 5 (без записи рекорда)
-  useEffect(() => {
-    if (!timeUp || timeoutAnswer) return undefined
-    let cancelled = false
-    let attempts = 0
-    let retryTimer
-    const load = async () => {
-      attempts += 1
-      try {
-        const result = await requestTimeout(game.id)
-        if (cancelled) return
-        setTimeoutAnswer(result?.answer || '')
-        setTimeoutError('')
-        if (result?.answer) {
-          setValues((prev) => prev.map((words, c) => (c === LAST_COLUMN
-            ? words.map((word, p) => (p === 0 ? result.answer : word))
-            : words)))
-        }
-      } catch (err) {
-        if (cancelled) return
-        if (attempts < 4) {
-          retryTimer = setTimeout(load, 1200)
-        } else {
-          setTimeoutError(apiMessage(err))
-        }
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
-      clearTimeout(retryTimer)
-    }
-  }, [game.id, timeoutAnswer, timeUp])
-
-  /** Слово, которое известно клиенту: стартовое (колонка 1) или отгаданное. */
   const wordAt = (columnIndex, position) => (columnIndex === 0
-    ? (gameStarted ? (game.startWords[position] || '') : '')
+    ? (game.startWords[position] || '')
     : solved[cellKey(columnIndex, position)] || '')
 
   const isHintOpen = (columnIndex, position) =>
@@ -251,55 +161,6 @@ export default function GameBoard({
       return next
     })
 
-  const finish = (serverSeconds) => {
-    if (finishedRef.current || timeUp) return
-    finishedRef.current = true
-    const seconds = Number.isFinite(serverSeconds) && serverSeconds > 0
-      ? serverSeconds
-      : Math.max(1, elapsedSeconds())
-    setFinishedTime(seconds)
-    setElapsed(seconds)
-    setWin(true)
-    setActionError('')
-    if (onWin) Promise.resolve(onWin(seconds)).catch(() => {})
-  }
-
-  /** Уровень «Обычный»: текущий вопрос и счётчик решённых. */
-  const normalQuestions = game.levelType === 'NORMAL' ? (game.questions || []) : []
-  const normalKey = (question) => `l${game.levelId}:q${question.id}`
-  const currentNormalQuestion = normalQuestions.find((q) => !solved[normalKey(q)]) || normalQuestions[0]
-  const normalSolvedCount = normalQuestions.filter((q) => solved[normalKey(q)]).length
-  const normalPassThreshold = Number(game.passThreshold) > 0 ? Number(game.passThreshold) : normalQuestions.length
-
-  /** Ответить на вопрос обычного уровня: сравниваем с любым вариантом из массива answers. */
-  const submitNormalAnswer = async () => {
-    const question = currentNormalQuestion
-    if (!question || timeUp || finishedTime != null) return
-    const text = (normalAnswer || '').trim()
-    if (!text) return
-    setChecking((prev) => ({ ...prev, normal: true }))
-    try {
-      const result = await checkAnswer(game.id, null, null, text, question.id)
-      setSolved(result.progress?.solved || {})
-      if (result.correct) {
-        if (result.progress?.finishedSeconds != null) {
-          finish(result.progress.finishedSeconds)
-        }
-      } else {
-        setActionError('Неверный ответ. Попробуйте ещё раз.')
-      }
-    } catch (err) {
-      setActionError(apiMessage(err))
-    } finally {
-      setChecking((prev) => {
-        const next = { ...prev }
-        delete next.normal
-        return next
-      })
-    }
-  }
-
-  /** Проверка ответа на сервере: правильное слово клиенту неизвестно. */
   const check = async (columnIndex, position) => {
     const key = cellKey(columnIndex, position)
     if (timeUp || isSolved(columnIndex, position) || checking[key]) return
@@ -309,7 +170,6 @@ export default function GameBoard({
       return
     }
     const prefix = prefixFor(columnIndex, position)
-    // поле содержит только подсказку — это ещё не ответ, красным не подсвечиваем
     const onlyPrefix = Boolean(prefix) && text.toLowerCase() === prefix.toLowerCase()
 
     setChecking((prev) => ({ ...prev, [key]: true }))
@@ -322,11 +182,12 @@ export default function GameBoard({
       if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
       if (result.correct) {
         clearWrong(key)
-        // показываем слово в том виде, в каком оно сохранено в прогрессе
         setValues((prev) => prev.map((words, c) => (c === columnIndex
           ? words.map((word, p) => (p === position ? (nextSolved[key] || text) : word))
           : words)))
-        if (columnIndex === LAST_COLUMN) finish(result.progress?.finishedSeconds)
+        if (columnIndex === LAST_COLUMN) {
+          completeLevel({ netTime: elapsedSeconds() })
+        }
       } else if (!onlyPrefix) {
         setWrong((prev) => ({ ...prev, [key]: true }))
       } else {
@@ -352,7 +213,6 @@ export default function GameBoard({
     clearWrong(cellKey(columnIndex, position))
   }
 
-  /** Не даём стереть подсказку и увести курсор перед ней. */
   const handleInputKeyDown = (event, columnIndex, position) => {
     const prefix = prefixFor(columnIndex, position)
     if (prefix && (event.key === 'Backspace' || event.key === 'Delete')) {
@@ -384,7 +244,6 @@ export default function GameBoard({
     input.setSelectionRange(prefix.length, end != null && end > prefix.length ? end : prefix.length)
   }
 
-  /** Взять следующую подсказку: сервер сам проверяет, прошло ли нужное время. */
   const getHint = async () => {
     if (!hintAvailable || takingHint) return
     setTakingHint(true)
@@ -410,37 +269,6 @@ export default function GameBoard({
     }
   }
 
-  /** Начать заново: сервер обнуляет прогресс только этого пользователя. */
-  const restart = async () => {
-    setRestarting(true)
-    setActionError('')
-    try {
-      const fresh = await restartGame(game.id)
-      finishedRef.current = false
-      setSolved(fresh.solved || {})
-      setValues(emptyValues())
-      setWrong({})
-      setWin(false)
-      setFinishedTime(null)
-      setTimeUp(false)
-      setShowTimeout(false)
-      setTimeoutAnswer('')
-      setTimeoutError('')
-      setClock({ baseElapsed: 0, loadedAt: Date.now() })
-      setElapsed(0)
-      setHintLevel(fresh.hintLevel || 0)
-      setHintPrefixes(fresh.hintPrefixes || {})
-      setHintNotice(false)
-      hintWasAvailable.current = false
-      setTakingHint(false)
-    } catch (err) {
-      setActionError(apiMessage(err))
-    } finally {
-      setRestarting(false)
-    }
-  }
-
-  /** Карточка ответа: подсказка пары + поле ввода. */
   const renderCard = (columnIndex, position) => {
     const key = cellKey(columnIndex, position)
     const cardSolved = isSolved(columnIndex, position)
@@ -449,8 +277,7 @@ export default function GameBoard({
     const prefix = prefixFor(columnIndex, position)
     const value = cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]
     const showPrefix = Boolean(prefix) && !cardSolved
-    const expiredAnswer = timeUp && columnIndex === LAST_COLUMN
-    const cardDisabled = !gameStarted || cardSolved || Boolean(checking[key]) || timeUp
+    const cardDisabled = cardSolved || Boolean(checking[key]) || timeUp
 
     return (
       <div
@@ -458,7 +285,6 @@ export default function GameBoard({
           'assoc-card',
           cardSolved ? 'is-solved' : '',
           cardWrong ? 'is-wrong' : '',
-          expiredAnswer ? 'is-timeup-answer' : '',
           checking[key] ? 'is-checking' : '',
           hintOpen ? 'hint-open' : 'hint-locked',
         ].join(' ').trim()}
@@ -488,7 +314,7 @@ export default function GameBoard({
               onFocus={(event) => guardCaret(event, columnIndex, position)}
               onSelect={(event) => guardCaret(event, columnIndex, position)}
               disabled={cardDisabled}
-              placeholder={!gameStarted ? 'Нажмите «Начать игру»' : (checking[key] ? 'Проверяем…' : (expiredAnswer ? 'Время вышло' : 'Ваш ответ'))}
+              placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
               aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
             />
             {showPrefix && (
@@ -504,37 +330,32 @@ export default function GameBoard({
     )
   }
 
-  const timerValue = remainingSeconds
-  const timerCritical = finishedTime == null && !timeUp
-    && remainingSeconds > 0 && remainingSeconds <= 60
+  const timerCritical = !timeUp && remainingSeconds > 0 && remainingSeconds <= 60
 
   return (
     <div className="assoc-board">
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
-          Время на игру: <strong>{formatMinutes(game.timeLimitMinutes)} мин.</strong>{' '}
-          Разгадайте слово в колонке 5 до конца таймера — это победа. Подсказки следующих
-          колонок открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
+          Уровень «{level.title}». Время: <strong>{formatTime(remainingSeconds)}</strong>{' '}
+          Разгадайте слово в колонке 5 до конца таймера. Подсказки следующих колонок
+          открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
         </p>
 
         <div className="assoc-board-tools">
           <div
             className={[
               'assoc-timer',
-              finishedTime != null ? 'is-finished' : '',
               timeUp ? 'is-timeup' : '',
-              timerCritical && gameStarted ? 'is-critical' : '',
+              timerCritical ? 'is-critical' : '',
             ].join(' ').trim()}
             role="timer"
-            aria-live={timerCritical && gameStarted ? 'polite' : 'off'}
+            aria-live={timerCritical ? 'polite' : 'off'}
           >
             <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
-            <span className="assoc-timer-value">{formatTime(timerValue)}</span>
-            <span className="assoc-timer-label">
-              {finishedTime != null ? 'финиш' : (timeUp ? 'время вышло' : (gameStarted ? 'осталось' : 'готово к старту'))}
-            </span>
+            <span className="assoc-timer-value">{formatTime(remainingSeconds)}</span>
+            <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>
           </div>
-          {gameStarted && hintScheduled && (
+          {hintScheduled && (
             hintAvailable ? (
               <button
                 type="button"
@@ -551,25 +372,6 @@ export default function GameBoard({
               </span>
             )
           )}
-          <button
-            type="button"
-            className="btn btn-small btn-secondary"
-            onClick={async () => {
-              try {
-                await restart()
-              } finally {
-                setGameStarted(false)
-                setTimeoutMessageShown(false)
-                timeUpTriggered.current = false
-                try {
-                  localStorage.removeItem(timeoutMessageShownKey)
-                } catch {}
-              }
-            }}
-            disabled={restarting}
-          >
-            {restarting ? 'Сброс…' : 'Начать заново'}
-          </button>
         </div>
       </div>
 
@@ -582,93 +384,8 @@ export default function GameBoard({
       {actionError && <div className="alert alert-error">{actionError}</div>}
 
       <div className="assoc-scroll">
-        {game.levelType === 'NORMAL' ? (
-          <div className="assoc-normal">
-            {!gameStarted && (
-            <div className="assoc-start-overlay">
-              <button
-                type="button"
-                className="btn-medium"
-                onClick={() => {
-                  setGameStarted(true)
-                  setClock({ baseElapsed: progress?.elapsedSeconds || 0, loadedAt: Date.now() })
-                  setElapsed(progress?.elapsedSeconds || 0)
-                  setTimeoutMessageShown(false)
-                  timeUpTriggered.current = false
-                  try {
-                    localStorage.removeItem(timeoutMessageShownKey)
-                  } catch {}
-                }}
-              >
-                Начать игру
-              </button>
-            </div>
-          )}
-            {gameStarted && !finishedTime && !timeUp && currentNormalQuestion ? (
-              <div className="assoc-normal-card">
-                <div className="assoc-normal-media">
-                  {currentNormalQuestion.mediaType === 'image' && currentNormalQuestion.mediaUrl ? (
-                    <img src={currentNormalQuestion.mediaUrl} alt="Изображение к вопросу" />
-                  ) : currentNormalQuestion.mediaType === 'audio' && currentNormalQuestion.mediaUrl ? (
-                    <audio controls src={currentNormalQuestion.mediaUrl} />
-                  ) : currentNormalQuestion.mediaType === 'video' && currentNormalQuestion.mediaUrl ? (
-                    <video controls src={currentNormalQuestion.mediaUrl} />
-                  ) : null}
-                </div>
-                <h3 className="assoc-normal-question">{currentNormalQuestion.questionText}</h3>
-                <p className="assoc-normal-progress">
-                  Отгадано: <strong>{normalSolvedCount}</strong> / {normalPassThreshold}
-                </p>
-                <div className="assoc-normal-answer">
-                  <input
-                    className="assoc-input"
-                    value={normalAnswer}
-                    onChange={(event) => setNormalAnswer(event.target.value)}
-                    disabled={Boolean(checking.normal) || timeUp}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') submitNormalAnswer()
-                    }}
-                    placeholder="Ваш ответ"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={submitNormalAnswer}
-                    disabled={Boolean(checking.normal) || timeUp || finishedTime != null}
-                  >
-                    {Boolean(checking.normal) ? 'Проверяем…' : 'Ответить'}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="assoc-pyramid-wrap">
-          {/*<PyramidHead />*/}
-
-          {!gameStarted && (
-            <div className="assoc-start-overlay">
-              <button
-                type="button"
-                className="btn-medium"
-                onClick={() => {
-                  setGameStarted(true)
-                  setClock({ baseElapsed: progress?.elapsedSeconds || 0, loadedAt: Date.now() })
-                  setElapsed(progress?.elapsedSeconds || 0)
-                  setTimeoutMessageShown(false)
-                  timeUpTriggered.current = false
-                  try {
-                    localStorage.removeItem(timeoutMessageShownKey)
-                  } catch {}
-                }}
-              >
-                Начать игру
-              </button>
-            </div>
-          )}
-
-          <div className={`assoc-pyramid ${!gameStarted ? 'is-blurred' : ''}`}>
-            {/* Колонка 1: пара слов и её ответ из колонки 2 — на одной строке */}
+        <div className="assoc-pyramid-wrap">
+          <div className="assoc-pyramid">
             {toPairs(game.startWords).map((pair, row) => (
               <Fragment key={`row-${row}`}>
                 <div
@@ -679,8 +396,8 @@ export default function GameBoard({
                   <div className="assoc-pair">
                     <span className="assoc-pair-num">{row + 1}</span>
                     {pair.map((word, offset) => (
-                      <span className={`assoc-word ${!gameStarted ? 'is-blurred' : ''}`} key={offset}>
-                        {gameStarted ? word : '*****'}
+                      <span className="assoc-word" key={offset}>
+                        {word}
                       </span>
                     ))}
                   </div>
@@ -696,7 +413,6 @@ export default function GameBoard({
               </Fragment>
             ))}
 
-            {/* Колонки 3-5: карточка занимает 2/4/8 строк и стоит по центру своих подсказок */}
             {[2, 3, 4].map((columnIndex) => {
               const span = COLUMN_SPANS[columnIndex]
               return Array.from({ length: COLUMN_SIZES[columnIndex] }, (_, position) => (
@@ -715,82 +431,7 @@ export default function GameBoard({
             })}
           </div>
         </div>
-        )}
       </div>
-
-      {win && (
-        <Modal title="Победа!" onClose={() => setWin(false)}>
-          <div className="assoc-win">
-            <div className="assoc-win-emoji">🏆</div>
-            <p className="assoc-win-text">
-              Поздравляем! Вы победитель! Ваше время: <strong>{finishedTime} сек.</strong>
-            </p>
-            {resultError && <p className="assoc-win-error">{resultError}</p>}
-
-            <Leaderboard
-              entries={leaderboard || []}
-              loading={leaderboardLoading}
-              currentUserId={currentUserId}
-              limit={5}
-              title="Лучшие результаты"
-            />
-
-            <div className="form-actions">
-              <button type="button" className="btn btn-primary" onClick={restart} disabled={restarting}>
-                Начать заново
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {timeUp && showTimeout && (
-        <Modal title="Время вышло!" onClose={() => setShowTimeout(false)}>
-          <div className="assoc-timeup">
-            <div className="assoc-win-emoji" aria-hidden="true">⏳</div>
-            <p className="assoc-win-text">
-              Время вышло! Вы не успели угадать загаданное слово. Игра окончена.
-            </p>
-            <p className="assoc-timeup-text">
-              Результат не засчитан в рейтинге.
-            </p>
-            {timeoutAnswer ? (
-              <p className="assoc-timeup-answer">
-                Правильный ответ в колонке 5: <strong>{timeoutAnswer}</strong>
-              </p>
-            ) : (
-              <p className="assoc-timeup-text">
-                {timeoutError || 'Загружаем правильный ответ…'}
-              </p>
-            )}
-            <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowTimeout(false)}>
-                Закрыть
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={async () => {
-                  try {
-                    await restart()
-                  } finally {
-                    setGameStarted(false)
-                    setTimeoutMessageShown(false)
-                    timeUpTriggered.current = false
-                    try {
-                      localStorage.removeItem(timeoutMessageShownKey)
-                    } catch {}
-                    setShowTimeout(false)
-                  }
-                }}
-                disabled={restarting}
-              >
-                Начать заново
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   )
 }

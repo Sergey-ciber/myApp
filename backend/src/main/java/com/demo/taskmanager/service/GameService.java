@@ -9,12 +9,15 @@ import com.demo.taskmanager.dto.GameResponse;
 import com.demo.taskmanager.dto.GameSessionResponse;
 import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
+import com.demo.taskmanager.dto.QuestionHintRequest;
+import com.demo.taskmanager.dto.QuestionHintResponse;
 import com.demo.taskmanager.dto.ResultResponse;
 import com.demo.taskmanager.dto.TimeoutResponse;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameLevel;
 import com.demo.taskmanager.entity.GameResult;
 import com.demo.taskmanager.entity.GameWord;
+import com.demo.taskmanager.entity.HintType;
 import com.demo.taskmanager.entity.LevelHint;
 import com.demo.taskmanager.entity.LevelQuestion;
 import com.demo.taskmanager.entity.LevelWord;
@@ -153,9 +156,6 @@ public class GameService {
                 && normalize(request.answer()).equals(normalize(expected));
 
         UserProgress progress = findOrCreateProgress(game, user);
-        if (progress.getFinishedSeconds() == null && isTimeUp(game, progress)) {
-            throw new BadRequestException("Время вышло — игра окончена");
-        }
         if (correct) {
             Map<String, String> solved = parseSolved(progress);
             solved.put(column + ":" + position, expected);
@@ -164,14 +164,6 @@ public class GameService {
             Map<String, String> prefixes = parsePrefixes(progress);
             if (prefixes.remove(column + ":" + position) != null) {
                 writePrefixes(progress, prefixes);
-            }
-            // верное слово колонки 5 — победа, время считает сервер
-            if (column == COLUMN_SIZES.length && progress.getFinishedSeconds() == null) {
-                long elapsed = elapsedSeconds(progress);
-                if (elapsed > limitSeconds(game)) {
-                    throw new BadRequestException("Время вышло — результат не засчитывается");
-                }
-                progress.setFinishedSeconds((int) Math.max(1, elapsed));
             }
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
@@ -192,12 +184,6 @@ public class GameService {
             throw new NotFoundException("Вопрос не найден");
         }
         UserProgress progress = findOrCreateProgress(game, user);
-        if (progress.getFinishedSeconds() != null) {
-            throw new BadRequestException("Игра уже пройдена");
-        }
-        if (isTimeUp(game, progress)) {
-            throw new BadRequestException("Время вышло — игра окончена");
-        }
 
         List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
                 .map(StandardAnswer::getAnswerText)
@@ -223,15 +209,6 @@ public class GameService {
             if (prefixes.remove(key) != null) {
                 writePrefixes(progress, prefixes);
             }
-            GameLevel level = question.getLevel();
-            if (level.getPassThreshold() != null
-                    && solvedCountForLevel(progress, level.getId()) >= level.getPassThreshold()) {
-                long elapsed = elapsedSeconds(progress);
-                if (elapsed > limitSeconds(game)) {
-                    throw new BadRequestException("Время вышло — результат не засчитывается");
-                }
-                progress.setFinishedSeconds((int) Math.max(1, elapsed));
-            }
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
         }
@@ -246,6 +223,43 @@ public class GameService {
     }
 
     /**
+     * Раскрыть содержимое подсказки конкретного вопроса обычного уровня.
+     * Для «Первая буква» возвращает первую букву правильного ответа, для «Общая подсказка» — текст/медиа.
+     */
+    @Transactional
+    public QuestionHintResponse revealQuestionHint(Long gameId, User user, QuestionHintRequest request) {
+        Game game = findGame(gameId);
+        if (request == null || request.questionId() == null) {
+            throw new BadRequestException("Укажите вопрос");
+        }
+        StandardQuestion question = standardQuestionRepository.findById(request.questionId())
+                .orElseThrow(() -> new NotFoundException("Вопрос не найден"));
+        if (question.getLevel() == null || question.getLevel().getGame() == null
+                || !question.getLevel().getGame().getId().equals(game.getId())) {
+            throw new NotFoundException("Вопрос не найден");
+        }
+        GameLevel level = question.getLevel();
+        List<LevelHint> hints = level.getHints() == null
+                ? List.of()
+                : level.getHints().stream().sorted(Comparator.comparingInt(LevelHint::getOrderIndex)).toList();
+        int hintIndex = request.hintIndex() == null ? 0 : request.hintIndex();
+        if (hintIndex < 0 || hintIndex >= hints.size()) {
+            throw new BadRequestException("Подсказка не найдена");
+        }
+        LevelHint hint = hints.get(hintIndex);
+        String firstLetter = null;
+        if (hint.getType() == HintType.FIRST_LETTER) {
+            firstLetter = question.getAnswers() == null ? null : question.getAnswers().stream()
+                    .map(StandardAnswer::getAnswerText)
+                    .filter(a -> a != null && !a.trim().isEmpty())
+                    .findFirst()
+                    .map(a -> a.trim().substring(0, 1))
+                    .orElse(null);
+        }
+        return new QuestionHintResponse(firstLetter, hint.getText(), hint.getImageUrl());
+    }
+
+    /**
      * Выдать следующую подсказку. Доступность считается по серверному времени:
      * 180, 360, 540 и 720 секунд после старта. Подсказка открывает первые буквы
      * только доступных (родители разгаданы) неразгаданных ячеек.
@@ -254,12 +268,6 @@ public class GameService {
     public GameProgressDto takeHint(Long gameId, User user) {
         Game game = findGame(gameId);
         UserProgress progress = findOrCreateProgress(game, user);
-        if (progress.getFinishedSeconds() != null) {
-            throw new BadRequestException("Игра уже пройдена — подсказка не нужна");
-        }
-        if (isTimeUp(game, progress)) {
-            throw new BadRequestException("Время вышло — подсказки недоступны");
-        }
 
         GameLevel level = currentLevel(game);
         List<LevelHint> levelHints = level.getHints() == null
@@ -420,6 +428,7 @@ public class GameService {
                         hint.setText(hr.text());
                         hint.setImageUrl(hr.imageUrl());
                         hint.setTriggerTime(hr.triggerTime());
+                        hint.setPenaltyTime(hr.penaltyTime());
                         hint.setOrderIndex(h);
                         level.getHints().add(hint);
                     }
@@ -571,6 +580,7 @@ public class GameService {
                         hint.setText(hr.text());
                         hint.setImageUrl(hr.imageUrl());
                         hint.setTriggerTime(hr.triggerTime());
+                        hint.setPenaltyTime(hr.penaltyTime());
                         hint.setOrderIndex(h);
                         level.getHints().add(hint);
                     }
@@ -685,26 +695,13 @@ public class GameService {
         UserProgress progress = progressRepository
                 .findByGameIdAndUserId(gameId, user.getId())
                 .orElseThrow(() -> new BadRequestException("Сначала начните игру"));
-        int limit = limitSeconds(game);
-        Integer serverTime = progress.getFinishedSeconds();
-        int seconds;
-        if (serverTime != null) {
-            seconds = serverTime;
-        } else {
-            if (isTimeUp(game, progress)) {
-                throw new BadRequestException("Время вышло — результат не засчитывается");
-            }
-            seconds = validateTime(timeSeconds);
-            if (seconds > limit) {
-                throw new BadRequestException("Результат не может превышать лимит времени игры");
-            }
-        }
+        int seconds = validateTime(timeSeconds);
 
         GameResult result = new GameResult(game, user, seconds);
         resultRepository.save(result);
         // Повторная отправка результата разрешена (в рейтинг идёт лучшая попытка),
         // но победа текущей попытки начисляет командам +1 только один раз.
-        if (serverTime != null && !progress.isWinCounted()) {
+        if (!progress.isWinCounted()) {
             progress.setWinCounted(true);
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);

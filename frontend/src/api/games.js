@@ -22,6 +22,10 @@ export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) =
 /** Взять подсказку: сервер проверяет время и открывает первые буквы неразгаданных слов. */
 export const requestHint = (id) => api.post(`/games/${id}/hint`).then((res) => res.data)
 
+/** Подсказка конкретного вопроса обычного уровня: { questionId, hintIndex } → { firstLetter, text, imageUrl }. */
+export const revealQuestionHint = (id, questionId, hintIndex) =>
+  api.post(`/games/${id}/question-hint`, { questionId, hintIndex }).then((res) => res.data)
+
 /** Время вышло: сервер раскрывает правильный ответ колонки 5 (рекорд не записывается). */
 export const requestTimeout = (id) => api.post(`/games/${id}/timeout`).then((res) => res.data)
 

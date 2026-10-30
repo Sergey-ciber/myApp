@@ -845,6 +845,91 @@ body {
   font-size: 16px;
 }
 
+/* Навигация и индикаторы обычного уровня */
+.assoc-normal-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.assoc-normal-nav .field { flex: 1; min-width: 180px; }
+.assoc-normal-indicator { font-size: 13px; color: #c8c8d4; }
+
+/* Блок подсказок обычного уровня */
+.assoc-normal-hints {
+  width: 100%;
+  padding: 14px 16px;
+  background: #12121a;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.assoc-normal-hints-title { font-weight: 700; color: #ffffff; font-size: 14px; }
+.assoc-normal-hints-empty { margin: 0; font-size: 13px; color: #a0a0b0; }
+.assoc-normal-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.assoc-normal-hint .assoc-hint-btn { animation: none; }
+.assoc-normal-hint-used { font-size: 13px; color: #7a7a88; }
+.assoc-normal-hint-penalty { font-size: 12px; color: #a0a0b0; }
+
+/* Модальное окно подсказки обычного уровня */
+.assoc-normal-hint-modal { text-align: center; }
+.assoc-normal-hint-letter { font-size: 18px; }
+.assoc-normal-hint-letter strong { font-size: 28px; color: #ff8c00; }
+.assoc-normal-hint-img { max-width: 100%; max-height: 320px; border-radius: 10px; margin: 8px 0; }
+.assoc-normal-hint-modal .form-actions { justify-content: center; margin-top: 14px; }
+
+/* Стартовый экран */
+.assoc-start-screen { display: flex; justify-content: center; padding: 24px; }
+.assoc-start-card {
+  text-align: center;
+  max-width: 480px;
+  padding: 28px;
+  background: #24242e;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
+  border-radius: 14px;
+}
+.assoc-start-card h3 { margin: 0 0 10px; color: #ffffff; }
+.assoc-start-card p { margin: 0 0 18px; color: #a0a0b0; }
+
+/* Индикатор текущего уровня */
+.assoc-level-progress {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #e37c14;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-block;
+}
+
+/* Экран итоговой статистики */
+.assoc-statistics { display: flex; justify-content: center; padding: 18px; }
+.assoc-statistics-card {
+  width: 100%;
+  max-width: 720px;
+  padding: 24px;
+  background: #24242e;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
+  border-radius: 14px;
+  text-align: center;
+}
+.assoc-statistics-title { margin: 8px 0 16px; color: #ffffff; }
+.assoc-statistics-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px; }
+.assoc-statistics-table th,
+.assoc-statistics-table td { padding: 9px 10px; border-bottom: 1px solid #3a3a4a; text-align: left; }
+.assoc-statistics-table th { color: #a0a0b0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+.assoc-statistics-table td { color: #e5e7eb; }
+.assoc-statistics-table tfoot td { border-bottom: none; font-weight: 600; }
+.assoc-statistics-card .assoc-leaderboard { text-align: left; margin: 0 0 18px; }
+.assoc-statistics-card .form-actions { justify-content: center; }
+
 /* Победа */
 .assoc-win { text-align: center; }
 .assoc-win-emoji { font-size: 56px; line-height: 1; }

@@ -8,6 +8,8 @@ import com.demo.taskmanager.dto.GameResponse;
 import com.demo.taskmanager.dto.GameSessionResponse;
 import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
+import com.demo.taskmanager.dto.QuestionHintRequest;
+import com.demo.taskmanager.dto.QuestionHintResponse;
 import com.demo.taskmanager.dto.ResultRequest;
 import com.demo.taskmanager.dto.ResultResponse;
 import com.demo.taskmanager.dto.TimeoutResponse;
@@ -88,6 +90,14 @@ public class GameController {
     public GameProgressDto hint(@AuthenticationPrincipal UserDetails principal,
                                 @PathVariable Long id) {
         return gameService.takeHint(id, currentUser(principal));
+    }
+
+    /** Подсказка конкретного вопроса обычного уровня. */
+    @PostMapping("/{id}/question-hint")
+    public QuestionHintResponse questionHint(@AuthenticationPrincipal UserDetails principal,
+                                             @PathVariable Long id,
+                                             @RequestBody QuestionHintRequest request) {
+        return gameService.revealQuestionHint(id, currentUser(principal), request);
     }
 
     /** Время вышло: раскрываем игроку правильный ответ колонки 5 (без записи результата). */

@@ -30,7 +30,8 @@ public record GameRequest(
             HintType type,
             String text,
             String imageUrl,
-            Double triggerTime
+            Double triggerTime,
+            Double penaltyTime
     ) {
     }
 

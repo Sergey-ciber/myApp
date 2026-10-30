@@ -130,9 +130,9 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
         }
     }
 
-    public record HintResponse(Long id, HintType type, String text, String imageUrl, Double triggerTime, Integer orderIndex) {
+    public record HintResponse(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex) {
         public static HintResponse from(com.demo.taskmanager.entity.LevelHint hint) {
-            return new HintResponse(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(), hint.getOrderIndex());
+            return new HintResponse(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(), hint.getPenaltyTime(), hint.getOrderIndex());
         }
     }
 

@@ -41,6 +41,7 @@ function createEmptyHint(index) {
     text: '',
     imageUrl: '',
     triggerTime: '',
+    penaltyTime: '',
   }
 }
 
@@ -105,6 +106,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           text: hint.text || '',
           imageUrl: hint.imageUrl || '',
           triggerTime: hint.triggerTime != null ? String(hint.triggerTime) : '',
+          penaltyTime: hint.penaltyTime != null ? String(hint.penaltyTime) : '',
         })),
         associationColumns: level.associationColumns ? cloneColumns(level.associationColumns) : emptyColumns(),
         questions: (level.questions || []).map((q) => ({
@@ -385,6 +387,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
             text: hint.text?.trim() || null,
             imageUrl: hint.imageUrl?.trim() || null,
             triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
+            penaltyTime: hint.penaltyTime?.toString().trim() ? Number(hint.penaltyTime) : null,
           })),
           associationColumns: level.type === 'ASSOCIATIONS' ? (level.associationColumns || []).map((words) => words.map((word) => word.trim())) : null,
           questions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
@@ -653,6 +656,10 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       <label className="field">
                         <span>Время появления (мин. от начала уровня)</span>
                         <input type="number" min="0" step="any" value={hint.triggerTime} onChange={(event) => updateHint(levelIndex, hintIndex, { triggerTime: event.target.value })} placeholder="например, 3" />
+                      </label>
+                      <label className="field">
+                        <span>Штрафное время (мин.)</span>
+                        <input type="number" min="0" step="any" value={hint.penaltyTime} onChange={(event) => updateHint(levelIndex, hintIndex, { penaltyTime: event.target.value })} placeholder="например, 1" />
                       </label>
                     </div>
                     {hint.type === 'GENERAL' && (
