@@ -640,10 +640,12 @@ body {
   color: #1a1a1a;
 }
 
-/* Фильтр и сортировка списка игр */
-.assoc-list-controls { display: flex; gap: 12px; flex-wrap: wrap; }
+/* Фильтр, поиск и сортировка списка игр */
+.assoc-list-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .assoc-list-controls .field { min-width: 160px; }
-.assoc-list-controls select {
+.assoc-list-controls .field.assoc-search-field { min-width: 220px; }
+.assoc-list-controls select,
+.assoc-list-controls input {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 10px;
@@ -652,6 +654,7 @@ body {
   background: #fff;
   color: var(--text);
 }
+.assoc-list-controls input { width: 100%; }
 
 /* Режим игрока */
 .assoc-player { display: flex; flex-direction: column; gap: 14px; color: #fdfcfc

@@ -77,6 +77,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [loadingGame, setLoadingGame] = useState(false)
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [sortBy, setSortBy] = useState('date')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const isOwn = (game) => game.creatorId != null && game.creatorId === currentUserId
   const myGames = useMemo(() => games.filter(isOwn), [games, currentUserId])
@@ -86,6 +87,12 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     let result = [...source]
     if (difficultyFilter !== 'all') {
       result = result.filter((game) => (game.difficulty || 'MEDIUM') === difficultyFilter)
+    }
+    const query = searchQuery.trim().toLowerCase()
+    if (query) {
+      result = result.filter((game) =>
+        (game.title || '').toLowerCase().includes(query)
+        || (game.creatorUsername || '').toLowerCase().includes(query))
     }
     const difficultyOrder = (game) =>
       DIFFICULTIES.find((d) => d.value === (game.difficulty || 'MEDIUM'))?.order ?? 1
@@ -102,7 +109,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
       })
     }
     return result
-  }, [view, games, myGames, difficultyFilter, sortBy])
+  }, [view, games, myGames, difficultyFilter, sortBy, searchQuery])
 
   const resetForm = () => {
     setTitle('')
@@ -572,6 +579,14 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
             </p>
           </div>
           <div className="assoc-list-controls">
+            <label className="field assoc-search-field">
+              <span>Поиск</span>
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Название или автор"
+              />
+            </label>
             <label className="field">
               <span>Сложность</span>
               <select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)}>
