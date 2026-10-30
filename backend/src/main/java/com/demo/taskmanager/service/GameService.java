@@ -378,6 +378,9 @@ public class GameService {
         Game game = new Game();
         game.setTitle(title);
         game.setGameDate(request.gameDate());
+        game.setDescription(request.description() == null ? null : request.description().trim());
+        game.setVisibility(normalizeVisibility(request.visibility()));
+        game.setMediaUrls(normalizeMediaUrls(request.mediaUrls()));
         Double timeLimit = request.timeLimitMinutes() == null ? 10.0 : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
         game.setDifficulty(normalizeDifficulty(request.difficulty()));
@@ -414,6 +417,7 @@ public class GameService {
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
                 level.setPassThreshold(lr.passThreshold());
+                level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
                 game.getLevels().add(level);
 
                 if (lr.hints() != null) {
@@ -527,6 +531,9 @@ public class GameService {
         requireCreator(game, currentUser);
         game.setTitle(title);
         game.setGameDate(request.gameDate());
+        game.setDescription(request.description() == null ? null : request.description().trim());
+        game.setVisibility(normalizeVisibility(request.visibility()));
+        game.setMediaUrls(normalizeMediaUrls(request.mediaUrls()));
         Double timeLimit = request.timeLimitMinutes() == null ? (game.getTimeLimitMinutes() == null ? 10.0 : game.getTimeLimitMinutes()) : validateTimeLimit(request.timeLimitMinutes());
         game.setTimeLimitMinutes(timeLimit);
         game.setDifficulty(normalizeDifficulty(request.difficulty()));
@@ -567,6 +574,7 @@ public class GameService {
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
                 level.setPassThreshold(lr.passThreshold());
+                level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
                 game.getLevels().add(level);
 
                 if (lr.hints() != null) {
@@ -882,14 +890,31 @@ public class GameService {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** Нормализация сложности игры: только EASY, MEDIUM, HARD. */
-    private String normalizeDifficulty(String difficulty) {
-        if (difficulty == null || difficulty.trim().isEmpty()) return "MEDIUM";
-        String value = difficulty.trim().toUpperCase(Locale.ROOT);
-        return switch (value) {
-            case "EASY", "MEDIUM", "HARD" -> value;
-            default -> "MEDIUM";
-        };
+    /** Нормализация сложности игры: от 1 до 5 (звёзды). */
+    private int normalizeDifficulty(Integer difficulty) {
+        if (difficulty == null) return 3;
+        return Math.max(1, Math.min(5, difficulty));
+    }
+
+    /** Нормализация видимости: PUBLIC — для всех, TEAM — для моей команды. */
+    private String normalizeVisibility(String visibility) {
+        if (visibility == null || visibility.trim().isEmpty()) return "PUBLIC";
+        String value = visibility.trim().toUpperCase(Locale.ROOT);
+        return value.equals("TEAM") ? "TEAM" : "PUBLIC";
+    }
+
+    /** Нормализация списка медиафайлов: максимум 10 непустых URL. */
+    private List<String> normalizeMediaUrls(List<String> mediaUrls) {
+        List<String> result = new ArrayList<>();
+        if (mediaUrls == null) return result;
+        for (String url : mediaUrls) {
+            if (url == null) continue;
+            String trimmed = url.trim();
+            if (!trimmed.isEmpty() && result.size() < 10) {
+                result.add(trimmed);
+            }
+        }
+        return result;
     }
 
     /** Раскладывает колонки по строкам таблицы game_words. */

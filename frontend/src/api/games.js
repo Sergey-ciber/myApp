@@ -48,3 +48,10 @@ export const submitResult = (gameId, timeSeconds) =>
 /** Рейтинг игры: [{ place, userId, username, timeSeconds, completedAt }]. */
 export const fetchLeaderboard = (gameId) =>
   api.get(`/games/${gameId}/leaderboard`).then((res) => res.data)
+
+/** Загрузить медиафайл игры: возвращает публичный URL. */
+export const uploadGameMedia = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/files', form).then((res) => res.data.url)
+}

@@ -10,7 +10,10 @@ public record GameRequest(
         String title,
         LocalDate gameDate,
         Double timeLimitMinutes,
-        String difficulty,
+        Integer difficulty,
+        String description,
+        String visibility,
+        List<String> mediaUrls,
         List<List<String>> columns,
         List<LevelRequest> levels
 ) {
@@ -20,6 +23,7 @@ public record GameRequest(
             LevelType type,
             Integer hintsCount,
             Integer passThreshold,
+            List<String> mediaUrls,
             List<HintRequest> hints,
             List<List<String>> associationColumns,
             List<QuestionRequest> questions,

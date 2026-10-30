@@ -18,11 +18,26 @@ public class Game {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 150)
+    @Column(nullable = false, length = 250)
     private String title;
 
     @Column(name = "game_date")
     private LocalDate gameDate;
+
+    /** Описание игры. */
+    @Column(columnDefinition = "text")
+    private String description;
+
+    /** Видимость: PUBLIC — для всех, TEAM — для моей команды. */
+    @Column(length = 20)
+    private String visibility = "PUBLIC";
+
+    /** Список URL медиафайлов (максимум 10). */
+    @ElementCollection
+    @CollectionTable(name = "game_media", joinColumns = @JoinColumn(name = "game_id"))
+    @Column(name = "url", columnDefinition = "text")
+    @OrderColumn(name = "order_index")
+    private List<String> mediaUrls = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -35,9 +50,9 @@ public class Game {
     @Column(name = "time_limit", columnDefinition = "double precision default 10")
     private Double timeLimitMinutes = 10.0;
 
-    /** Сложность игры: EASY, MEDIUM, HARD. */
-    @Column(length = 20)
-    private String difficulty = "MEDIUM";
+    /** Сложность игры: от 1 до 5 (звёзды). */
+    @Column(nullable = false, columnDefinition = "integer default 3")
+    private int difficulty = 3;
 
     /** Создатель игры: только он может редактировать и удалять её. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -83,6 +98,15 @@ public class Game {
     public LocalDate getGameDate() { return gameDate; }
     public void setGameDate(LocalDate gameDate) { this.gameDate = gameDate; }
 
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public String getVisibility() { return visibility; }
+    public void setVisibility(String visibility) { this.visibility = visibility; }
+
+    public List<String> getMediaUrls() { return mediaUrls; }
+    public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls; }
+
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 
@@ -92,8 +116,8 @@ public class Game {
     public Double getTimeLimitMinutes() { return timeLimitMinutes; }
     public void setTimeLimitMinutes(Double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
 
-    public String getDifficulty() { return difficulty; }
-    public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
+    public int getDifficulty() { return difficulty; }
+    public void setDifficulty(int difficulty) { this.difficulty = difficulty; }
 
     public User getCreator() { return creator; }
     public void setCreator(User creator) { this.creator = creator; }

@@ -17,11 +17,18 @@ public class GameLevel {
     @JoinColumn(name = "game_id", nullable = false)
     private Game game;
 
-    @Column(nullable = false, length = 150)
+    @Column(nullable = false, length = 250)
     private String title;
 
     @Column(name = "time_limit", nullable = false)
     private double timeLimitMinutes = 10.0;
+
+    /** Список URL медиафайлов уровня (максимум 10). */
+    @ElementCollection
+    @CollectionTable(name = "level_media", joinColumns = @JoinColumn(name = "level_id"))
+    @Column(name = "url", columnDefinition = "text")
+    @OrderColumn(name = "order_index")
+    private List<String> mediaUrls = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -60,6 +67,8 @@ public class GameLevel {
     public void setTitle(String title) { this.title = title; }
     public double getTimeLimitMinutes() { return timeLimitMinutes; }
     public void setTimeLimitMinutes(double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
+    public List<String> getMediaUrls() { return mediaUrls; }
+    public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls; }
     public LevelType getType() { return type; }
     public void setType(LevelType type) { this.type = type; }
     public int getHintsCount() { return hintsCount; }

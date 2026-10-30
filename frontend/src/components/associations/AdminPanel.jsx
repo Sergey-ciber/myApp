@@ -1,6 +1,6 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
-import { activateGame, createGame, deleteGame, fetchGameForEdit, updateGame } from '../../api/games'
+import { activateGame, createGame, deleteGame, fetchGameForEdit, updateGame, uploadGameMedia } from '../../api/games'
 import ConfirmDialog from '../ConfirmDialog'
 import PyramidHead from './PyramidHead'
 import {
@@ -23,13 +23,15 @@ const HINT_TYPES = [
   { value: 'GENERAL', label: 'Общая подсказка' },
 ]
 
-const DIFFICULTIES = [
-  { value: 'EASY', label: 'Легкий', order: 0 },
-  { value: 'MEDIUM', label: 'Средний', order: 1 },
-  { value: 'HARD', label: 'Сложный', order: 2 },
+const DIFFICULTY_MAX = 5
+
+const VISIBILITIES = [
+  { value: 'PUBLIC', label: 'Для всех' },
+  { value: 'TEAM', label: 'Для моей команды' },
 ]
 
-const difficultyLabel = (value) => DIFFICULTIES.find((d) => d.value === value)?.label || '—'
+/** Сложность в виде звёздочек: 1..5. */
+const difficultyLabel = (value) => '★'.repeat(Math.max(0, Math.min(DIFFICULTY_MAX, Number(value) || 0)))
 
 function createEmptyLevel(index) {
   return {
@@ -38,6 +40,7 @@ function createEmptyLevel(index) {
     type: 'ASSOCIATIONS',
     hintsCount: '0',
     hints: [],
+    mediaUrls: [],
     associationColumns: emptyColumns(),
     questions: [],
   }
@@ -60,12 +63,79 @@ function createEmptyQuestion() {
   }
 }
 
+/** Область добавления медиафайлов (максимум 10). */
+function MediaUploader({ urls, onChange, max = 10 }) {
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
+  const list = urls || []
+
+  const addFiles = async (event) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+    const remaining = max - list.length
+    if (remaining <= 0) return
+    setUploading(true)
+    try {
+      const uploaded = []
+      for (const file of files.slice(0, remaining)) {
+        uploaded.push(await uploadGameMedia(file))
+      }
+      onChange([...list, ...uploaded].slice(0, max))
+    } catch {
+      // ошибка загрузки файла
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const remove = (index) => onChange(list.filter((_, i) => i !== index))
+
+  return (
+    <div className="assoc-media-field">
+      <div className="assoc-media-field-head">
+        <span className="assoc-media-field-label">Медиа файлы ({list.length}/{max})</span>
+        <button
+          type="button"
+          className="btn btn-small btn-secondary"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || list.length >= max}
+        >
+          {uploading ? 'Загрузка…' : 'Загрузить медиа'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: 'none' }}
+          onChange={addFiles}
+        />
+      </div>
+      {list.length > 0 && (
+        <div className="assoc-media-thumbs">
+          {list.map((url, index) => (
+            <div key={index} className="assoc-media-thumb">
+              <img src={url} alt="" />
+              <button type="button" className="assoc-media-remove" onClick={() => remove(index)} aria-label="Удалить">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [view, setView] = useState('all')
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [gameDate, setGameDate] = useState('')
   const [timeLimit, setTimeLimit] = useState('10')
-  const [difficulty, setDifficulty] = useState('MEDIUM')
+  const [difficulty, setDifficulty] = useState(3)
+  const [visibility, setVisibility] = useState('PUBLIC')
+  const [mediaUrls, setMediaUrls] = useState([])
+  const [levelsCount, setLevelsCount] = useState(1)
   const [columns, setColumns] = useState(emptyColumns())
   const [levels, setLevels] = useState([])
   const [editingId, setEditingId] = useState(null)
@@ -86,7 +156,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     const source = view === 'mine' ? myGames : games
     let result = [...source]
     if (difficultyFilter !== 'all') {
-      result = result.filter((game) => (game.difficulty || 'MEDIUM') === difficultyFilter)
+      const target = Number(difficultyFilter)
+      result = result.filter((game) => (game.difficulty || 3) === target)
     }
     const query = searchQuery.trim().toLowerCase()
     if (query) {
@@ -94,8 +165,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         (game.title || '').toLowerCase().includes(query)
         || (game.creatorUsername || '').toLowerCase().includes(query))
     }
-    const difficultyOrder = (game) =>
-      DIFFICULTIES.find((d) => d.value === (game.difficulty || 'MEDIUM'))?.order ?? 1
+    const difficultyOrder = (game) => Number(game.difficulty) || 3
     if (sortBy === 'title') {
       result.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'))
     } else if (sortBy === 'difficulty') {
@@ -113,9 +183,13 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   const resetForm = () => {
     setTitle('')
+    setDescription('')
     setGameDate('')
     setTimeLimit('10')
-    setDifficulty('MEDIUM')
+    setDifficulty(3)
+    setVisibility('PUBLIC')
+    setMediaUrls([])
+    setLevelsCount(1)
     setColumns(emptyColumns())
     setLevels([])
     setEditingId(null)
@@ -132,9 +206,13 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   const applyGame = (game) => {
     setTitle(game.title || '')
+    setDescription(game.description || '')
     setGameDate(game.gameDate || '')
     setTimeLimit(formatMinutes(game.timeLimitMinutes ?? 10))
-    setDifficulty(game.difficulty || 'MEDIUM')
+    setDifficulty(game.difficulty || 3)
+    setVisibility(game.visibility || 'PUBLIC')
+    setMediaUrls(Array.isArray(game.mediaUrls) ? game.mediaUrls : [])
+    setLevelsCount(game.levels && game.levels.length > 0 ? game.levels.length : 1)
     setColumns(game.columns ? cloneColumns(game.columns) : emptyColumns())
     if (game.levels && game.levels.length > 0) {
       setLevels(game.levels.map((level, idx) => ({
@@ -143,6 +221,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         timeLimitMinutes: formatMinutes(level.timeLimitMinutes ?? 10),
         type: level.type || 'ASSOCIATIONS',
         hintsCount: level.hintsCount != null ? String(level.hintsCount) : '0',
+        mediaUrls: Array.isArray(level.mediaUrls) ? level.mediaUrls : [],
         hints: (level.hints || []).map((hint) => ({
           id: hint.id,
           type: hint.type || 'FIRST_LETTER',
@@ -183,7 +262,19 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   }
 
   const addLevel = () => {
-    setLevels((prev) => [...prev, createEmptyLevel(prev.length)])
+    const count = Math.max(1, Math.min(50, Number(levelsCount) || 1))
+    setLevels((prev) => {
+      const next = [...prev]
+      for (let i = 0; i < count; i++) {
+        next.push(createEmptyLevel(next.length))
+      }
+      return next
+    })
+  }
+
+  /** Обновить список медиафайлов уровня. */
+  const updateLevelMedia = (levelIndex, urls) => {
+    setLevels((prev) => prev.map((level, i) => (i === levelIndex ? { ...level, mediaUrls: urls } : level)))
   }
 
   const removeLevel = (index) => {
@@ -416,9 +507,12 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     try {
       const payload = {
         title: title.trim(),
+        description: description.trim(),
         gameDate: gameDate || null,
         timeLimitMinutes: timeLimitValue || 10,
-        difficulty,
+        difficulty: Number(difficulty) || 3,
+        visibility,
+        mediaUrls: mediaUrls.slice(0, 10),
         columns: columns.map((words) => words.map((word) => word.trim())),
         levels: levels.map((level, idx) => ({
           title: level.title.trim(),
@@ -426,6 +520,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           type: level.type,
           hintsCount: Number(level.hintsCount) || 0,
           passThreshold: level.type === 'NORMAL' ? Number(level.passThreshold) : null,
+          mediaUrls: (level.mediaUrls || []).slice(0, 10),
           hints: (level.hints || []).map((hint) => ({
             type: hint.type,
             text: hint.text?.trim() || null,
@@ -591,7 +686,9 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
               <span>Сложность</span>
               <select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)}>
                 <option value="all">Все</option>
-                {DIFFICULTIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                {Array.from({ length: DIFFICULTY_MAX }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{'★'.repeat(n)}</option>
+                ))}
               </select>
             </label>
             <label className="field">
@@ -623,7 +720,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                     <span className="assoc-game-meta">
                       <span>Дата: {game.gameDate || 'не указана'}</span>
                       <span>Автор: {game.creatorUsername || 'неизвестен'}</span>
-                      <span>Сложность: <span className="assoc-badge difficulty">{difficultyLabel(game.difficulty || 'MEDIUM')}</span></span>
+                      <span>Сложность: <span className="assoc-badge difficulty">{difficultyLabel(game.difficulty) || '—'}</span></span>
                       {game.active && <span className="assoc-badge">по умолчанию</span>}
                     </span>
                   </div>
@@ -680,25 +777,68 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
       </div>
 
       <form className="assoc-form" onSubmit={save} noValidate>
+        {/* Блок настроек игры */}
         <div className="assoc-panel">
+          <h3 style={{ margin: '0 0 16px', color: '#ffffff' }}>Создание новой игры</h3>
+
           <div className="field-row">
             <label className="field">
               <span>Название игры *</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например, Интеллектуальный марафон" className={showErrors && !title.trim() ? 'input-invalid' : ''} />
+              <input value={title} maxLength={250} onChange={(event) => setTitle(event.target.value)} placeholder="Например, Интеллектуальный марафон" className={showErrors && !title.trim() ? 'input-invalid' : ''} />
             </label>
+          </div>
+
+          <div className="field-row">
             <label className="field">
-              <span>Дата проведения игры</span>
+              <span>Описание игры</span>
+              <textarea value={description} maxLength={5000} rows={4} onChange={(event) => setDescription(event.target.value)} placeholder="Краткое описание игры" />
+            </label>
+          </div>
+
+          <MediaUploader urls={mediaUrls} onChange={setMediaUrls} />
+
+          <div className="field-row">
+            <label className="field field--compact">
+              <span>Дата проведения</span>
               <input type="date" value={gameDate} onChange={(event) => setGameDate(event.target.value)} />
             </label>
-            <label className="field">
+            <label className="field field--compact">
               <span>Время на прохождение (мин.)</span>
-              <input type="number" min="0.1" step="any" value={timeLimit} onChange={(event) => setTimeLimit(event.target.value)} placeholder="10" />
+              <input type="number" min="0.1" step="any" maxLength={10} value={timeLimit} onChange={(event) => setTimeLimit(event.target.value)} placeholder="10" />
             </label>
             <label className="field">
               <span>Сложность</span>
-              <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
-                {DIFFICULTIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              <div className="assoc-stars">
+                {Array.from({ length: DIFFICULTY_MAX }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`assoc-star ${n <= difficulty ? 'active' : ''}`}
+                    onClick={() => setDifficulty(n)}
+                    aria-label={`${n} из ${DIFFICULTY_MAX}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+
+          <div className="field-row">
+            <label className="field">
+              <span>Видимость</span>
+              <select value={visibility} onChange={(event) => setVisibility(event.target.value)}>
+                {VISIBILITIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
+            </label>
+            <label className="field field--compact">
+              <span>Количество уровней</span>
+              <select value={levelsCount} onChange={(event) => setLevelsCount(Number(event.target.value))}>
+                {Array.from({ length: 50 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ alignSelf: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary" onClick={addLevel}>Добавить уровень</button>
             </label>
           </div>
         </div>
@@ -706,12 +846,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         {error && <div className="alert alert-error">{error}</div>}
         {message && <div className="alert alert-success">{message}</div>}
 
-        <div className="assoc-panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, color: '#ffffff' }}>Уровни игры</h3>
-            <button type="button" className="btn btn-secondary" onClick={addLevel}>Добавить уровень</button>
-          </div>
-          {levels.length === 0 && <div className="empty-state">Уровни не добавлены</div>}
+        {levels.length === 0 && <div className="empty-state">Уровни не добавлены</div>}
           {levels.map((level, levelIndex) => (
             <div key={levelIndex} className="assoc-panel" style={{ borderLeft: '3px solid #ff8c00', marginBottom: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -721,7 +856,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
               <div className="field-row">
                 <label className="field">
                   <span>Название уровня *</span>
-                  <input value={level.title} onChange={(event) => updateLevel(levelIndex, { title: event.target.value })} />
+                  <input value={level.title} maxLength={250} onChange={(event) => updateLevel(levelIndex, { title: event.target.value })} />
                 </label>
                 <label className="field">
                   <span>Время уровня (мин.) *</span>
@@ -738,6 +873,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                   <input type="number" min="0" value={level.hintsCount} onChange={(event) => updateLevel(levelIndex, { hintsCount: event.target.value })} />
                 </label>
               </div>
+              <MediaUploader urls={level.mediaUrls || []} onChange={(urls) => updateLevelMedia(levelIndex, urls)} />
               <div style={{ marginTop: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки</span>
@@ -853,7 +989,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
               )}
             </div>
           ))}
-        </div>
 
         <div className="assoc-form-actions" style={{ position: 'sticky', bottom: 10, background: 'rgba(18,18,18,0.9)', padding: '12px 16px', borderRadius: 12, border: '1px solid #3a3a4a' }}>
           <button type="button" className="btn btn-secondary" onClick={resetForm} disabled={saving}>Отмена</button>

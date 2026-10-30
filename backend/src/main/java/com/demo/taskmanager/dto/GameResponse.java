@@ -14,7 +14,10 @@ import java.util.List;
 public record GameResponse(Long id, String title, LocalDate gameDate, Instant createdAt, boolean active,
                            Long creatorId, String creatorUsername,
                            Double timeLimitMinutes,
-                           String difficulty,
+                           int difficulty,
+                           String description,
+                           String visibility,
+                           List<String> mediaUrls,
                            List<List<String>> columns,
                            List<LevelResponse> levels) {
 
@@ -41,6 +44,9 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 creator == null ? null : creator.getUsername(),
                 game.getTimeLimitMinutes(),
                 game.getDifficulty(),
+                game.getDescription(),
+                game.getVisibility(),
+                game.getMediaUrls() == null ? List.of() : game.getMediaUrls(),
                 columns,
                 levelResponses);
     }
@@ -53,6 +59,7 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             Integer hintsCount,
             Integer orderIndex,
             Integer passThreshold,
+            List<String> mediaUrls,
             List<HintResponse> hints,
             List<List<String>> associationColumns,
             List<QuestionResponse> questions,
@@ -113,7 +120,9 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 }
             }
             return new LevelResponse(level.getId(), level.getTitle(), level.getTimeLimitMinutes(), level.getType(),
-                    level.getHintsCount(), level.getOrderIndex(), level.getPassThreshold(), hints, associationColumns, questions, standardQuestions);
+                    level.getHintsCount(), level.getOrderIndex(), level.getPassThreshold(),
+                    level.getMediaUrls() == null ? List.of() : level.getMediaUrls(),
+                    hints, associationColumns, questions, standardQuestions);
         }
 
         private static com.demo.taskmanager.entity.StandardQuestion toStandardQuestion(GameLevel level,

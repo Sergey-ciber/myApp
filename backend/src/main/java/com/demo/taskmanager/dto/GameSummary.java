@@ -9,7 +9,7 @@ import java.time.LocalDate;
 /** Краткая карточка игры для списка: автор, права и лимит времени. */
 public record GameSummary(Long id, String title, Instant createdAt, boolean active,
                           Long creatorId, String creatorUsername, double timeLimitMinutes,
-                          LocalDate gameDate, int levelsCount, String difficulty) {
+                          LocalDate gameDate, int levelsCount, int difficulty) {
 
     public static GameSummary from(Game game) {
         User creator = game.getCreator();
