@@ -656,6 +656,7 @@ body {
 /* Режим игрока */
 .assoc-player { display: flex; flex-direction: column; gap: 14px; color: #fdfcfc
 }
+.assoc-back-btn { align-self: flex-start; }
 .assoc-player-top {
   display: flex;
   align-items: flex-end;

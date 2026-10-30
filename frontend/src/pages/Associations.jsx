@@ -25,19 +25,15 @@ function writeStored(key, value) {
 }
 
 /**
- * Раздел «Игра в ассоциации»: переключатель режима «Администратор» / «Игрок».
- * Администратор создаёт игру из 31 слова, игрок разгадывает пирамиду.
- *
- * Настройки раздела хранятся под ключами с id пользователя, а прогресс игры
- * живёт только на сервере: при смене пользователя состояние сбрасывается.
+ * Раздел «Игры»: по умолчанию список игр (вкладки «Все игры», «Создать игру»,
+ * «Мои игры», «Зарегистрирован на игры»). Игра открывается только по кнопке «Играть».
  */
 export default function Associations() {
   const { user } = useAuth()
   const userId = user?.id
-  const modeKey = userScopedKey('mode', userId)
   const gameKey = userScopedKey('game', userId)
 
-  const [mode, setMode] = useState(() => (readStored(modeKey) === 'player' ? 'player' : 'admin'))
+  const [mode, setMode] = useState('admin')
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -97,10 +93,6 @@ export default function Associations() {
   }, [userId])
 
   useEffect(() => {
-    writeStored(modeKey, mode)
-  }, [modeKey, mode])
-
-  useEffect(() => {
     if (!selectedGameId || !gameKey) return
     writeStored(gameKey, String(selectedGameId))
   }, [gameKey, selectedGameId])
@@ -110,42 +102,10 @@ export default function Associations() {
     setMode('player')
   }
 
-  /** В режиме игрока всегда нужна существующая игра: активная или первая в списке. */
-  const switchMode = (nextMode) => {
-    if (nextMode === 'player' && games.length > 0) {
-      const exists = games.some((game) => game.id === selectedGameId)
-      if (!exists) {
-        const active = games.find((game) => game.active) || games[0]
-        setSelectedGameId(active.id)
-      }
-    }
-    setMode(nextMode)
-  }
-
   return (
     <div className="page assoc-page">
       <div className="page-header">
         <h1>Игры</h1>
-        <div className="mode-switch" role="tablist" aria-label="Режим игры">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'admin'}
-            className={`mode-btn ${mode === 'admin' ? 'active' : ''}`}
-            onClick={() => switchMode('admin')}
-          >
-            Администратор
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'player'}
-            className={`mode-btn ${mode === 'player' ? 'active' : ''}`}
-            onClick={() => switchMode('player')}
-          >
-            Игрок
-          </button>
-        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -164,6 +124,7 @@ export default function Associations() {
           games={games}
           gameId={selectedGameId}
           onSelectGame={setSelectedGameId}
+          onExit={() => setMode('admin')}
           currentUserId={user?.id}
         />
       )}

@@ -14,7 +14,7 @@ import { formatMinutes, formatTime } from './constants'
  * - После прохождения уровня (или истечения времени уровня) загружается следующий.
  * - После последнего уровня — экран итоговой статистики.
  */
-export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId }) {
+export default function PlayerPanel({ games, gameId, onSelectGame, onExit, currentUserId }) {
   const navigate = useNavigate()
   const [game, setGame] = useState(null)
   const [progress, setProgress] = useState(null)
@@ -132,6 +132,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, currentUserId
 
   return (
     <div className="assoc-player">
+      {onExit && (
+        <button type="button" className="btn btn-secondary assoc-back-btn" onClick={onExit}>
+          ← К списку игр
+        </button>
+      )}
+
       <div className="assoc-player-top">
         <div className="assoc-player-heading">
           <h2 className="assoc-player-title">{game.title}</h2>
