@@ -38,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -259,25 +260,30 @@ public class GameService {
         if (isTimeUp(game, progress)) {
             throw new BadRequestException("Время вышло — подсказки недоступны");
         }
-        int level = progress.getHintLevel();
-        if (level >= MAX_HINT_LEVEL) {
+
+        GameLevel level = currentLevel(game);
+        List<LevelHint> levelHints = level.getHints() == null
+                ? List.of()
+                : level.getHints().stream()
+                    .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
+                    .toList();
+
+        int hintLevel = progress.getHintLevel();
+        if (hintLevel >= levelHints.size()) {
             throw new BadRequestException("Все подсказки уже получены");
         }
 
-        int required = switch (level) {
-            case 0 -> HINT_LEVEL_ONE_SECONDS;
-            case 1 -> HINT_LEVEL_TWO_SECONDS;
-            case 2 -> HINT_LEVEL_THREE_SECONDS;
-            case 3 -> HINT_LEVEL_FOUR_SECONDS;
-            default -> Integer.MAX_VALUE;
-        };
+        LevelHint nextHint = levelHints.get(hintLevel);
+        long requiredSeconds = Math.round(
+                (nextHint.getTriggerTime() == null ? 0 : nextHint.getTriggerTime()) * 60);
+
         long elapsed = elapsedSeconds(progress);
-        if (elapsed < required) {
+        if (elapsed < requiredSeconds) {
             throw new BadRequestException("Подсказка будет доступна через "
-                    + (required - elapsed) + " с");
+                    + (requiredSeconds - elapsed) + " с");
         }
 
-        int newLevel = level + 1;
+        int newLevel = hintLevel + 1;
         Map<String, String> solved = parseSolved(progress);
         // Найдём доступные поля: колонка >=2, не разгадано, оба родителя из предыдущей колонки разгаданы
         java.util.List<GameWord> availableWords = new java.util.ArrayList<>();
@@ -753,6 +759,15 @@ public class GameService {
     private Game findGame(Long id) {
         return gameRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Игра не найдена"));
+    }
+
+    /** Текущий уровень игры: первый по порядку. */
+    private GameLevel currentLevel(Game game) {
+        return game.getLevels() == null ? null : game.getLevels().stream()
+                .filter(level -> level != null)
+                .sorted(Comparator.comparingInt(GameLevel::getOrderIndex))
+                .findFirst()
+                .orElse(null);
     }
 
     /** Редактировать и удалять игру может только её создатель. */

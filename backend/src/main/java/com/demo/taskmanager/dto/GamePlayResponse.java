@@ -3,9 +3,10 @@ package com.demo.taskmanager.dto;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameLevel;
 import com.demo.taskmanager.entity.GameWord;
-import com.demo.taskmanager.entity.User;
+import com.demo.taskmanager.entity.LevelHint;
 import com.demo.taskmanager.entity.LevelType;
 import com.demo.taskmanager.entity.StandardQuestion;
+import com.demo.taskmanager.entity.User;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -21,12 +22,13 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
                                Long creatorId, String creatorUsername,
                                double timeLimitMinutes, List<String> startWords,
                                Long levelId, LevelType levelType, Integer passThreshold,
-                               List<GameQuestionViewResponse> questions) {
+                               List<GameQuestionViewResponse> questions,
+                               List<Double> hintTriggerMinutes) {
 
     public GamePlayResponse(Long id, String title, Instant createdAt, boolean active,
                             Long creatorId, String creatorUsername,
                             double timeLimitMinutes, List<String> startWords) {
-        this(id, title, createdAt, active, creatorId, creatorUsername, timeLimitMinutes, startWords, null, null, null, List.of());
+        this(id, title, createdAt, active, creatorId, creatorUsername, timeLimitMinutes, startWords, null, null, null, List.of(), List.of());
     }
 
     public static GamePlayResponse from(Game game) {
@@ -38,6 +40,12 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
         User creator = game.getCreator();
         GameLevel level = currentLevel(game);
         List<GameQuestionViewResponse> questions = level == null ? List.of() : questionsOf(level);
+        List<Double> hintTriggerMinutes = level == null || level.getHints() == null
+                ? List.of()
+                : level.getHints().stream()
+                    .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
+                    .map(LevelHint::getTriggerTime)
+                    .toList();
         return new GamePlayResponse(game.getId(), game.getTitle(), game.getCreatedAt(), game.isActive(),
                 creator == null ? null : creator.getId(),
                 creator == null ? null : creator.getUsername(),
@@ -46,7 +54,8 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
                 level == null ? null : level.getId(),
                 level == null ? null : level.getType(),
                 level == null ? null : level.getPassThreshold(),
-                questions);
+                questions,
+                hintTriggerMinutes);
     }
 
     /** Текущий уровень игры: первый по порядку (обычно это и есть единственный уровень). */

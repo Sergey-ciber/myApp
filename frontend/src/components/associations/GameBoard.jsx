@@ -7,12 +7,6 @@ import { checkAnswer, requestHint, requestTimeout, restartGame } from '../../api
 import { COLUMN_SIZES, COLUMN_SPANS, formatMinutes, formatTime, toPairs } from './constants'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
-/** Подсказки открываются по серверному таймеру: 3, 6, 9, 12 минут после старта. */
-const HINT_ONE_SECONDS = 180
-const HINT_TWO_SECONDS = 360
-const HINT_THREE_SECONDS = 540
-const HINT_FOUR_SECONDS = 720
-const MAX_HINT_LEVEL = 4
 
 const emptyValues = () => COLUMN_SIZES.map((size) => Array(size).fill(''))
 
@@ -159,16 +153,12 @@ export default function GameBoard({
     return hintPrefixes[cellKey(columnIndex, position)] || ''
   }
 
-  // ближайшая подсказка: первая на 180-й секунде, вторая — на 360-й, третья — на 540-й, четвёртая — на 720-й
-  const nextHintAt = hintLevel >= MAX_HINT_LEVEL
+  // время до каждой подсказки берётся из настроек уровня (triggerTime, в минутах)
+  const hintTriggerMinutes = game.hintTriggerMinutes || []
+  const maxHintLevel = hintTriggerMinutes.length
+  const nextHintAt = hintLevel >= maxHintLevel
     ? null
-    : (hintLevel === 0
-      ? HINT_ONE_SECONDS
-      : hintLevel === 1
-        ? HINT_TWO_SECONDS
-        : hintLevel === 2
-          ? HINT_THREE_SECONDS
-          : HINT_FOUR_SECONDS)
+    : Math.round(Number(hintTriggerMinutes[hintLevel]) * 60)
   const hintAvailable = gameStarted && !timeUp && finishedTime == null && nextHintAt != null
     && nextHintAt < limitSeconds && elapsed >= nextHintAt
   const hintSecondsLeft = nextHintAt == null ? 0 : Math.max(0, nextHintAt - elapsed)
@@ -404,7 +394,7 @@ export default function GameBoard({
       const nextPrefixes = fresh?.hintPrefixes || {}
       const nextSolved = fresh?.solved || {}
       setSolved(nextSolved)
-      setHintLevel(fresh?.hintLevel ?? Math.min(MAX_HINT_LEVEL, hintLevel + 1))
+      setHintLevel(fresh?.hintLevel ?? Math.min(maxHintLevel, hintLevel + 1))
       setHintPrefixes(nextPrefixes)
       setValues((prev) => prev.map((words, c) => words.map((word, p) => {
         if (c === 0 || nextSolved[cellKey(c, p)]) return word
