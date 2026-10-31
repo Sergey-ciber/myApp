@@ -48,6 +48,19 @@ export default function NormalLevelBoard({
 
   const currentQuestion = questions[currentQuestionIndex]
   const solvedCount = questions.filter((q) => isQuestionSolved(solved, q)).length
+  const guessedWords = useMemo(() => {
+    if (!currentQuestion) return []
+    const list = []
+    Object.keys(solved || {}).forEach((k) => {
+      if (k.startsWith(questionPrefix(currentQuestion))) {
+        const text = (solved[k] || '').trim()
+        if (text && !list.some((w) => w.toLowerCase() === text.toLowerCase())) {
+          list.push(text)
+        }
+      }
+    })
+    return list
+  }, [solved, currentQuestion])
   const netElapsed = Math.max(0, Math.floor((now - levelStartedAt.current) / 1000))
   const remainingSeconds = Math.max(0, limitSeconds - netElapsed)
 
@@ -345,6 +358,18 @@ export default function NormalLevelBoard({
             <div className="alert alert-success">
               Правильно! Ответ принят:{' '}
               <span style={{ color: 'var(--success)', fontWeight: 700 }}>{acceptedAnswer}</span>
+            </div>
+          )}
+
+          {/* Список угаданных слов */}
+          {guessedWords.length > 0 && (
+            <div className="assoc-normal-guessed">
+              <div className="assoc-normal-guessed-title">Угаданные слова</div>
+              <ul className="assoc-normal-guessed-list">
+                {guessedWords.map((w, idx) => (
+                  <li key={idx} className="assoc-normal-guessed-item">{w}</li>
+                ))}
+              </ul>
             </div>
           )}
 
