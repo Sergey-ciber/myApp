@@ -46,7 +46,7 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 game.getDifficulty(),
                 game.getDescription(),
                 game.getVisibility(),
-                game.getMediaUrls() == null ? List.of() : game.getMediaUrls(),
+                game.getMediaUrls() == null ? List.of() : List.copyOf(game.getMediaUrls()),
                 columns,
                 levelResponses);
     }
@@ -58,7 +58,6 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             LevelType type,
             Integer hintsCount,
             Integer orderIndex,
-            Integer passThreshold,
             List<String> mediaUrls,
             List<HintResponse> hints,
             List<List<String>> associationColumns,
@@ -99,7 +98,8 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                             }
                         }
                     }
-                    questions.add(new QuestionResponse(q.getId(), q.getQuestionText(), answers, q.getOrderIndex()));
+                    questions.add(new QuestionResponse(q.getId(), q.getQuestionText(), answers, q.getOrderIndex(),
+                            q.getMediaUrls() == null ? List.of() : List.copyOf(q.getMediaUrls()), q.getPassThreshold()));
                 }
             } else {
                 questions = level.getQuestions() == null ? List.of() : level.getQuestions().stream()
@@ -120,8 +120,8 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
                 }
             }
             return new LevelResponse(level.getId(), level.getTitle(), level.getTimeLimitMinutes(), level.getType(),
-                    level.getHintsCount(), level.getOrderIndex(), level.getPassThreshold(),
-                    level.getMediaUrls() == null ? List.of() : level.getMediaUrls(),
+                    level.getHintsCount(), level.getOrderIndex(),
+                    level.getMediaUrls() == null ? List.of() : List.copyOf(level.getMediaUrls()),
                     hints, associationColumns, questions, standardQuestions);
         }
 
@@ -141,26 +141,27 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
         }
     }
 
-    public record HintResponse(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex) {
+    public record HintResponse(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex, Long questionId, List<String> mediaUrls) {
         public static HintResponse from(com.demo.taskmanager.entity.LevelHint hint) {
-            return new HintResponse(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(), hint.getPenaltyTime(), hint.getOrderIndex());
+            return new HintResponse(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(), hint.getPenaltyTime(), hint.getOrderIndex(), hint.getQuestion() == null ? null : hint.getQuestion().getId(), hint.getMediaUrls() == null ? List.of() : List.copyOf(hint.getMediaUrls()));
         }
     }
 
-    public record QuestionResponse(Long id, String question, List<String> answers, Integer orderIndex) {
+    public record QuestionResponse(Long id, String question, List<String> answers, Integer orderIndex, List<String> mediaUrls, Integer passThreshold) {
         public static QuestionResponse from(com.demo.taskmanager.entity.LevelQuestion question) {
             return new QuestionResponse(question.getId(), question.getQuestion(), question.getAnswer() == null
-                    ? List.of() : List.of(question.getAnswer()), question.getOrderIndex());
+                    ? List.of() : List.of(question.getAnswer()), question.getOrderIndex(), List.of(), null);
         }
     }
 
-    public record StandardQuestionResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> answers) {
+    public record StandardQuestionResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> answers, List<String> mediaUrls, Integer passThreshold) {
         public static StandardQuestionResponse from(StandardQuestion question) {
             List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
                     .map(StandardAnswer::getAnswerText)
                     .filter(a -> a != null && !a.trim().isEmpty())
                     .toList();
-            return new StandardQuestionResponse(question.getId(), question.getQuestionText(), question.getMediaType(), question.getMediaUrl(), question.getOrderIndex(), answers);
+            List<String> mediaUrls = question.getMediaUrls() == null ? List.of() : List.copyOf(question.getMediaUrls());
+            return new StandardQuestionResponse(question.getId(), question.getQuestionText(), question.getMediaType(), question.getMediaUrl(), question.getOrderIndex(), answers, mediaUrls, question.getPassThreshold());
         }
     }
 }

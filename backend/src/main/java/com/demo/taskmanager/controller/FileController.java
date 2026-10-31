@@ -45,6 +45,11 @@ public class FileController {
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return MediaType.IMAGE_JPEG;
         if (lower.endsWith(".gif")) return MediaType.IMAGE_GIF;
         if (lower.endsWith(".webp")) return MediaType.parseMediaType("image/webp");
+        if (lower.endsWith(".mp3")) return MediaType.parseMediaType("audio/mpeg");
+        if (lower.endsWith(".wav")) return MediaType.parseMediaType("audio/wav");
+        if (lower.endsWith(".ogg")) return MediaType.parseMediaType("audio/ogg");
+        if (lower.endsWith(".mp4")) return MediaType.parseMediaType("video/mp4");
+        if (lower.endsWith(".webm")) return MediaType.parseMediaType("video/webm");
         return MediaType.IMAGE_PNG;
     }
 }

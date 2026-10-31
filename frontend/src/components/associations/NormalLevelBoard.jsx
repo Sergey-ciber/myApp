@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Modal from '../Modal'
 import { apiMessage } from '../../api/client'
 import { checkAnswer, revealQuestionHint } from '../../api/games'
 import { formatTime } from './constants'
@@ -15,10 +14,17 @@ export default function NormalLevelBoard({
 }) {
   const questions = useMemo(() => level.questions || [], [level.questions])
   const hints = useMemo(() => level.hints || [], [level.hints])
-  const passThreshold = Number(level.passThreshold) > 0 ? Number(level.passThreshold) : questions.length
   const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
 
   const questionKey = (q) => `l${level.id}:q${q.id}`
+  const questionPrefix = (q) => `${questionKey(q)}:`
+  const matchedCount = (solvedMap, q) =>
+    Object.keys(solvedMap || {}).filter((k) => k.startsWith(questionPrefix(q))).length
+  const effectiveThreshold = (q) => {
+    const t = Number(q.passThreshold)
+    return t > 0 ? t : 1
+  }
+  const isQuestionSolved = (solvedMap, q) => matchedCount(solvedMap, q) >= effectiveThreshold(q)
 
   const [solved, setSolved] = useState(() => progress?.solved || {})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -27,7 +33,8 @@ export default function NormalLevelBoard({
   const [actionError, setActionError] = useState('')
   const [penaltySeconds, setPenaltySeconds] = useState(0)
   const [timeUp, setTimeUp] = useState(false)
-  const [hintModal, setHintModal] = useState(null)
+  // содержимое использованных подсказок: { [questionId]: { [hintIndex]: content } }
+  const [hintContents, setHintContents] = useState({})
 
   const levelStartedAt = useRef(Date.now())
   const [now, setNow] = useState(Date.now())
@@ -38,7 +45,7 @@ export default function NormalLevelBoard({
   const [usedHints, setUsedHints] = useState({})
 
   const currentQuestion = questions[currentQuestionIndex]
-  const solvedCount = questions.filter((q) => solved[questionKey(q)]).length
+  const solvedCount = questions.filter((q) => isQuestionSolved(solved, q)).length
   const netElapsed = Math.max(0, Math.floor((now - levelStartedAt.current) / 1000))
   const remainingSeconds = Math.max(0, limitSeconds - netElapsed)
 
@@ -70,9 +77,9 @@ export default function NormalLevelBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netElapsed, limitSeconds])
 
-  // если порог уже достигнут (восстановление прогресса) — сразу завершаем уровень
+  // если все вопросы уже разгаданы (восстановление прогресса) — сразу завершаем уровень
   useEffect(() => {
-    if (questions.length > 0 && solvedCount >= passThreshold) {
+    if (questions.length > 0 && questions.every((q) => isQuestionSolved(solved, q))) {
       completeLevel({ netTime: 0, penaltyTime: 0, timedOut: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,16 +98,18 @@ export default function NormalLevelBoard({
       setSolved(nextSolved)
       if (result.correct) {
         setActionError('')
-        const nextCount = questions.filter((q) => nextSolved[questionKey(q)]).length
-        if (nextCount >= passThreshold) {
-          completeLevel({ netTime: netElapsed, penaltyTime: penaltySeconds, timedOut: false })
-        } else {
-          // переходим к следующему нерешённому вопросу
-          const nextIndex = questions.findIndex((q) => !nextSolved[questionKey(q)])
+        // очищаем ввод для следующего варианта ответа
+        setAnswers((prev) => ({ ...prev, [question.id]: '' }))
+        if (isQuestionSolved(nextSolved, question)) {
+          // вопрос разгадан — переходим к следующему неразгаданному или завершаем уровень
+          const nextIndex = questions.findIndex((q) => !isQuestionSolved(nextSolved, q))
           if (nextIndex >= 0) {
             setCurrentQuestionIndex(nextIndex)
+          } else {
+            completeLevel({ netTime: netElapsed, penaltyTime: penaltySeconds, timedOut: false })
           }
         }
+        // иначе остаёмся на том же вопросе: нужно дать ещё варианты ответа
       } else {
         setActionError('Неверный ответ. Попробуйте ещё раз.')
       }
@@ -138,7 +147,13 @@ export default function NormalLevelBoard({
       content = { text: hint.text, imageUrl: hint.imageUrl }
     }
 
-    setHintModal({ hintIndex, hint, content })
+    setHintContents((prev) => ({
+      ...prev,
+      [question.id]: {
+        ...(prev[question.id] || {}),
+        [hintIndex]: content,
+      },
+    }))
     setUsedHints((prev) => ({
       ...prev,
       [question.id]: [...(prev[question.id] || []), hintIndex],
@@ -170,7 +185,7 @@ export default function NormalLevelBoard({
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
           Уровень «{level.title}». Время: <strong>{formatTime(remainingSeconds)}</strong>{' '}
-          Дайте {passThreshold} из {questions.length} правильных ответов.
+          Разгадайте все {questions.length} {questions.length === 1 ? 'вопрос' : 'вопросов'}.
         </p>
         <div className="assoc-timer" role="timer" aria-live={timerCritical ? 'polite' : 'off'}>
           <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
@@ -178,6 +193,24 @@ export default function NormalLevelBoard({
           <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>
         </div>
       </div>
+
+      {level.mediaUrls?.length > 0 && (
+        <div className="assoc-level-media">
+          {level.mediaUrls.map((url, idx) => {
+            const lower = (url || '').toLowerCase()
+            if (/\.(mp4|webm|m4v|mov)(\?|$)/.test(lower)) {
+              return <video key={idx} controls src={url} />
+            }
+            if (/\.(mp3|wav|ogg|m4a)(\?|$)/.test(lower)) {
+              return <audio key={idx} controls src={url} />
+            }
+            if (/\.(png|jpg|jpeg|gif|webp)(\?|$)/.test(lower)) {
+              return <img key={idx} src={url} alt="Медиа к уровню" />
+            }
+            return null
+          })}
+        </div>
+      )}
 
       {actionError && <div className="alert alert-error">{actionError}</div>}
 
@@ -194,28 +227,39 @@ export default function NormalLevelBoard({
                 >
                   {questions.map((q, index) => (
                     <option key={q.id} value={index}>
-                      Вопрос {index + 1}{solved[questionKey(q)] ? ' ✓' : ''}
+                      Вопрос {index + 1}{isQuestionSolved(solved, q) ? ' ✓' : ''}
                     </option>
                   ))}
                 </select>
               </label>
               <span className="assoc-normal-indicator">Вопрос {currentQuestionIndex + 1} из {questions.length}</span>
               <span className="assoc-normal-indicator">Правильно: {solvedCount} из {questions.length}</span>
+              {currentQuestion && (
+                <span className="assoc-normal-indicator">
+                  Текущий: {matchedCount(solved, currentQuestion)} из {effectiveThreshold(currentQuestion)} ответов
+                </span>
+              )}
             </div>
           )}
 
           {/* Блок вопроса */}
-          {currentQuestion?.mediaType && currentQuestion?.mediaUrl ? (
+          {(currentQuestion?.mediaUrls?.length > 0 || (currentQuestion?.mediaType && currentQuestion?.mediaUrl)) && (
             <div className="assoc-normal-media">
-              {currentQuestion.mediaType === 'image' ? (
-                <img src={currentQuestion.mediaUrl} alt="Изображение к вопросу" />
-              ) : currentQuestion.mediaType === 'audio' ? (
-                <audio controls src={currentQuestion.mediaUrl} />
-              ) : currentQuestion.mediaType === 'video' ? (
-                <video controls src={currentQuestion.mediaUrl} />
-              ) : null}
+              {(currentQuestion.mediaUrls?.length > 0 ? currentQuestion.mediaUrls : [currentQuestion.mediaUrl]).map((url, idx) => {
+                const lower = (url || '').toLowerCase()
+                if (lower.match(/\.(mp4|webm|ogg)(\?|$)/)) {
+                  return <video key={idx} controls src={url} />
+                }
+                if (lower.match(/\.(mp3|wav|ogg)(\?|$)/)) {
+                  return <audio key={idx} controls src={url} />
+                }
+                if (lower.match(/\.(png|jpg|jpeg|gif|webp)(\?|$)/) || currentQuestion.mediaType === 'image') {
+                  return <img key={idx} src={url} alt="Изображение к вопросу" />
+                }
+                return null
+              })}
             </div>
-          ) : null}
+          )}
 
           <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
 
@@ -225,10 +269,33 @@ export default function NormalLevelBoard({
             {hints.length === 0 && <p className="assoc-normal-hints-empty">Подсказки не настроены</p>}
             {hints.map((hint, hintIndex) => {
               const state = hintState(hintIndex)
+              const content = hintContents[currentQuestion?.id]?.[hintIndex]
               return (
                 <div key={hint.id ?? hintIndex} className="assoc-normal-hint">
                   {state.type === 'used' ? (
-                    <span className="assoc-normal-hint-used">{HINT_NAMES[hintIndex] || `Подсказка ${hintIndex + 1}`} — использована</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span className="assoc-normal-hint-used">{HINT_NAMES[hintIndex] || `Подсказка ${hintIndex + 1}`} — использована</span>
+                      {content?.firstLetter && (
+                        <span className="assoc-normal-hint-letter">Первая буква ответа: <strong>{content.firstLetter}</strong></span>
+                      )}
+                      {hint.type !== 'FIRST_LETTER' && content?.text && <p style={{ margin: 0 }}>{content.text}</p>}
+                      {hint.type !== 'FIRST_LETTER' && content?.imageUrl && (
+                        <img src={content.imageUrl} alt="Подсказка" className="assoc-normal-hint-img" />
+                      )}
+                      {(hint.mediaUrls || []).map((url, i) => {
+                        const lower = (url || '').toLowerCase()
+                        if (/\.(mp4|webm|m4v|mov)(\?|$)/.test(lower)) {
+                          return <video key={`m${i}`} src={url} controls className="assoc-normal-hint-img" />
+                        }
+                        if (/\.(mp3|wav|ogg|m4a)(\?|$)/.test(lower)) {
+                          return <audio key={`m${i}`} src={url} controls style={{ width: '100%', maxWidth: 420 }} />
+                        }
+                        if (/\.(png|jpg|jpeg|gif|webp)(\?|$)/.test(lower)) {
+                          return <img key={`m${i}`} src={url} alt="Подсказка" className="assoc-normal-hint-img" />
+                        }
+                        return null
+                      })}
+                    </div>
                   ) : state.type === 'available' ? (
                     <button type="button" className="assoc-hint-btn" onClick={() => useHint(hintIndex)}>
                       💡 {HINT_NAMES[hintIndex] || `Подсказка ${hintIndex + 1}`}
@@ -271,28 +338,7 @@ export default function NormalLevelBoard({
         </div>
       </div>
 
-      {hintModal && (
-        <Modal title={hintModal.hint.type === 'FIRST_LETTER' ? 'Первая буква' : 'Подсказка'} onClose={() => setHintModal(null)}>
-          <div className="assoc-normal-hint-modal">
-            {hintModal.hint.type === 'FIRST_LETTER' && hintModal.content?.firstLetter ? (
-              <p className="assoc-normal-hint-letter">
-                Первая буква ответа: <strong>{hintModal.content.firstLetter}</strong>
-              </p>
-            ) : null}
-            {hintModal.hint.type !== 'FIRST_LETTER' && hintModal.content?.text ? (
-              <p>{hintModal.content.text}</p>
-            ) : null}
-            {hintModal.hint.type !== 'FIRST_LETTER' && hintModal.content?.imageUrl ? (
-              <img src={hintModal.content.imageUrl} alt="Подсказка" className="assoc-normal-hint-img" />
-            ) : null}
-            <div className="form-actions">
-              <button type="button" className="btn btn-primary" onClick={() => setHintModal(null)}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+
     </div>
   )
 }

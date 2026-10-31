@@ -11,6 +11,7 @@ import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.User;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -21,19 +22,14 @@ import java.util.List;
  * Для уровня типа «Обычный» отдаются только сам вопрос (без правильных ответов),
  * порог прохождения и подсказки.
  */
-public record GamePlayResponse(Long id, String title, Instant createdAt, boolean active,
+public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instant createdAt, boolean active,
                                Long creatorId, String creatorUsername,
-                               double timeLimitMinutes, List<String> startWords,
-                               Long levelId, LevelType levelType, Integer passThreshold,
+                               double timeLimitMinutes, int difficulty, String description, List<String> mediaUrls,
+                               List<String> startWords,
+                               Long levelId, LevelType levelType,
                                List<GameQuestionViewResponse> questions,
                                List<Double> hintTriggerMinutes,
                                List<GameLevelView> levels) {
-
-    public GamePlayResponse(Long id, String title, Instant createdAt, boolean active,
-                            Long creatorId, String creatorUsername,
-                            double timeLimitMinutes, List<String> startWords) {
-        this(id, title, createdAt, active, creatorId, creatorUsername, timeLimitMinutes, startWords, null, null, null, List.of(), List.of(), List.of());
-    }
 
     public static GamePlayResponse from(Game game) {
         List<String> startWords = game.getWords().stream()
@@ -57,14 +53,16 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
                     .sorted(Comparator.comparingInt(GameLevel::getOrderIndex))
                     .map(GameLevelView::from)
                     .toList();
-        return new GamePlayResponse(game.getId(), game.getTitle(), game.getCreatedAt(), game.isActive(),
+        return new GamePlayResponse(game.getId(), game.getTitle(), game.getGameDate(), game.getCreatedAt(), game.isActive(),
                 creator == null ? null : creator.getId(),
                 creator == null ? null : creator.getUsername(),
                 game.getTimeLimitMinutes(),
+                game.getDifficulty(),
+                game.getDescription(),
+                game.getMediaUrls() == null ? List.of() : List.copyOf(game.getMediaUrls()),
                 startWords,
                 level == null ? null : level.getId(),
                 level == null ? null : level.getType(),
-                level == null ? null : level.getPassThreshold(),
                 questions,
                 hintTriggerMinutes,
                 levels);
@@ -88,22 +86,31 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
             }
         } else if (level.getQuestions() != null) {
             for (com.demo.taskmanager.entity.LevelQuestion q : level.getQuestions()) {
-                result.add(new GameQuestionViewResponse(q.getId(), q.getQuestion(), null, null, q.getOrderIndex()));
+                result.add(new GameQuestionViewResponse(q.getId(), q.getQuestion(), null, null, q.getOrderIndex(), List.of(), null));
             }
         }
         return result;
     }
 
-    public record GameQuestionViewResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex) {
+    public record GameQuestionViewResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> mediaUrls, Integer passThreshold) {
         public static GameQuestionViewResponse from(StandardQuestion question) {
+            List<String> mediaUrls = question.getMediaUrls() == null
+                    ? List.of()
+                    : List.copyOf(question.getMediaUrls());
+            int answersCount = question.getAnswers() == null ? 0 : question.getAnswers().size();
+            Integer passThreshold = question.getPassThreshold();
+            if (passThreshold == null || passThreshold <= 0) {
+                passThreshold = Math.max(1, answersCount);
+            }
             return new GameQuestionViewResponse(question.getId(), question.getQuestionText(), question.getMediaType(),
-                    question.getMediaUrl(), question.getOrderIndex());
+                    question.getMediaUrl(), question.getOrderIndex(), mediaUrls, passThreshold);
         }
     }
 
     /** Полное описание уровня для игрока (без правильных ответов). */
-    public record GameLevelView(Long id, String title, LevelType type, double timeLimitMinutes, Integer passThreshold,
-                                List<GameHintView> hints, List<GameQuestionViewResponse> questions, List<String> startWords) {
+    public record GameLevelView(Long id, String title, LevelType type, double timeLimitMinutes,
+                                List<GameHintView> hints, List<GameQuestionViewResponse> questions, List<String> startWords,
+                                List<String> mediaUrls) {
         public static GameLevelView from(GameLevel level) {
             List<GameHintView> hints = level.getHints() == null
                     ? List.of()
@@ -119,15 +126,16 @@ public record GamePlayResponse(Long id, String title, Instant createdAt, boolean
                         .map(LevelWord::getWord)
                         .toList()
                     : List.of();
+            List<String> mediaUrls = level.getMediaUrls() == null ? List.of() : List.copyOf(level.getMediaUrls());
             return new GameLevelView(level.getId(), level.getTitle(), level.getType(), level.getTimeLimitMinutes(),
-                    level.getPassThreshold(), hints, questions, startWords);
+                    hints, questions, startWords, mediaUrls);
         }
     }
 
-    public record GameHintView(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex) {
+    public record GameHintView(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex, List<String> mediaUrls) {
         public static GameHintView from(LevelHint hint) {
             return new GameHintView(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(),
-                    hint.getPenaltyTime(), hint.getOrderIndex());
+                    hint.getPenaltyTime(), hint.getOrderIndex(), hint.getMediaUrls() == null ? List.of() : List.copyOf(hint.getMediaUrls()));
         }
     }
 }

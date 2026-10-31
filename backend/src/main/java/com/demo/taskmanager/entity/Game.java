@@ -51,8 +51,8 @@ public class Game {
     private Double timeLimitMinutes = 10.0;
 
     /** Сложность игры: от 1 до 5 (звёзды). */
-    @Column(nullable = false, columnDefinition = "integer default 3")
-    private int difficulty = 3;
+    @Column(columnDefinition = "integer default 3")
+    private Integer difficulty = 3;
 
     /** Создатель игры: только он может редактировать и удалять её. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -116,8 +116,9 @@ public class Game {
     public Double getTimeLimitMinutes() { return timeLimitMinutes; }
     public void setTimeLimitMinutes(Double timeLimitMinutes) { this.timeLimitMinutes = timeLimitMinutes; }
 
-    public int getDifficulty() { return difficulty; }
+    public int getDifficulty() { return difficulty == null ? 3 : difficulty; }
     public void setDifficulty(int difficulty) { this.difficulty = difficulty; }
+    public void setDifficulty(Integer difficulty) { this.difficulty = difficulty; }
 
     public User getCreator() { return creator; }
     public void setCreator(User creator) { this.creator = creator; }

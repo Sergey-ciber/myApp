@@ -111,6 +111,30 @@ public class GameService {
     public GameResponse getGameForEdit(Long id, User user) {
         Game game = findGame(id);
         requireCreator(game, user);
+        if (game.getMediaUrls() != null) game.getMediaUrls().size();
+        if (game.getLevels() != null) {
+            game.getLevels().forEach(level -> {
+                if (level.getMediaUrls() != null) level.getMediaUrls().size();
+                if (level.getHints() != null) {
+                    level.getHints().forEach(hint -> {
+                        if (hint.getMediaUrls() != null) hint.getMediaUrls().size();
+                        if (hint.getQuestion() != null) {
+                            hint.getQuestion().getId();
+                            if (hint.getQuestion().getMediaUrls() != null) hint.getQuestion().getMediaUrls().size();
+                            if (hint.getQuestion().getAnswers() != null) hint.getQuestion().getAnswers().size();
+                        }
+                    });
+                }
+                if (level.getStandardQuestions() != null) {
+                    level.getStandardQuestions().forEach(q -> {
+                        if (q.getAnswers() != null) q.getAnswers().size();
+                        if (q.getMediaUrls() != null) q.getMediaUrls().size();
+                    });
+                }
+                if (level.getQuestions() != null) level.getQuestions().size();
+                if (level.getWords() != null) level.getWords().size();
+            });
+        }
         return GameResponse.from(game);
     }
 
@@ -185,25 +209,25 @@ public class GameService {
         }
         UserProgress progress = findOrCreateProgress(game, user);
 
-        List<String> answers = question.getAnswers() == null ? List.of() : question.getAnswers().stream()
-                .map(StandardAnswer::getAnswerText)
-                .map(String::trim)
-                .filter(text -> !text.isEmpty())
-                .toList();
         String normalizedAnswer = normalize(request.answer());
-        String matched = null;
-        for (String answer : answers) {
-            if (normalize(answer).equals(normalizedAnswer)) {
-                matched = answer;
-                break;
+        StandardAnswer matchedAnswer = null;
+        if (question.getAnswers() != null) {
+            for (StandardAnswer a : question.getAnswers()) {
+                String text = a.getAnswerText() == null ? "" : a.getAnswerText().trim();
+                if (!text.isEmpty() && normalize(text).equals(normalizedAnswer)) {
+                    matchedAnswer = a;
+                    break;
+                }
             }
         }
-        boolean correct = matched != null;
+        boolean correct = matchedAnswer != null;
 
         if (correct) {
-            String key = "l" + question.getLevel().getId() + ":q" + question.getId();
+            // Каждый разгаданный вариант ответа хранится отдельным ключом,
+            // чтобы можно было считать, сколько вариантов уже дано по вопросу.
+            String key = "l" + question.getLevel().getId() + ":q" + question.getId() + ":a" + matchedAnswer.getId();
             Map<String, String> solved = parseSolved(progress);
-            solved.put(key, matched);
+            solved.put(key, matchedAnswer.getAnswerText());
             writeSolved(progress, solved);
             Map<String, String> prefixes = parsePrefixes(progress);
             if (prefixes.remove(key) != null) {
@@ -416,9 +440,11 @@ public class GameService {
                 level.setType(lr.type());
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
-                level.setPassThreshold(lr.passThreshold());
                 level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
                 game.getLevels().add(level);
+
+                // Индекс вопроса для каждой подсказки обычного уровня — связываем после создания вопросов.
+                java.util.Map<LevelHint, Integer> hintQuestionIndexes = new java.util.HashMap<>();
 
                 if (lr.hints() != null) {
                     for (int h = 0; h < lr.hints().size(); h++) {
@@ -435,6 +461,10 @@ public class GameService {
                         hint.setTriggerTime(hr.triggerTime());
                         hint.setPenaltyTime(hr.penaltyTime());
                         hint.setOrderIndex(h);
+                        hint.setMediaUrls(normalizeMediaUrls(hr.mediaUrls()));
+                        if (hr.questionIndex() != null) {
+                            hintQuestionIndexes.put(hint, hr.questionIndex());
+                        }
                         level.getHints().add(hint);
                     }
                 }
@@ -468,7 +498,7 @@ public class GameService {
                         for (int q = 0; q < lr.questions().size(); q++) {
                             GameRequest.QuestionRequest qr = lr.questions().get(q);
                             if (qr == null) continue;
-                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers());
+                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers(), qr.mediaUrls(), qr.passThreshold());
                             standardQuestions.add(sq);
                             questionIndexes.add(q);
                         }
@@ -498,6 +528,11 @@ public class GameService {
                         standardQuestion.setMediaType(sq.mediaType());
                         standardQuestion.setMediaUrl(sq.mediaUrl());
                         standardQuestion.setOrderIndex(q);
+                        Integer passThreshold = sq.passThreshold();
+                        if (passThreshold == null || passThreshold <= 0 || passThreshold > answers.size()) {
+                            passThreshold = answers.size();
+                        }
+                        standardQuestion.setPassThreshold(passThreshold);
                         for (String answer : answers) {
                             StandardAnswer standardAnswer = new StandardAnswer();
                             standardAnswer.setQuestion(standardQuestion);
@@ -505,6 +540,12 @@ public class GameService {
                             standardQuestion.getAnswers().add(standardAnswer);
                         }
                         level.getStandardQuestions().add(standardQuestion);
+                    }
+                    for (LevelHint hint : level.getHints()) {
+                        Integer qi = hintQuestionIndexes.get(hint);
+                        if (qi != null && qi >= 0 && qi < level.getStandardQuestions().size()) {
+                            hint.setQuestion(level.getStandardQuestions().get(qi));
+                        }
                     }
                 }
             }
@@ -573,9 +614,11 @@ public class GameService {
                 level.setType(lr.type());
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
-                level.setPassThreshold(lr.passThreshold());
                 level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
                 game.getLevels().add(level);
+
+                // Индекс вопроса для каждой подсказки обычного уровня — связываем после создания вопросов.
+                java.util.Map<LevelHint, Integer> hintQuestionIndexes = new java.util.HashMap<>();
 
                 if (lr.hints() != null) {
                     for (int h = 0; h < lr.hints().size(); h++) {
@@ -592,6 +635,10 @@ public class GameService {
                         hint.setTriggerTime(hr.triggerTime());
                         hint.setPenaltyTime(hr.penaltyTime());
                         hint.setOrderIndex(h);
+                        hint.setMediaUrls(normalizeMediaUrls(hr.mediaUrls()));
+                        if (hr.questionIndex() != null) {
+                            hintQuestionIndexes.put(hint, hr.questionIndex());
+                        }
                         level.getHints().add(hint);
                     }
                 }
@@ -625,7 +672,7 @@ public class GameService {
                         for (int q = 0; q < lr.questions().size(); q++) {
                             GameRequest.QuestionRequest qr = lr.questions().get(q);
                             if (qr == null) continue;
-                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers());
+                            GameRequest.StandardQuestionRequest sq = new GameRequest.StandardQuestionRequest(qr.question(), null, null, qr.answers(), qr.mediaUrls(), qr.passThreshold());
                             standardQuestions.add(sq);
                             questionIndexes.add(q);
                         }
@@ -655,6 +702,11 @@ public class GameService {
                         standardQuestion.setMediaType(sq.mediaType());
                         standardQuestion.setMediaUrl(sq.mediaUrl());
                         standardQuestion.setOrderIndex(q);
+                        Integer passThreshold = sq.passThreshold();
+                        if (passThreshold == null || passThreshold <= 0 || passThreshold > answers.size()) {
+                            passThreshold = answers.size();
+                        }
+                        standardQuestion.setPassThreshold(passThreshold);
                         for (String answer : answers) {
                             StandardAnswer standardAnswer = new StandardAnswer();
                             standardAnswer.setQuestion(standardQuestion);
@@ -662,6 +714,12 @@ public class GameService {
                             standardQuestion.getAnswers().add(standardAnswer);
                         }
                         level.getStandardQuestions().add(standardQuestion);
+                    }
+                    for (LevelHint hint : level.getHints()) {
+                        Integer qi = hintQuestionIndexes.get(hint);
+                        if (qi != null && qi >= 0 && qi < level.getStandardQuestions().size()) {
+                            hint.setQuestion(level.getStandardQuestions().get(qi));
+                        }
                     }
                 }
             }

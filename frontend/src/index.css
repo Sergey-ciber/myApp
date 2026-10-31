@@ -588,6 +588,31 @@ body {
 /* Компактные поля в форме (дата, время) */
 .field.field--compact { max-width: 220px; }
 
+/* Уведомление в правом верхнем углу */
+.assoc-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #2f9c3c;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+}
+.assoc-toast-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
 /* Сложность звёздочками */
 .assoc-stars { display: inline-flex; gap: 4px; align-items: center; }
 .assoc-star {
@@ -605,7 +630,8 @@ body {
 .assoc-media-field { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .assoc-media-field-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .assoc-media-field-label { font-size: 13px; color: #c8c8d4; }
-.assoc-media-thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.assoc-media-empty { margin: 0; font-size: 13px; color: #7a7a8a; }
+.assoc-media-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .assoc-media-thumb {
   position: relative;
   width: 84px;
@@ -613,8 +639,11 @@ body {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #3a3a4a;
+  background: #1f1f2b;
 }
 .assoc-media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.assoc-media-thumb audio,
+.assoc-media-thumb video { width: 100%; height: 100%; display: block; }
 .assoc-media-remove {
   position: absolute;
   top: 2px;
@@ -629,6 +658,46 @@ body {
   line-height: 1;
   cursor: pointer;
 }
+.assoc-media-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #2d2d3a;
+  border: 1px solid #3a3a4a;
+  max-width: 260px;
+  min-width: 140px;
+}
+.assoc-media-chip-icon { font-size: 18px; line-height: 1; }
+.assoc-media-chip-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.assoc-media-chip-name {
+  font-size: 12px;
+  color: #e5e7eb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.assoc-media-chip-type { font-size: 11px; color: #8a8a9a; }
+.assoc-media-chip-remove {
+  background: transparent;
+  border: none;
+  color: #b0b0bf;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+}
+.assoc-media-chip-remove:hover { color: #ff6b6b; }
+.assoc-media-toast {
+  font-size: 12px;
+  color: #ffcf7d;
+  background: rgba(255, 140, 0, 0.12);
+  border: 1px solid rgba(255, 140, 0, 0.35);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
 
 /* Список сохранённых игр */
 .assoc-saved h2 { margin: 0 0 12px; font-size: 18px; color: #ffffff; }
@@ -685,6 +754,24 @@ body {
   color: #1a1a1a;
 }
 
+/* Сворачивание/разворачивание блоков уровней */
+.assoc-level-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.assoc-level-toggle:hover { color: #ff8c00; }
+.assoc-level-toggle-icon { color: #ff8c00; width: 14px; text-align: center; }
+
 /* Фильтр, поиск и сортировка списка игр */
 .assoc-list-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .assoc-list-controls .field { min-width: 160px; }
@@ -737,6 +824,27 @@ body {
   flex-wrap: wrap;
   margin-top: 10px;
   margin-bottom: 10px;
+}
+
+/* Медиафайлы уровня в режиме игрока */
+.assoc-level-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.assoc-level-media img {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+  border: 1px solid #3a3a4a;
+  object-fit: contain;
+}
+.assoc-level-media audio,
+.assoc-level-media video {
+  max-width: 100%;
+  border-radius: 10px;
 }
 
 .assoc-start-overlay {
@@ -978,6 +1086,100 @@ body {
 }
 .assoc-start-card h3 { margin: 0 0 10px; color: #ffffff; }
 .assoc-start-card p { margin: 0 0 18px; color: #a0a0b0; }
+
+/* Экран информации об игре */
+.assoc-info-card {
+  width: 100%;
+  max-width: 760px;
+  padding: 40px 44px;
+  background: linear-gradient(180deg, #2a2a37 0%, #1f1f2b 100%);
+  border: 1px solid #3a3a4a;
+  border-top: 3px solid #ff8c00;
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.assoc-info-title {
+  margin: 0 0 20px;
+  color: #ffffff;
+  font-size: 30px;
+  line-height: 1.25;
+  text-align: center;
+  word-break: break-word;
+}
+.assoc-info-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.assoc-info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: #2d2d3a;
+  border: 1px solid #3a3a4a;
+  color: #e5e7eb;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.assoc-info-stars { color: #ff8c00; letter-spacing: 2px; }
+.assoc-info-block { margin-bottom: 24px; }
+.assoc-info-block-title {
+  margin: 0 0 12px;
+  color: #ff8c00;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.assoc-info-description {
+  margin: 0;
+  color: #cfcfdb;
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.assoc-info-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.assoc-info-media-img {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+  border: 1px solid #3a3a4a;
+  object-fit: contain;
+}
+.assoc-info-media-audio { width: 100%; max-width: 460px; }
+.assoc-info-media-video { width: 100%; max-width: 640px; border-radius: 10px; border: 1px solid #3a3a4a; }
+.assoc-info-media-link {
+  color: #4c9aff;
+  text-decoration: none;
+  font-size: 13px;
+  word-break: break-all;
+}
+.assoc-info-media-link:hover { text-decoration: underline; }
+.assoc-info-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+.assoc-info-start {
+  padding: 14px 40px;
+  font-size: 17px;
+  font-weight: 700;
+  background: #ff8c00;
+  border: none;
+  border-radius: 12px;
+  color: #1a1a22;
+}
+.assoc-info-start:hover { background: #ff9d2e; }
 
 /* Индикатор текущего уровня */
 .assoc-level-progress {

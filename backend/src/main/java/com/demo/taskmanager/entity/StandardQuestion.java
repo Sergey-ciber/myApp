@@ -26,8 +26,19 @@ public class StandardQuestion {
     @Column(name = "media_url", columnDefinition = "text")
     private String mediaUrl;
 
+    /** Список URL медиафайлов вопроса (максимум 10). */
+    @ElementCollection
+    @CollectionTable(name = "standard_question_media", joinColumns = @JoinColumn(name = "question_id"))
+    @Column(name = "url", columnDefinition = "text")
+    @OrderColumn(name = "order_index")
+    private List<String> mediaUrls = new ArrayList<>();
+
     @Column(name = "order_index", nullable = false)
     private int orderIndex = 0;
+
+    /** Порог прохождения: сколько вариантов ответа нужно дать, чтобы вопрос считался разгаданным. */
+    @Column(name = "pass_threshold")
+    private Integer passThreshold;
 
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<StandardAnswer> answers = new ArrayList<>();
@@ -42,7 +53,11 @@ public class StandardQuestion {
     public void setMediaType(String mediaType) { this.mediaType = mediaType; }
     public String getMediaUrl() { return mediaUrl; }
     public void setMediaUrl(String mediaUrl) { this.mediaUrl = mediaUrl; }
+    public List<String> getMediaUrls() { return mediaUrls; }
+    public void setMediaUrls(List<String> mediaUrls) { this.mediaUrls = mediaUrls; }
     public int getOrderIndex() { return orderIndex; }
     public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public Integer getPassThreshold() { return passThreshold; }
+    public void setPassThreshold(Integer passThreshold) { this.passThreshold = passThreshold; }
     public List<StandardAnswer> getAnswers() { return answers; }
 }

@@ -22,7 +22,6 @@ public record GameRequest(
             Double timeLimitMinutes,
             LevelType type,
             Integer hintsCount,
-            Integer passThreshold,
             List<String> mediaUrls,
             List<HintRequest> hints,
             List<List<String>> associationColumns,
@@ -36,13 +35,18 @@ public record GameRequest(
             String text,
             String imageUrl,
             Double triggerTime,
-            Double penaltyTime
+            Double penaltyTime,
+            Long questionId,
+            Integer questionIndex,
+            List<String> mediaUrls
     ) {
     }
 
     public record QuestionRequest(
             String question,
-            List<String> answers
+            List<String> answers,
+            List<String> mediaUrls,
+            Integer passThreshold
     ) {
     }
 
@@ -50,7 +54,9 @@ public record GameRequest(
             String questionText,
             String mediaType,
             String mediaUrl,
-            List<String> answers
+            List<String> answers,
+            List<String> mediaUrls,
+            Integer passThreshold
     ) {
     }
 }

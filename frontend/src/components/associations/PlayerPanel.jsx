@@ -1,11 +1,34 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiMessage } from '../../api/client'
-import { fetchLeaderboard, startGame, submitResult, restartGame } from '../../api/games'
+import { fetchGame, fetchLeaderboard, startGame, submitResult, restartGame } from '../../api/games'
 import GameBoard from './GameBoard'
 import NormalLevelBoard from './NormalLevelBoard'
 import Leaderboard from './Leaderboard'
 import { formatMinutes, formatTime } from './constants'
+
+/** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
+function mediaKind(url) {
+  const lower = (url || '').toLowerCase()
+  if (/\.(mp4|webm|m4v|mov)(\?|$)/.test(lower)) return 'video'
+  if (/\.(mp3|wav|ogg|m4a)(\?|$)/.test(lower)) return 'audio'
+  if (/\.(png|jpg|jpeg|gif|webp)(\?|$)/.test(lower)) return 'image'
+  return 'other'
+}
+
+/** Дата игры из ISO-строки (LocalDate) в человекочитаемый формат. */
+function formatGameDate(dateStr) {
+  if (!dateStr) return ''
+  const parts = String(dateStr).split('-')
+  if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}.${parts[1]}.${parts[0]}`
+  return String(dateStr)
+}
+
+/** Сложность в виде звёздочек (1..5). */
+function difficultyStars(value) {
+  const n = Math.max(0, Math.min(5, Number(value) || 0))
+  return n > 0 ? '★'.repeat(n) : ''
+}
 
 /**
  * Режим игрока: последовательное прохождение уровней игры.
@@ -25,11 +48,13 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [resultError, setResultError] = useState('')
 
   const [gameStarted, setGameStarted] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0)
   const [levelStats, setLevelStats] = useState([])
   const [finished, setFinished] = useState(false)
   const [totalTime, setTotalTime] = useState(0)
 
+  // Загружаем информацию об игре (без запуска таймера): игрок видит экран описания.
   useEffect(() => {
     if (!gameId) {
       setGame(null)
@@ -39,16 +64,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     let cancelled = false
     setLoading(true)
     setError('')
-    startGame(gameId)
+    fetchGame(gameId)
       .then((data) => {
         if (cancelled) return
         setGame(data.game)
         setProgress(data.progress)
-        const hasProgress = data.progress
-          && (data.progress.elapsedSeconds > 0
-            || data.progress.finishedSeconds != null
-            || (data.progress.solved && Object.keys(data.progress.solved).length > 0))
-        setGameStarted(Boolean(hasProgress))
+        setGameStarted(false)
         setCurrentLevelIndex(0)
         setLevelStats([])
         setFinished(false)
@@ -58,6 +79,27 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [gameId, currentUserId])
+
+  /** Начать игру: запускаем серверный таймер и показываем первый уровень. */
+  const startPlaying = async () => {
+    if (!game || starting) return
+    setStarting(true)
+    setError('')
+    try {
+      const data = await startGame(game.id)
+      setGame(data.game)
+      setProgress(data.progress)
+      setCurrentLevelIndex(0)
+      setLevelStats([])
+      setFinished(false)
+      setTotalTime(0)
+      setGameStarted(true)
+    } catch (err) {
+      setError(apiMessage(err))
+    } finally {
+      setStarting(false)
+    }
+  }
 
   const loadLeaderboard = useCallback(async (id) => {
     if (!id) return
@@ -145,35 +187,15 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
             автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
           </span>
         </div>
-
-        <label className="assoc-game-select">
-          <span>Выбрать игру</span>
-          <select value={game.id} onChange={(event) => onSelectGame(Number(event.target.value))}>
-            {games.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title} — {item.creatorUsername || 'без автора'}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
       {!gameStarted ? (
-        <div className="assoc-start-screen">
-          <div className="assoc-start-card">
-            <h3>Готовы начать?</h3>
-            <p>
-              В игре {levels.length} {levels.length === 1 ? 'уровень' : 'уровней'}. Нажмите кнопку, чтобы запустить первый уровень.
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setGameStarted(true)}
-            >
-              Начать игру
-            </button>
-          </div>
-        </div>
+        <GameInfoScreen
+          game={game}
+          levelsCount={levels.length}
+          starting={starting}
+          onStart={startPlaying}
+        />
       ) : finished ? (
         <StatisticsScreen
           stats={levelStats}
@@ -209,6 +231,81 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/** Экран информации об игре перед стартом. */
+function GameInfoScreen({ game, levelsCount, starting, onStart }) {
+  const media = Array.isArray(game.mediaUrls) ? game.mediaUrls : []
+  const description = (game.description || '').trim()
+  const date = formatGameDate(game.gameDate)
+  const stars = difficultyStars(game.difficulty)
+
+  return (
+    <div className="assoc-start-screen">
+      <div className="assoc-info-card">
+        <h2 className="assoc-info-title">{game.title}</h2>
+
+        <div className="assoc-info-meta">
+          <span className="assoc-info-badge">
+            <span aria-hidden="true">👤</span> {game.creatorUsername || 'неизвестен'}
+          </span>
+          {date && (
+            <span className="assoc-info-badge">
+              <span aria-hidden="true">📅</span> {date}
+            </span>
+          )}
+          <span className="assoc-info-badge">
+            <span aria-hidden="true">🔥</span>
+            {stars ? <span className="assoc-info-stars">{stars}</span> : 'Сложность не указана'}
+          </span>
+          <span className="assoc-info-badge">
+            <span aria-hidden="true">⏱️</span> {formatMinutes(game.timeLimitMinutes)} минут
+          </span>
+          <span className="assoc-info-badge">
+            <span aria-hidden="true">🎯</span> {levelsCount} {levelsCount === 1 ? 'уровень' : 'уровней'}
+          </span>
+        </div>
+
+        {media.length > 0 && (
+          <div className="assoc-info-block">
+            <h3 className="assoc-info-block-title">Материалы игры</h3>
+            <div className="assoc-info-media">
+              {media.map((url, index) => {
+                const kind = mediaKind(url)
+                if (kind === 'image') {
+                  return <img key={index} src={url} alt="Медиа к игре" className="assoc-info-media-img" />
+                }
+                if (kind === 'audio') {
+                  return <audio key={index} src={url} controls className="assoc-info-media-audio" />
+                }
+                if (kind === 'video') {
+                  return <video key={index} src={url} controls className="assoc-info-media-video" />
+                }
+                return (
+                  <a key={index} href={url} target="_blank" rel="noreferrer" className="assoc-info-media-link">
+                    📎 {url}
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {description && (
+          <div className="assoc-info-block">
+            <h3 className="assoc-info-block-title">Описание</h3>
+            <p className="assoc-info-description">{description}</p>
+          </div>
+        )}
+
+        <div className="assoc-info-actions">
+          <button type="button" className="btn btn-primary assoc-info-start" onClick={onStart} disabled={starting}>
+            {starting ? 'Запускаем…' : 'Начать игру'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
 import { activateGame, createGame, deleteGame, fetchGameForEdit, updateGame, uploadGameMedia } from '../../api/games'
 import ConfirmDialog from '../ConfirmDialog'
@@ -53,6 +53,7 @@ function createEmptyHint(index) {
     imageUrl: '',
     triggerTime: '',
     penaltyTime: '',
+    mediaUrls: [],
   }
 }
 
@@ -60,30 +61,72 @@ function createEmptyQuestion() {
   return {
     question: '',
     answers: [''],
+    hints: [],
+    mediaUrls: [],
+    passThreshold: '1',
   }
 }
 
+/** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
+function mediaTypeOf(url) {
+  const lower = (url || '').toLowerCase()
+  if (/\.(mp4|webm|m4v|mov)(\?|$)/.test(lower)) return 'video'
+  if (/\.(mp3|wav|ogg|m4a)(\?|$)/.test(lower)) return 'audio'
+  if (/\.(png|jpg|jpeg|gif|webp)(\?|$)/.test(lower)) return 'image'
+  return 'other'
+}
+
+/** Человекочитаемое имя файла из URL. */
+function mediaFileName(url) {
+  if (!url) return 'файл'
+  try {
+    const path = String(url).split(/[?#]/)[0]
+    const segment = path.split('/').filter(Boolean).pop()
+    if (segment) return decodeURIComponent(segment)
+  } catch {
+    // ignore
+  }
+  return url
+}
+
+const MEDIA_ICONS = { image: '🖼', audio: '🎵', video: '🎬', other: '📎' }
+const MEDIA_LABELS = { image: 'Изображение', audio: 'Аудио', video: 'Видео', other: 'Файл' }
+
 /** Область добавления медиафайлов (максимум 10). */
-function MediaUploader({ urls, onChange, max = 10 }) {
+function MediaUploader({ urls, onChange, max = 10, accept = 'image/*,audio/*,video/*' }) {
   const [uploading, setUploading] = useState(false)
+  const [toast, setToast] = useState('')
   const fileInputRef = useRef(null)
   const list = urls || []
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(''), 4000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   const addFiles = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
+    if (list.length >= max) {
+      setToast(`Максимальное количество файлов — ${max}`)
+      return
+    }
     const remaining = max - list.length
-    if (remaining <= 0) return
+    const selected = files.slice(0, remaining)
+    if (files.length > remaining) {
+      setToast(`Максимальное количество файлов — ${max}`)
+    }
     setUploading(true)
     try {
       const uploaded = []
-      for (const file of files.slice(0, remaining)) {
+      for (const file of selected) {
         uploaded.push(await uploadGameMedia(file))
       }
       onChange([...list, ...uploaded].slice(0, max))
     } catch {
-      // ошибка загрузки файла
+      setToast('Не удалось загрузить файл')
     } finally {
       setUploading(false)
     }
@@ -106,20 +149,38 @@ function MediaUploader({ urls, onChange, max = 10 }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={accept}
           multiple
           style={{ display: 'none' }}
           onChange={addFiles}
         />
       </div>
-      {list.length > 0 && (
-        <div className="assoc-media-thumbs">
-          {list.map((url, index) => (
-            <div key={index} className="assoc-media-thumb">
-              <img src={url} alt="" />
-              <button type="button" className="assoc-media-remove" onClick={() => remove(index)} aria-label="Удалить">×</button>
-            </div>
-          ))}
+      {toast && <div className="assoc-media-toast" role="status">{toast}</div>}
+      {list.length === 0 ? (
+        <p className="assoc-media-empty">Нет прикрепленных файлов</p>
+      ) : (
+        <div className="assoc-media-chips">
+          {list.map((url, index) => {
+            const type = mediaTypeOf(url)
+            if (type === 'image') {
+              return (
+                <div key={index} className="assoc-media-thumb">
+                  <img src={url} alt="" />
+                  <button type="button" className="assoc-media-remove" onClick={() => remove(index)} aria-label="Удалить">×</button>
+                </div>
+              )
+            }
+            return (
+              <div key={index} className="assoc-media-chip">
+                <span className="assoc-media-chip-icon">{MEDIA_ICONS[type]}</span>
+                <span className="assoc-media-chip-body">
+                  <span className="assoc-media-chip-name" title={url}>{mediaFileName(url)}</span>
+                  <span className="assoc-media-chip-type">{MEDIA_LABELS[type]}</span>
+                </span>
+                <button type="button" className="assoc-media-chip-remove" onClick={() => remove(index)} aria-label="Удалить">✖</button>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -135,13 +196,14 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [difficulty, setDifficulty] = useState(3)
   const [visibility, setVisibility] = useState('PUBLIC')
   const [mediaUrls, setMediaUrls] = useState([])
-  const [levelsCount, setLevelsCount] = useState(1)
   const [columns, setColumns] = useState(emptyColumns())
   const [levels, setLevels] = useState([])
+  const [collapsedLevels, setCollapsedLevels] = useState({})
   const [editingId, setEditingId] = useState(null)
   const [showErrors, setShowErrors] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [toast, setToast] = useState(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [loadingGame, setLoadingGame] = useState(false)
@@ -189,13 +251,14 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setDifficulty(3)
     setVisibility('PUBLIC')
     setMediaUrls([])
-    setLevelsCount(1)
     setColumns(emptyColumns())
     setLevels([])
+    setCollapsedLevels({})
     setEditingId(null)
     setShowErrors(false)
     setError('')
     setMessage('')
+    setToast(null)
     setView('all')
   }
 
@@ -212,7 +275,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setDifficulty(game.difficulty || 3)
     setVisibility(game.visibility || 'PUBLIC')
     setMediaUrls(Array.isArray(game.mediaUrls) ? game.mediaUrls : [])
-    setLevelsCount(game.levels && game.levels.length > 0 ? game.levels.length : 1)
     setColumns(game.columns ? cloneColumns(game.columns) : emptyColumns())
     if (game.levels && game.levels.length > 0) {
       setLevels(game.levels.map((level, idx) => ({
@@ -222,24 +284,39 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         type: level.type || 'ASSOCIATIONS',
         hintsCount: level.hintsCount != null ? String(level.hintsCount) : '0',
         mediaUrls: Array.isArray(level.mediaUrls) ? level.mediaUrls : [],
-        hints: (level.hints || []).map((hint) => ({
+        hints: ((level.hints || []).filter((h) => h.questionId == null || level.type === 'ASSOCIATIONS')).map((hint) => ({
           id: hint.id,
           type: hint.type || 'FIRST_LETTER',
           text: hint.text || '',
           imageUrl: hint.imageUrl || '',
           triggerTime: hint.triggerTime != null ? String(hint.triggerTime) : '',
           penaltyTime: hint.penaltyTime != null ? String(hint.penaltyTime) : '',
+          questionId: hint.questionId,
+          mediaUrls: Array.isArray(hint.mediaUrls) ? hint.mediaUrls : [],
         })),
         associationColumns: level.associationColumns ? cloneColumns(level.associationColumns) : emptyColumns(),
         questions: (level.questions || []).map((q) => ({
           id: q.id,
           question: q.question || '',
           answers: Array.isArray(q.answers) ? q.answers : (q.answer ? [q.answer] : ['']),
+          mediaUrls: Array.isArray(q.mediaUrls) ? q.mediaUrls : [],
+          passThreshold: q.passThreshold != null ? String(q.passThreshold) : '',
+          hints: ((level.hints || []).filter((h) => h.questionId != null && h.questionId === q.id)).map((hint) => ({
+            id: hint.id,
+            type: hint.type || 'FIRST_LETTER',
+            text: hint.text || '',
+            imageUrl: hint.imageUrl || '',
+            triggerTime: hint.triggerTime != null ? String(hint.triggerTime) : '',
+            penaltyTime: hint.penaltyTime != null ? String(hint.penaltyTime) : '',
+            questionId: hint.questionId,
+            mediaUrls: Array.isArray(hint.mediaUrls) ? hint.mediaUrls : [],
+          })),
         })),
       })))
     } else {
       setLevels([])
     }
+    setCollapsedLevels({})
     setEditingId(game.id)
     setShowErrors(false)
     setError('')
@@ -251,6 +328,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setLoadingGame(true)
     setError('')
     setMessage('')
+    setToast(null)
     try {
       applyGame(await fetchGameForEdit(game.id))
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -262,14 +340,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   }
 
   const addLevel = () => {
-    const count = Math.max(1, Math.min(50, Number(levelsCount) || 1))
-    setLevels((prev) => {
-      const next = [...prev]
-      for (let i = 0; i < count; i++) {
-        next.push(createEmptyLevel(next.length))
-      }
-      return next
-    })
+    setLevels((prev) => [...prev, createEmptyLevel(prev.length)])
   }
 
   /** Обновить список медиафайлов уровня. */
@@ -279,29 +350,60 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   const removeLevel = (index) => {
     setLevels((prev) => prev.filter((_, i) => i !== index))
+    setCollapsedLevels((prev) => {
+      const next = { ...prev }
+      delete next[index]
+      return next
+    })
+  }
+
+  const toggleLevel = (index) => {
+    setCollapsedLevels((prev) => ({ ...prev, [index]: !prev[index] }))
   }
 
   const updateLevel = (index, patch) => {
     setLevels((prev) => prev.map((level, i) => (i === index ? { ...level, ...patch } : level)))
   }
 
-  const addHint = (levelIndex) => {
+  const addHint = (levelIndex, questionIndex = null) => {
     setLevels((prev) => prev.map((level, i) => {
       if (i !== levelIndex) return level
+      if (questionIndex !== null && level.type === 'NORMAL') {
+        const questions = (level.questions || []).map((q, idx) => {
+          if (idx !== questionIndex) return q
+          return { ...q, hints: [...(q.hints || []), createEmptyHint((q.hints || []).length)] }
+        })
+        return { ...level, questions }
+      }
       return { ...level, hints: [...(level.hints || []), createEmptyHint((level.hints || []).length)] }
     }))
   }
 
-  const removeHint = (levelIndex, hintIndex) => {
+  const removeHint = (levelIndex, hintIndex, questionIndex = null) => {
     setLevels((prev) => prev.map((level, i) => {
       if (i !== levelIndex) return level
+      if (questionIndex !== null && level.type === 'NORMAL') {
+        const questions = (level.questions || []).map((q, idx) => {
+          if (idx !== questionIndex) return q
+          return { ...q, hints: (q.hints || []).filter((_, h) => h !== hintIndex) }
+        })
+        return { ...level, questions }
+      }
       return { ...level, hints: (level.hints || []).filter((_, h) => h !== hintIndex) }
     }))
   }
 
-  const updateHint = (levelIndex, hintIndex, patch) => {
+  const updateHint = (levelIndex, hintIndex, patch, questionIndex = null) => {
     setLevels((prev) => prev.map((level, i) => {
       if (i !== levelIndex) return level
+      if (questionIndex !== null && level.type === 'NORMAL') {
+        const questions = (level.questions || []).map((q, idx) => {
+          if (idx !== questionIndex) return q
+          const hints = (q.hints || []).map((hint, h) => (h === hintIndex ? { ...hint, ...patch } : hint))
+          return { ...q, hints }
+        })
+        return { ...level, questions }
+      }
       const hints = (level.hints || []).map((hint, h) => (h === hintIndex ? { ...hint, ...patch } : hint))
       return { ...level, hints }
     }))
@@ -310,7 +412,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const addQuestion = (levelIndex) => {
     setLevels((prev) => prev.map((level, i) => {
       if (i !== levelIndex) return level
-      return { ...level, questions: [...(level.questions || []), createEmptyQuestion()] }
+      return { ...level, questions: [...(level.questions || []), { ...createEmptyQuestion(), hints: [] }] }
     }))
   }
 
@@ -351,7 +453,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         if (idx !== qIndex) return q
         const answers = Array.isArray(q.answers) ? [...q.answers] : [q.answer || '']
         answers.push('')
-        return { ...q, answers }
+        // при добавлении ответа порог прохождения = количеству ответов
+        return { ...q, answers, passThreshold: String(answers.length) }
       })
       return { ...level, questions }
     }))
@@ -367,7 +470,10 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         if (answers.length > 1) {
           answers.splice(answerIndex, 1)
         }
-        return { ...q, answers }
+        // если порог больше нового количества ответов — уменьшаем до него
+        const current = Number(q.passThreshold)
+        const nextPassThreshold = Number.isFinite(current) && current > answers.length ? String(answers.length) : q.passThreshold
+        return { ...q, answers, passThreshold: nextPassThreshold }
       })
       return { ...level, questions }
     }))
@@ -448,12 +554,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
       if (level.type === 'NORMAL') {
         const questions = level.questions || []
         const levelErrors = []
-        const passThreshold = Number(level.passThreshold)
-        if (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold?.toString().trim() === '' || !Number.isFinite(passThreshold) || passThreshold <= 0) {
-          levelErrors.push(`Уровень ${i + 1}: укажите порог прохождения`)
-        } else if (questions.length > 0 && passThreshold > questions.length) {
-          levelErrors.push(`Уровень ${i + 1}: порог прохождения не может быть больше количества вопросов`)
-        }
         if (questions.length === 0) {
           levelErrors.push(`Уровень ${i + 1}: добавьте хотя бы один вопрос`)
         }
@@ -465,6 +565,25 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           const answers = (question.answers || []).map((a) => (a || '').trim()).filter((a) => a)
           if (answers.length === 0) {
             levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: добавьте хотя бы один правильный ответ`)
+          } else {
+            const pt = question.passThreshold
+            if (pt === undefined || pt === null || pt?.toString().trim() === '') {
+              levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: укажите порог прохождения`)
+            } else {
+              const passThreshold = Number(pt)
+              if (!Number.isFinite(passThreshold) || passThreshold <= 0) {
+                levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: порог прохождения должен быть больше 0`)
+              } else if (passThreshold > answers.length) {
+                levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}: порог прохождения не может быть больше количества ответов`)
+              }
+            }
+          }
+          for (let h = 0; h < (question.hints || []).length; h++) {
+            const hint = question.hints[h]
+            const tt = hint.triggerTime
+            if (tt === undefined || tt === null || tt?.toString().trim() === '' || !Number.isFinite(Number(tt)) || Number(tt) < 0) {
+              levelErrors.push(`Уровень ${i + 1}, Вопрос ${q + 1}, Подсказка ${h + 1}: укажите время появления подсказки`)
+            }
           }
         }
         if (levelErrors.length > 0) {
@@ -483,6 +602,12 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           if (!hint.type) {
             setShowErrors(true)
             setError(`Уровень ${i + 1}, подсказка ${h + 1}: укажите тип подсказки`)
+            return
+          }
+          const tt = hint.triggerTime
+          if (tt === undefined || tt === null || tt?.toString().trim() === '' || !Number.isFinite(Number(tt)) || Number(tt) < 0) {
+            setShowErrors(true)
+            setError(`Уровень ${i + 1}, подсказка ${h + 1}: укажите время появления подсказки`)
             return
           }
           if (hint.type === 'GENERAL') {
@@ -519,30 +644,50 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           timeLimitMinutes: Number(level.timeLimitMinutes),
           type: level.type,
           hintsCount: Number(level.hintsCount) || 0,
-          passThreshold: level.type === 'NORMAL' ? Number(level.passThreshold) : null,
           mediaUrls: (level.mediaUrls || []).slice(0, 10),
-          hints: (level.hints || []).map((hint) => ({
-            type: hint.type,
-            text: hint.text?.trim() || null,
-            imageUrl: hint.imageUrl?.trim() || null,
-            triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
-            penaltyTime: hint.penaltyTime?.toString().trim() ? Number(hint.penaltyTime) : null,
-          })),
+          hints: [
+            ...(level.type === 'ASSOCIATIONS' ? (level.hints || []).map((hint) => ({
+              type: hint.type,
+              text: hint.text?.trim() || null,
+              imageUrl: hint.imageUrl?.trim() || null,
+              triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
+              penaltyTime: hint.penaltyTime?.toString().trim() ? Number(hint.penaltyTime) : null,
+              mediaUrls: (hint.mediaUrls || []).slice(0, 10),
+            })) : []),
+            ...(level.type === 'NORMAL' ? (level.questions || []).flatMap((q, qIdx) => (q.hints || []).map((hint) => ({
+              type: hint.type,
+              text: hint.text?.trim() || null,
+              imageUrl: hint.imageUrl?.trim() || null,
+              triggerTime: hint.triggerTime?.toString().trim() ? Number(hint.triggerTime) : null,
+              penaltyTime: hint.penaltyTime?.toString().trim() ? Number(hint.penaltyTime) : null,
+              questionId: q.id || undefined,
+              questionIndex: qIdx,
+              mediaUrls: (hint.mediaUrls || []).slice(0, 10),
+            }))) : []),
+          ],
           associationColumns: level.type === 'ASSOCIATIONS' ? (level.associationColumns || []).map((words) => words.map((word) => word.trim())) : null,
           questions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
             question: q.question?.trim(),
             answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
+            passThreshold: (q.passThreshold === undefined || q.passThreshold === null || q.passThreshold?.toString().trim() === '')
+              ? null
+              : Number(q.passThreshold),
           })) : null,
           standardQuestions: level.type === 'NORMAL' ? (level.questions || []).map((q) => ({
             questionText: q.question?.trim(),
             mediaType: null,
             mediaUrl: null,
             answers: (q.answers || []).map((a) => (a || '').trim()).filter((a) => a),
+            mediaUrls: q.mediaUrls || [],
+            passThreshold: (q.passThreshold === undefined || q.passThreshold === null || q.passThreshold?.toString().trim() === '')
+              ? null
+              : Number(q.passThreshold),
           })) : null,
         })),
       }
       const saved = editingId ? await updateGame(editingId, payload) : await createGame(payload)
       setMessage('Игра сохранена')
+      setToast({ type: 'success', text: 'Игра успешно сохранена' })
       await onReload()
       applyGame(saved)
     } catch (err) {
@@ -557,11 +702,13 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     if (editingId === deleting.id) resetForm()
     setDeleting(null)
     setMessage('Игра удалена')
+    setToast({ type: 'success', text: 'Игра удалена' })
     await onReload()
   }
 
   const playGame = async (game) => {
     setError('')
+    setToast(null)
     try {
       if (isOwn(game)) {
         await activateGame(game.id)
@@ -661,9 +808,26 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     </div>
   )
 
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(null), 7000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const renderToast = () => {
+    if (!toast) return null
+    return (
+      <div className="assoc-toast" role="status" aria-live="polite">
+        <span className="assoc-toast-text">{toast.text}</span>
+        <button type="button" className="assoc-toast-close" onClick={() => setToast(null)} aria-label="Закрыть">×</button>
+      </div>
+    )
+  }
+
   if (view === 'all' || view === 'mine') {
     return (
       <div className="assoc-admin">
+        {renderToast()}
         {renderTabs()}
 
         <div className="assoc-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
@@ -758,6 +922,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   if (view === 'registered') {
     return (
       <div className="assoc-admin">
+        {renderToast()}
         {renderTabs()}
         <div className="empty-state">Раздел «Зарегистрирован на игры» находится в разработке.</div>
       </div>
@@ -766,6 +931,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
   return (
     <div className="assoc-admin">
+      {renderToast()}
       {renderTabs()}
 
       <div className="assoc-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -831,12 +997,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                 {VISIBILITIES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
             </label>
-            <label className="field field--compact">
-              <span>Количество уровней</span>
-              <select value={levelsCount} onChange={(event) => setLevelsCount(Number(event.target.value))}>
-                {Array.from({ length: 50 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
             <label className="field" style={{ alignSelf: 'flex-end' }}>
               <button type="button" className="btn btn-secondary" onClick={addLevel}>Добавить уровень</button>
             </label>
@@ -849,16 +1009,31 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
         {levels.length === 0 && <div className="empty-state">Уровни не добавлены</div>}
           {levels.map((level, levelIndex) => (
             <div key={levelIndex} className="assoc-panel" style={{ borderLeft: '3px solid #ff8c00', marginBottom: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, color: '#ffffff' }}>Уровень {levelIndex + 1}</h4>
-                <button type="button" className="btn btn-small btn-danger" onClick={() => removeLevel(levelIndex)}>Удалить уровень</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="assoc-level-toggle"
+                  onClick={() => toggleLevel(levelIndex)}
+                  aria-expanded={!collapsedLevels[levelIndex]}
+                >
+                  <span aria-hidden="true" className="assoc-level-toggle-icon">{collapsedLevels[levelIndex] ? '▸' : '▾'}</span>
+                  <span>Уровень {levelIndex + 1}{level.title ? ` — ${level.title}` : ''}</span>
+                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button type="button" className="btn btn-small btn-secondary" onClick={() => toggleLevel(levelIndex)}>
+                    {collapsedLevels[levelIndex] ? 'Развернуть' : 'Свернуть'}
+                  </button>
+                  <button type="button" className="btn btn-small btn-danger" onClick={() => removeLevel(levelIndex)}>Удалить уровень</button>
+                </div>
               </div>
+              {!collapsedLevels[levelIndex] && (
+              <>
               <div className="field-row">
                 <label className="field">
                   <span>Название уровня *</span>
                   <input value={level.title} maxLength={250} onChange={(event) => updateLevel(levelIndex, { title: event.target.value })} />
                 </label>
-                <label className="field">
+                <label className="field field--compact">
                   <span>Время уровня (мин.) *</span>
                   <input type="number" min="0.1" step="any" value={level.timeLimitMinutes} onChange={(event) => updateLevel(levelIndex, { timeLimitMinutes: event.target.value })} />
                 </label>
@@ -868,54 +1043,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                     {LEVEL_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </label>
-                <label className="field">
-                  <span>Количество подсказок *</span>
-                  <input type="number" min="0" value={level.hintsCount} onChange={(event) => updateLevel(levelIndex, { hintsCount: event.target.value })} />
-                </label>
               </div>
               <MediaUploader urls={level.mediaUrls || []} onChange={(urls) => updateLevelMedia(levelIndex, urls)} />
-              <div style={{ marginTop: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки</span>
-                  <button type="button" className="btn btn-small btn-secondary" onClick={() => addHint(levelIndex)}>Добавить подсказку</button>
-                </div>
-                {(level.hints || []).map((hint, hintIndex) => (
-                  <div key={hintIndex} className="assoc-panel" style={{ background: '#1f1f2b', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
-                      <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex)}>Удалить</button>
-                    </div>
-                    <div className="field-row">
-                      <label className="field">
-                        <span>Тип подсказки *</span>
-                        <select value={hint.type} onChange={(event) => updateHint(levelIndex, hintIndex, { type: event.target.value })}>
-                          {HINT_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Время появления (мин. от начала уровня)</span>
-                        <input type="number" min="0" step="any" value={hint.triggerTime} onChange={(event) => updateHint(levelIndex, hintIndex, { triggerTime: event.target.value })} placeholder="например, 3" />
-                      </label>
-                      <label className="field">
-                        <span>Штрафное время (мин.)</span>
-                        <input type="number" min="0" step="any" value={hint.penaltyTime} onChange={(event) => updateHint(levelIndex, hintIndex, { penaltyTime: event.target.value })} placeholder="например, 1" />
-                      </label>
-                    </div>
-                    {hint.type === 'GENERAL' && (
-                      <div className="field-row">
-                        <label className="field">
-                          <span>Текст подсказки</span>
-                          <input value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value })} placeholder="Текст общей подсказки" />
-                        </label>
-                        <label className="field">
-                          <span>Изображение (URL)</span>
-                          <input value={hint.imageUrl} onChange={(event) => updateHint(levelIndex, hintIndex, { imageUrl: event.target.value })} placeholder="https://..." />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
 
               {level.type === 'ASSOCIATIONS' && (
                 <div style={{ marginTop: 18 }}>
@@ -926,18 +1055,6 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
 
               {level.type === 'NORMAL' && (
                 <div style={{ marginTop: 18 }}>
-                  <div className="field-row" style={{ marginBottom: 12 }}>
-                    <label className="field">
-                      <span>Порог прохождения (кол-во верных ответов) *</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={level.passThreshold ?? ''}
-                        onChange={(event) => updateLevel(levelIndex, { passThreshold: event.target.value })}
-                        className={showErrors && (level.passThreshold === undefined || level.passThreshold === null || level.passThreshold.toString().trim() === '') ? 'input-invalid' : ''}
-                      />
-                    </label>
-                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Вопросы и ответы</span>
                     <button type="button" className="btn btn-small btn-secondary" onClick={() => addQuestion(levelIndex)}>Добавить вопрос</button>
@@ -956,6 +1073,9 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                           className={showErrors && !(q.question || '').trim() ? 'input-invalid' : ''}
                         />
                       </label>
+                      <div style={{ marginBottom: 12 }}>
+                        <MediaUploader urls={q.mediaUrls || []} onChange={(urls) => updateQuestion(levelIndex, qIndex, { mediaUrls: urls })} />
+                      </div>
                       <div style={{ marginBottom: 8 }}>
                         <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Варианты ответов</span>
                       </div>
@@ -983,9 +1103,128 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                         </div>
                       ) : null)}
                       <button type="button" className="btn btn-small btn-secondary" onClick={() => addAnswer(levelIndex, qIndex)}>+ Добавить вариант ответа</button>
+                      <div className="field-row" style={{ marginTop: 12 }}>
+                        <label className="field field--compact">
+                          <span>Порог прохождения *</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={(q.answers || []).length}
+                            value={q.passThreshold ?? ''}
+                            onChange={(event) => updateQuestion(levelIndex, qIndex, { passThreshold: event.target.value })}
+                            className={showErrors && (q.passThreshold === undefined || q.passThreshold === null || q.passThreshold?.toString().trim() === '') ? 'input-invalid' : ''}
+                          />
+                        </label>
+                      </div>
+                      {level.type !== 'ASSOCIATIONS' && (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки к вопросу</span>
+                            <button type="button" className="btn btn-small btn-secondary" onClick={() => addHint(levelIndex, qIndex)}>Добавить подсказку</button>
+                          </div>
+                          {(q.hints || []).map((hint, hintIndex) => (
+                            <div key={hintIndex} className="assoc-panel" style={{ background: '#262636', marginBottom: 10 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
+                                <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex, qIndex)}>Удалить</button>
+                              </div>
+                              <div className="field-row">
+                                <label className="field">
+                                  <span>Тип подсказки *</span>
+                                  <select value={hint.type} onChange={(event) => updateHint(levelIndex, hintIndex, { type: event.target.value }, qIndex)}>
+                                    {HINT_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                  </select>
+                                </label>
+                                <label className="field">
+                                  <span>Время появления (мин. от начала уровня) *</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={hint.triggerTime}
+                                    onChange={(event) => updateHint(levelIndex, hintIndex, { triggerTime: event.target.value }, qIndex)}
+                                    placeholder="например, 3"
+                                    className={showErrors && (hint.triggerTime === undefined || hint.triggerTime === null || hint.triggerTime?.toString().trim() === '') ? 'input-invalid' : ''}
+                                  />
+                                </label>
+                                <label className="field">
+                                  <span>Штрафное время (мин.)</span>
+                                  <input type="number" min="0" step="any" value={hint.penaltyTime} onChange={(event) => updateHint(levelIndex, hintIndex, { penaltyTime: event.target.value }, qIndex)} placeholder="например, 1" />
+                                </label>
+                              </div>
+                              {hint.type === 'GENERAL' && (
+                                <div>
+                                  <label className="field" style={{ marginBottom: 10 }}>
+                                    <span>Текст подсказки</span>
+                                    <input value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value }, qIndex)} placeholder="Текст общей подсказки" />
+                                  </label>
+                                  <MediaUploader
+                                    urls={hint.mediaUrls || []}
+                                    onChange={(urls) => updateHint(levelIndex, hintIndex, { mediaUrls: urls }, qIndex)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
+              )}
+
+              {level.type !== 'ASSOCIATIONS' && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки</span>
+                  </div>
+                  {(level.hints || []).map((hint, hintIndex) => (
+                    <div key={hintIndex} className="assoc-panel" style={{ background: '#1f1f2b', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
+                        <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex)}>Удалить</button>
+                      </div>
+                      <div className="field-row">
+                        <label className="field">
+                          <span>Тип подсказки *</span>
+                          <select value={hint.type} onChange={(event) => updateHint(levelIndex, hintIndex, { type: event.target.value })}>
+                            {HINT_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Время появления (мин. от начала уровня) *</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={hint.triggerTime}
+                            onChange={(event) => updateHint(levelIndex, hintIndex, { triggerTime: event.target.value })}
+                            placeholder="например, 3"
+                            className={showErrors && (hint.triggerTime === undefined || hint.triggerTime === null || hint.triggerTime?.toString().trim() === '') ? 'input-invalid' : ''}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Штрафное время (мин.)</span>
+                          <input type="number" min="0" step="any" value={hint.penaltyTime} onChange={(event) => updateHint(levelIndex, hintIndex, { penaltyTime: event.target.value })} placeholder="например, 1" />
+                        </label>
+                      </div>
+                      {hint.type === 'GENERAL' && (
+                        <div>
+                          <label className="field" style={{ marginBottom: 10 }}>
+                            <span>Текст подсказки</span>
+                            <input value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value })} placeholder="Текст общей подсказки" />
+                          </label>
+                          <MediaUploader
+                            urls={hint.mediaUrls || []}
+                            onChange={(urls) => updateHint(levelIndex, hintIndex, { mediaUrls: urls })}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              </>
               )}
             </div>
           ))}

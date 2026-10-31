@@ -18,8 +18,8 @@ import java.util.UUID;
 @Service
 public class ImageStorageService {
 
-    private static final Set<String> ALLOWED_TYPES = Set.of("image/png", "image/jpeg", "image/webp", "image/gif");
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp", "gif");
+    private static final Set<String> ALLOWED_TYPES = Set.of("image/png", "image/jpeg", "image/webp", "image/gif", "audio/mpeg", "audio/mp3", "audio/ogg", "audio/wav", "video/mp4", "video/webm", "video/ogg");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp", "gif", "mp3", "ogg", "wav", "mp4", "webm");
 
     private final Path uploadDir;
 
@@ -45,7 +45,7 @@ public class ImageStorageService {
         boolean typeAllowed = type != null && ALLOWED_TYPES.contains(type);
         boolean extAllowed = ALLOWED_EXTENSIONS.contains(extension);
         if (!typeAllowed && !extAllowed) {
-            throw new BadRequestException("Поддерживаются только изображения (PNG, JPEG, WEBP, GIF)");
+            throw new BadRequestException("Поддерживаются только изображения (PNG, JPEG, WEBP, GIF), аудио (MP3, WAV, OGG) и видео (MP4, WEBM)");
         }
 
         String filename = UUID.randomUUID() + "." + extension;

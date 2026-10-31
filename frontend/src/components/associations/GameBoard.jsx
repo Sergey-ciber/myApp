@@ -375,6 +375,24 @@ export default function GameBoard({
         </div>
       </div>
 
+      {level.mediaUrls?.length > 0 && (
+        <div className="assoc-level-media">
+          {level.mediaUrls.map((url, idx) => {
+            const lower = (url || '').toLowerCase()
+            if (/\.(mp4|webm|m4v|mov)(\?|$)/.test(lower)) {
+              return <video key={idx} controls src={url} />
+            }
+            if (/\.(mp3|wav|ogg|m4a)(\?|$)/.test(lower)) {
+              return <audio key={idx} controls src={url} />
+            }
+            if (/\.(png|jpg|jpeg|gif|webp)(\?|$)/.test(lower)) {
+              return <img key={idx} src={url} alt="Медиа к уровню" />
+            }
+            return null
+          })}
+        </div>
+      )}
+
       {hintNotice && hintAvailable && (
         <div className="assoc-hint-notice" role="status">
           🔔 Доступна новая подсказка!
