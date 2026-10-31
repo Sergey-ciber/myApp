@@ -246,7 +246,20 @@ export default function NormalLevelBoard({
         </div>
       )}
 
-      {actionError && <div className="alert alert-error">{actionError}</div>}
+      {(actionError || alreadyGuessed || acceptedAnswer) && (
+        <div className={actionError ? 'alert alert-error' : alreadyGuessed ? 'alert alert-warning' : 'alert alert-success'}>
+          {actionError
+            ? actionError
+            : alreadyGuessed
+              ? 'Слово уже угадано'
+              : (
+                <>
+                  Правильно! Ответ принят:{' '}
+                  <span style={{ color: 'var(--success)', fontWeight: 700 }}>{acceptedAnswer}</span>
+                </>
+              )}
+        </div>
+      )}
 
       <div className="assoc-normal">
         <div className="assoc-normal-card">
@@ -347,19 +360,6 @@ export default function NormalLevelBoard({
               )
             })}
           </div>
-
-          {/* Быстрое уведомление об уже угаданном слове */}
-          {alreadyGuessed && (
-            <div className="alert alert-warning">Слово уже угадано</div>
-          )}
-
-          {/* Принятый правильный ответ */}
-          {acceptedAnswer && (
-            <div className="alert alert-success">
-              Правильно! Ответ принят:{' '}
-              <span style={{ color: 'var(--success)', fontWeight: 700 }}>{acceptedAnswer}</span>
-            </div>
-          )}
 
           {/* Список угаданных слов */}
           {guessedWords.length > 0 && (
