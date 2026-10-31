@@ -122,6 +122,7 @@ export default function NormalLevelBoard({
     )
     if (alreadyGuessedNow) {
       setAlreadyGuessed(true)
+      setChecking(false)
       return
     }
     try {
