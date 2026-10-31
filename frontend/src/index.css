@@ -174,6 +174,7 @@ body {
 .alert { border-radius: var(--radius); padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
 .alert-error { background: #ffebe6; color: #b04632; border: 1px solid #ffbdad; }
 .alert-success { background: #dcfff0; color: #2d8a4e; border: 1px solid #7ee2b8; }
+.alert-warning { background: #fff7e0; color: #92600a; border: 1px solid #ffd98a; }
 
 /* ---------- Auth ---------- */
 .auth-page {

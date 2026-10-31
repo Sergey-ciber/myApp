@@ -32,6 +32,7 @@ export default function NormalLevelBoard({
   const [checking, setChecking] = useState(false)
   const [actionError, setActionError] = useState('')
   const [acceptedAnswer, setAcceptedAnswer] = useState(null)
+  const [alreadyGuessed, setAlreadyGuessed] = useState(false)
   const [penaltySeconds, setPenaltySeconds] = useState(0)
   const [timeUp, setTimeUp] = useState(false)
   // содержимое использованных подсказок: { [questionId]: { [hintIndex]: content } }
@@ -64,6 +65,13 @@ export default function NormalLevelBoard({
     }
   }, [currentQuestion])
 
+  // быстрое уведомление об уже угаданном слове — исчезает сам
+  useEffect(() => {
+    if (!alreadyGuessed) return undefined
+    const timer = setTimeout(() => setAlreadyGuessed(false), 3000)
+    return () => clearTimeout(timer)
+  }, [alreadyGuessed])
+
   const completeLevel = (payload) => {
     if (completedRef.current) return
     completedRef.current = true
@@ -94,6 +102,15 @@ export default function NormalLevelBoard({
     setChecking(true)
     setActionError('')
     setAcceptedAnswer(null)
+    setAlreadyGuessed(false)
+    // повторный ввод уже угаданного слова — не отправляем на проверку, показываем уведомление
+    const alreadyGuessedNow = Object.keys(solved || {}).some(
+      (k) => k.startsWith(questionPrefix(question)) && (solved[k] || '').trim().toLowerCase() === text.trim().toLowerCase()
+    )
+    if (alreadyGuessedNow) {
+      setAlreadyGuessed(true)
+      return
+    }
     try {
       const result = await checkAnswer(game.id, null, null, text, question.id)
       const nextSolved = result.progress?.solved || {}
@@ -317,6 +334,11 @@ export default function NormalLevelBoard({
               )
             })}
           </div>
+
+          {/* Быстрое уведомление об уже угаданном слове */}
+          {alreadyGuessed && (
+            <div className="alert alert-warning">Слово уже угадано</div>
+          )}
 
           {/* Принятый правильный ответ */}
           {acceptedAnswer && (
