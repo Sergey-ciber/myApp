@@ -31,6 +31,7 @@ export default function NormalLevelBoard({
   const [answers, setAnswers] = useState({})
   const [checking, setChecking] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [acceptedAnswer, setAcceptedAnswer] = useState(null)
   const [penaltySeconds, setPenaltySeconds] = useState(0)
   const [timeUp, setTimeUp] = useState(false)
   // содержимое использованных подсказок: { [questionId]: { [hintIndex]: content } }
@@ -92,6 +93,7 @@ export default function NormalLevelBoard({
     if (!text) return
     setChecking(true)
     setActionError('')
+    setAcceptedAnswer(null)
     try {
       const result = await checkAnswer(game.id, null, null, text, question.id)
       const nextSolved = result.progress?.solved || {}
@@ -100,6 +102,8 @@ export default function NormalLevelBoard({
         setActionError('')
         // очищаем ввод для следующего варианта ответа
         setAnswers((prev) => ({ ...prev, [question.id]: '' }))
+        // показываем пользователю принятый правильный ответ (зелёным)
+        setAcceptedAnswer(result.answer || null)
         if (isQuestionSolved(nextSolved, question)) {
           // вопрос разгадан — переходим к следующему неразгаданному или завершаем уровень
           const nextIndex = questions.findIndex((q) => !isQuestionSolved(nextSolved, q))
@@ -223,7 +227,7 @@ export default function NormalLevelBoard({
                 <span>Вопрос</span>
                 <select
                   value={currentQuestionIndex}
-                  onChange={(event) => setCurrentQuestionIndex(Number(event.target.value))}
+                  onChange={(event) => { setAcceptedAnswer(null); setCurrentQuestionIndex(Number(event.target.value)) }}
                 >
                   {questions.map((q, index) => (
                     <option key={q.id} value={index}>
@@ -313,6 +317,14 @@ export default function NormalLevelBoard({
               )
             })}
           </div>
+
+          {/* Принятый правильный ответ */}
+          {acceptedAnswer && (
+            <div className="alert alert-success">
+              Правильно! Ответ принят:{' '}
+              <span style={{ color: 'var(--success)', fontWeight: 700 }}>{acceptedAnswer}</span>
+            </div>
+          )}
 
           {/* Блок ввода ответа */}
           <div className="assoc-normal-answer">

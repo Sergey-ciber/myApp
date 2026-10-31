@@ -192,7 +192,7 @@ public class GameService {
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
         }
-        return new CheckAnswerResponse(correct, toDto(progress));
+        return new CheckAnswerResponse(correct, toDto(progress), correct ? request.answer() : null);
     }
 
     /**
@@ -236,7 +236,7 @@ public class GameService {
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
         }
-        return new CheckAnswerResponse(correct, toDto(progress));
+        return new CheckAnswerResponse(correct, toDto(progress), correct ? matchedAnswer.getAnswerText() : null);
     }
 
     /** Сколько вопросов обычного уровня уже разгадано данным игроком. */
