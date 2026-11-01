@@ -248,7 +248,7 @@ public class GameService {
 
     /**
      * Раскрыть содержимое подсказки конкретного вопроса обычного уровня.
-     * Для «Первая буква» возвращает первую букву правильного ответа, для «Общая подсказка» — текст/медиа.
+     * Для «Первая буква» возвращает первые буквы для каждого слова неразгаданных ответов.
      */
     @Transactional
     public QuestionHintResponse revealQuestionHint(Long gameId, User user, QuestionHintRequest request) {
@@ -272,15 +272,60 @@ public class GameService {
         }
         LevelHint hint = hints.get(hintIndex);
         String firstLetter = null;
+        List<String> firstLetterPatterns = null;
         if (hint.getType() == HintType.FIRST_LETTER) {
-            firstLetter = question.getAnswers() == null ? null : question.getAnswers().stream()
-                    .map(StandardAnswer::getAnswerText)
-                    .filter(a -> a != null && !a.trim().isEmpty())
-                    .findFirst()
-                    .map(a -> a.trim().substring(0, 1))
-                    .orElse(null);
+            UserProgress progress = findOrCreateProgress(game, user);
+            Map<String, String> solved = parseSolved(progress);
+            if (question.getAnswers() != null) {
+                firstLetterPatterns = new ArrayList<>();
+                for (StandardAnswer answer : question.getAnswers()) {
+                    String answerText = answer.getAnswerText();
+                    if (answerText == null || answerText.trim().isEmpty()) {
+                        continue;
+                    }
+                    String key = "l" + level.getId() + ":q" + question.getId() + ":a" + answer.getId();
+                    if (solved.containsKey(key)) {
+                        continue;
+                    }
+                    String trimmed = answerText.trim();
+                    String[] words = trimmed.split("\\s+");
+                    StringBuilder pattern = new StringBuilder();
+                    for (int i = 0; i < words.length; i++) {
+                        String word = words[i];
+                        if (word.isEmpty()) {
+                            continue;
+                        }
+                        pattern.append(word.substring(0, 1));
+                        for (int j = 1; j < word.length(); j++) {
+                            pattern.append('_');
+                        }
+                        if (i < words.length - 1) {
+                            pattern.append(' ');
+                        }
+                    }
+                    if (pattern.length() > 0) {
+                        firstLetterPatterns.add(pattern.toString());
+                    }
+                }
+                if (firstLetterPatterns.isEmpty()) {
+                    firstLetterPatterns = null;
+                } else if (!firstLetterPatterns.isEmpty()) {
+                    firstLetter = firstLetterPatterns.get(0).replace("_", "").substring(0, 1);
+                    if (firstLetter.isEmpty() && firstLetterPatterns.get(0).length() > 0) {
+                        firstLetter = firstLetterPatterns.get(0).substring(0, 1);
+                    }
+                }
+            }
+            if (firstLetter == null && firstLetterPatterns == null && question.getAnswers() != null) {
+                firstLetter = question.getAnswers().stream()
+                        .map(StandardAnswer::getAnswerText)
+                        .filter(a -> a != null && !a.trim().isEmpty())
+                        .findFirst()
+                        .map(a -> a.trim().substring(0, 1))
+                        .orElse(null);
+            }
         }
-        return new QuestionHintResponse(firstLetter, hint.getText(), hint.getImageUrl());
+        return new QuestionHintResponse(firstLetter, hint.getText(), hint.getImageUrl(), firstLetterPatterns);
     }
 
     /**

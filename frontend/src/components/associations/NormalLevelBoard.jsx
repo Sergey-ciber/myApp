@@ -166,7 +166,9 @@ export default function NormalLevelBoard({
     if (hint.type === 'FIRST_LETTER') {
       try {
         const revealed = await revealQuestionHint(game.id, question.id, hintIndex)
-        if (revealed?.firstLetter) {
+        if (revealed?.firstLetterPatterns?.length) {
+          content = { firstLetterPatterns: revealed.firstLetterPatterns, firstLetter: revealed.firstLetter }
+        } else if (revealed?.firstLetter) {
           setAnswers((prev) => {
             const current = (prev[question.id] || '').trim()
             if (current.toLowerCase().startsWith(revealed.firstLetter.toLowerCase())) return prev
@@ -323,9 +325,16 @@ export default function NormalLevelBoard({
                   {state.type === 'used' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span className="assoc-normal-hint-used">{HINT_NAMES[hintIndex] || `Подсказка ${hintIndex + 1}`} — использована</span>
-                      {content?.firstLetter && (
+                      {content?.firstLetterPatterns?.length ? (
+                        <div className="assoc-normal-hint-letter" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>Первые буквы неразгаданных ответов:</span>
+                          {content.firstLetterPatterns.map((pattern, pIdx) => (
+                            <strong key={pIdx} style={{ fontFamily: 'monospace', letterSpacing: 2 }}>{pattern}</strong>
+                          ))}
+                        </div>
+                      ) : content?.firstLetter ? (
                         <span className="assoc-normal-hint-letter">Первая буква ответа: <strong>{content.firstLetter}</strong></span>
-                      )}
+                      ) : null}
                       {hint.type !== 'FIRST_LETTER' && content?.text && <p style={{ margin: 0 }}>{content.text}</p>}
                       {hint.type !== 'FIRST_LETTER' && content?.imageUrl && (
                         <img src={content.imageUrl} alt="Подсказка" className="assoc-normal-hint-img" />
