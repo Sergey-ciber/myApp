@@ -92,6 +92,22 @@ public class TeamGameService {
         }
         Game game = gameRepository.findById(gameId).orElseThrow(() -> new NotFoundException("Игра не найдена"));
         Team team = teamService.findTeamEntity(teamId);
+
+        // Один игрок не может параллельно проходить одну и ту же игру в разных командах:
+        // блокируем вход во вторую активную (LOBBY / IN_PROGRESS) сессию этой игры.
+        List<TeamGameSession> activeForGame = sessionRepository
+                .findByGameIdAndStatusInOrderByCreatedAtDesc(gameId, List.of("LOBBY", "IN_PROGRESS"));
+        for (TeamGameSession existing : activeForGame) {
+            if (existing.getTeam() == null || existing.getTeam().getId().equals(teamId)) {
+                continue;
+            }
+            if (teamService.isMember(existing.getTeam().getId(), user)) {
+                throw new BadRequestException("Вы уже участвуете в этой игре в составе команды «"
+                        + existing.getTeam().getName()
+                        + "». Завершите текущую сессию, чтобы играть другой командой.");
+            }
+        }
+
         TeamGameSession session = sessionRepository.findTopByTeamIdAndGameIdOrderByCreatedAtDesc(teamId, gameId)
                 .filter(s -> "LOBBY".equals(s.getStatus()))
                 .orElse(null);

@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface TeamGameSessionRepository extends JpaRepository<TeamGameSession, Long> {
     List<TeamGameSession> findByTeamIdOrderByCreatedAtDesc(Long teamId);
     Optional<TeamGameSession> findTopByTeamIdAndGameIdOrderByCreatedAtDesc(Long teamId, Long gameId);
+    List<TeamGameSession> findByGameIdAndStatusInOrderByCreatedAtDesc(Long gameId, List<String> statuses);
 }
