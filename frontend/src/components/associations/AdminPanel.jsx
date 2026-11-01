@@ -1067,8 +1067,9 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       </div>
                       <label className="field" style={{ marginBottom: 12 }}>
                         <span>Вопрос *</span>
-                        <input
+                        <textarea
                           value={q.question || ''}
+                          rows={3}
                           onChange={(event) => updateQuestion(levelIndex, qIndex, { question: event.target.value })}
                           className={showErrors && !(q.question || '').trim() ? 'input-invalid' : ''}
                         />
@@ -1156,7 +1157,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                                 <div>
                                   <label className="field" style={{ marginBottom: 10 }}>
                                     <span>Текст подсказки</span>
-                                    <input value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value }, qIndex)} placeholder="Текст общей подсказки" />
+                                    <textarea rows={3} value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value }, qIndex)} placeholder="Текст общей подсказки" />
                                   </label>
                                   <MediaUploader
                                     urls={hint.mediaUrls || []}
@@ -1212,7 +1213,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                         <div>
                           <label className="field" style={{ marginBottom: 10 }}>
                             <span>Текст подсказки</span>
-                            <input value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value })} placeholder="Текст общей подсказки" />
+                            <textarea rows={3} value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value })} placeholder="Текст общей подсказки" />
                           </label>
                           <MediaUploader
                             urls={hint.mediaUrls || []}
