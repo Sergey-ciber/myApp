@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface TeamSessionProgressRepository extends JpaRepository<TeamSessionProgress, Long> {
     Optional<TeamSessionProgress> findBySessionIdAndLevelId(Long sessionId, Long levelId);
+    void deleteByLevelId(Long levelId);
+    void deleteBySessionId(Long sessionId);
 }

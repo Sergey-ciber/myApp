@@ -72,19 +72,22 @@ public class GameService {
     private final TeamService teamService;
     private final ObjectMapper objectMapper;
     private final StandardQuestionRepository standardQuestionRepository;
+    private final com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
                        UserProgressRepository progressRepository,
                        TeamService teamService,
                        ObjectMapper objectMapper,
-                       StandardQuestionRepository standardQuestionRepository) {
+                       StandardQuestionRepository standardQuestionRepository,
+                       com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
         this.teamService = teamService;
         this.objectMapper = objectMapper;
         this.standardQuestionRepository = standardQuestionRepository;
+        this.teamSessionProgressRepository = teamSessionProgressRepository;
     }
 
     @Transactional(readOnly = true)
@@ -636,6 +639,11 @@ public class GameService {
             throw new BadRequestException("Для уровня типа «Игра в ассоциации» необходимо заполнить пирамиду из 31 слова");
         }
 
+        if (game.getLevels() != null) {
+            for (GameLevel oldLevel : new ArrayList<>(game.getLevels())) {
+                teamSessionProgressRepository.deleteByLevelId(oldLevel.getId());
+            }
+        }
         game.getLevels().clear();
         gameRepository.saveAndFlush(game);
 
