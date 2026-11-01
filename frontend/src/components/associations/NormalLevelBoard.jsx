@@ -293,8 +293,10 @@ export default function NormalLevelBoard({
           )}
 
           {/* Блок вопроса */}
+          <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
+
           {(currentQuestion?.mediaUrls?.length > 0 || (currentQuestion?.mediaType && currentQuestion?.mediaUrl)) && (
-            <div className="assoc-normal-media">
+            <div className="assoc-normal-media" style={{ flexDirection: 'column' }}>
               {(currentQuestion.mediaUrls?.length > 0 ? currentQuestion.mediaUrls : [currentQuestion.mediaUrl]).map((url, idx) => {
                 const lower = (url || '').toLowerCase()
                 if (lower.match(/\.(mp4|webm|ogg)(\?|$)/)) {
@@ -310,8 +312,6 @@ export default function NormalLevelBoard({
               })}
             </div>
           )}
-
-          <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
 
           {/* Блок подсказок (всегда виден) */}
           <div className="assoc-normal-hints">
