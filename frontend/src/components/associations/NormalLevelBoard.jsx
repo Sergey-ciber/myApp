@@ -45,6 +45,7 @@ export default function NormalLevelBoard({
   const hintStartAt = useRef({})
   // использованные подсказки: { [questionId]: [индексы подсказок] }
   const [usedHints, setUsedHints] = useState({})
+  const [fullscreenImage, setFullscreenImage] = useState(null)
 
   const currentQuestion = questions[currentQuestionIndex]
   const solvedCount = questions.filter((q) => isQuestionSolved(solved, q)).length
@@ -306,7 +307,15 @@ export default function NormalLevelBoard({
                   return <audio key={idx} controls src={url} />
                 }
                 if (lower.match(/\.(png|jpg|jpeg|gif|webp)(\?|$)/) || currentQuestion.mediaType === 'image') {
-                  return <img key={idx} src={url} alt="Изображение к вопросу" />
+                  return (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt="Изображение к вопросу"
+                      style={{ cursor: 'zoom-in' }}
+                      onClick={() => setFullscreenImage(url)}
+                    />
+                  )
                 }
                 return null
               })}
@@ -407,7 +416,34 @@ export default function NormalLevelBoard({
         </div>
       </div>
 
-
+      {fullscreenImage && (
+        <div
+          onClick={() => setFullscreenImage(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            cursor: 'zoom-out',
+            padding: '20px',
+          }}
+        >
+          <img
+            src={fullscreenImage}
+            alt="Изображение во весь экран"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              borderRadius: '8px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

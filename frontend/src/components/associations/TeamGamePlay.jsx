@@ -15,13 +15,13 @@ function mediaKind(url) {
   return 'other'
 }
 
-function renderMedia(urls) {
+function renderMedia(urls, onImageClick) {
   if (!Array.isArray(urls) || urls.length === 0) return null
   return (
-    <div className="assoc-normal-media">
+    <div className="assoc-normal-media" style={{ flexDirection: 'column' }}>
       {urls.map((url, idx) => {
         const kind = mediaKind(url)
-        if (kind === 'image') return <img key={idx} src={url} alt="Медиа" />
+        if (kind === 'image') return <img key={idx} src={url} alt="Медиа" style={{ cursor: 'zoom-in' }} onClick={() => onImageClick?.(url)} />
         if (kind === 'audio') return <audio key={idx} src={url} controls />
         if (kind === 'video') return <video key={idx} src={url} controls />
         return null
@@ -38,6 +38,7 @@ export default function TeamGamePlay({ sessionId, initialState, onExit, currentU
   const [checking, setChecking] = useState(false)
   const [wrong, setWrong] = useState(false)
   const [flash, setFlash] = useState('')
+  const [fullscreenImage, setFullscreenImage] = useState(null)
   const wrongTimer = useRef(null)
   const flashTimer = useRef(null)
 
@@ -212,12 +213,12 @@ export default function TeamGamePlay({ sessionId, initialState, onExit, currentU
 
       <div className="assoc-normal-card">
         <h3 className="assoc-normal-question">{level?.title}</h3>
-        {renderMedia(level?.mediaUrls)}
+        {renderMedia(level?.mediaUrls, setFullscreenImage)}
 
         {currentQuestion ? (
           <>
-            {renderMedia(currentQuestion.mediaUrls)}
             <p className="assoc-normal-question">{currentQuestion.questionText}</p>
+            {renderMedia(currentQuestion.mediaUrls, setFullscreenImage)}
             <p className="assoc-normal-progress">
               Правильно: <strong>{questionSolvedCount}</strong> из <strong>{passThreshold}</strong>
             </p>
