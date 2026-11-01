@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
-import { getTeamGameState, joinTeamGame, leaveTeamGame, requestTeamHint, submitTeamAnswer } from '../../api/teamGames'
+import { getTeamGameState, heartbeatTeamGame, joinTeamGame, leaveTeamGame, requestTeamHint, submitTeamAnswer } from '../../api/teamGames'
 import { apiMessage } from '../../api/client'
 import { formatTime } from './constants'
 
@@ -57,7 +57,12 @@ export default function TeamGamePlay({ sessionId, initialState, onExit, currentU
         .catch((err) => setError(apiMessage(err)))
         .finally(() => setLoading(false))
     }
+    // Периодическое обновление времени присутствия, чтобы статус «онлайн» не устаревал.
+    const heartbeat = setInterval(() => {
+      heartbeatTeamGame(sessionId).catch(() => {})
+    }, 30000)
     return () => {
+      clearInterval(heartbeat)
       leaveTeamGame(sessionId).catch(() => {})
     }
   }, [sessionId, initialState, applyState])

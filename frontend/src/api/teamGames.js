@@ -23,3 +23,6 @@ export const joinTeamGame = (sessionId) =>
 
 export const leaveTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/leave`).then((res) => res.data)
+
+export const heartbeatTeamGame = (sessionId) =>
+  api.post(`/team-games/${sessionId}/heartbeat`).then((res) => res.data)

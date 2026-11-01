@@ -13,6 +13,8 @@ import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.Team;
 import com.demo.taskmanager.entity.TeamGameSession;
+import com.demo.taskmanager.entity.TeamSessionEvent;
+import com.demo.taskmanager.entity.TeamSessionPresence;
 import com.demo.taskmanager.entity.TeamSessionProgress;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.exception.BadRequestException;
@@ -21,6 +23,8 @@ import com.demo.taskmanager.exception.NotFoundException;
 import com.demo.taskmanager.repository.GameRepository;
 import com.demo.taskmanager.repository.StandardQuestionRepository;
 import com.demo.taskmanager.repository.TeamGameSessionRepository;
+import com.demo.taskmanager.repository.TeamSessionEventRepository;
+import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
 import com.demo.taskmanager.repository.TeamSessionProgressRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -37,27 +41,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TeamGameService {
 
+    /** Пользователь считается онлайн, пока его «последняя активность» не старше этого окна. */
+    private static final long PRESENCE_TTL_SECONDS = 60;
+
+    /** Максимальное число событий, отдаваемых в ленту. */
+    private static final int MAX_EVENTS = 100;
+
     private final TeamGameSessionRepository sessionRepository;
     private final TeamSessionProgressRepository progressRepository;
+    private final TeamSessionEventRepository eventRepository;
+    private final TeamSessionPresenceRepository presenceRepository;
     private final GameRepository gameRepository;
     private final TeamService teamService;
     private final StandardQuestionRepository standardQuestionRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
-    /** Онлайн-участники сессии: sessionId -> (userId -> username). */
-    private final Map<Long, Map<Long, String>> onlineUsers = new ConcurrentHashMap<>();
-
-    /** Лента событий сессии: sessionId -> список событий. */
-    private final Map<Long, List<Map<String, Object>>> events = new ConcurrentHashMap<>();
-
     public TeamGameService(TeamGameSessionRepository sessionRepository,
                            TeamSessionProgressRepository progressRepository,
+                           TeamSessionEventRepository eventRepository,
+                           TeamSessionPresenceRepository presenceRepository,
                            GameRepository gameRepository,
                            TeamService teamService,
                            StandardQuestionRepository standardQuestionRepository,
@@ -65,6 +72,8 @@ public class TeamGameService {
                            SimpMessagingTemplate messagingTemplate) {
         this.sessionRepository = sessionRepository;
         this.progressRepository = progressRepository;
+        this.eventRepository = eventRepository;
+        this.presenceRepository = presenceRepository;
         this.gameRepository = gameRepository;
         this.teamService = teamService;
         this.standardQuestionRepository = standardQuestionRepository;
@@ -95,7 +104,7 @@ public class TeamGameService {
             session.setCreatedById(user.getId());
             sessionRepository.save(session);
         }
-        markOnline(session.getId(), user);
+        markOnline(session, user);
         List<TeamMemberResponse> members = teamService.getMembers(team);
         return TeamGameLobbyResponse.from(session, members, onlineIds(session.getId()));
     }
@@ -114,7 +123,7 @@ public class TeamGameService {
         session.setCurrentLevelIndex(0);
         sessionRepository.save(session);
         ensureProgress(session);
-        addEvent(sessionId, "Игра началась. Удачи, команда!");
+        addEvent(session, "Игра началась. Удачи, команда!");
         TeamGameStateResponse state = buildState(session);
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "STARTED");
@@ -166,15 +175,15 @@ public class TeamGameService {
             solved.put(key, matched.getAnswerText());
             progress.setSolvedData(writeSolved(solved));
             progressRepository.save(progress);
-            addEvent(sessionId, "Игрок " + user.getUsername() + " разгадал слово \"" + matched.getAnswerText() + "\"");
+            addEvent(session, "Игрок " + user.getUsername() + " разгадал слово \"" + matched.getAnswerText() + "\"");
             boolean levelComplete = isLevelComplete(level, solved);
             payload.put("levelCompleted", levelComplete);
             if (levelComplete) {
-                addEvent(sessionId, "Команда прошла уровень \"" + level.getTitle() + "\"");
+                addEvent(session, "Команда прошла уровень \"" + level.getTitle() + "\"");
                 advance(session);
             }
         } else {
-            addEvent(sessionId, "Игрок " + user.getUsername() + " ввёл неверный ответ");
+            addEvent(session, "Игрок " + user.getUsername() + " ввёл неверный ответ");
         }
         payload.put("state", buildState(session));
         broadcast(sessionId, payload);
@@ -204,7 +213,7 @@ public class TeamGameService {
         double penalty = progress.getPenaltyTime() + (hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime());
         progress.setPenaltyTime(penalty);
         progressRepository.save(progress);
-        addEvent(sessionId, "Команда получила подсказку (+" + Math.round((hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime()) * 60) + " сек. штрафа)");
+        addEvent(session, "Команда получила подсказку (+" + Math.round((hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime()) * 60) + " сек. штрафа)");
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "HINT_USED");
@@ -226,8 +235,8 @@ public class TeamGameService {
     @Transactional
     public TeamGameStateResponse join(Long sessionId, User user) {
         TeamGameSession session = requireSession(sessionId, user);
-        markOnline(sessionId, user);
-        addEvent(sessionId, "Игрок " + user.getUsername() + " присоединился");
+        markOnline(session, user);
+        addEvent(session, "Игрок " + user.getUsername() + " присоединился");
         TeamGameStateResponse state = buildState(session);
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "PRESENCE");
@@ -239,27 +248,27 @@ public class TeamGameService {
     @Transactional
     public void leave(Long sessionId, User user) {
         TeamGameSession session = requireSession(sessionId, user);
-        Map<Long, String> members = onlineUsers.get(sessionId);
-        if (members != null) {
-            members.remove(user.getId());
-            if (members.isEmpty()) {
-                onlineUsers.remove(sessionId);
-            }
-        }
+        presenceRepository.deleteBySessionIdAndUserId(sessionId, user.getId());
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "PRESENCE");
         payload.put("state", buildState(session));
         broadcast(sessionId, payload);
     }
 
+    @Transactional
+    public void heartbeat(Long sessionId, User user) {
+        TeamGameSession session = requireSession(sessionId, user);
+        markOnline(session, user);
+    }
+
     private void advance(TeamGameSession session) {
         List<GameLevel> levels = sortedLevels(session.getGame());
         if (session.getCurrentLevelIndex() >= levels.size() - 1) {
             session.setStatus("FINISHED");
-            addEvent(session.getId(), "Команда завершила игру! 🏆");
+            addEvent(session, "Команда завершила игру! 🏆");
         } else {
             session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
-            addEvent(session.getId(), "Переход на уровень " + (session.getCurrentLevelIndex() + 1));
+            addEvent(session, "Переход на уровень " + (session.getCurrentLevelIndex() + 1));
         }
         sessionRepository.save(session);
     }
@@ -305,7 +314,6 @@ public class TeamGameService {
     }
 
     private TeamGameStateResponse buildState(TeamGameSession session) {
-        List<GameLevel> levels = sortedLevels(session.getGame());
         GameLevel level = currentLevel(session);
         TeamSessionProgress progress = level == null ? null
                 : progressRepository.findBySessionIdAndLevelId(session.getId(), level.getId()).orElse(null);
@@ -316,7 +324,16 @@ public class TeamGameService {
         for (TeamMemberResponse m : members) {
             memberNames.put(String.valueOf(m.userId()), m.username());
         }
-        List<Map<String, Object>> eventList = new ArrayList<>(events.getOrDefault(session.getId(), List.of()));
+        List<Map<String, Object>> eventList = new ArrayList<>();
+        List<TeamSessionEvent> storedEvents = eventRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
+        int start = Math.max(0, storedEvents.size() - MAX_EVENTS);
+        for (int i = start; i < storedEvents.size(); i++) {
+            TeamSessionEvent ev = storedEvents.get(i);
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("text", ev.getText());
+            entry.put("time", ev.getCreatedAt() == null ? null : ev.getCreatedAt().toString());
+            eventList.add(entry);
+        }
         return new TeamGameStateResponse(
                 session.getId(),
                 session.getStatus(),
@@ -350,15 +367,27 @@ public class TeamGameService {
                 });
     }
 
-    private void markOnline(Long sessionId, User user) {
-        onlineUsers.computeIfAbsent(sessionId, k -> new ConcurrentHashMap<>())
-                .put(user.getId(), user.getUsername());
+    /** Отметить пользователя онлайн: обновляем/создаём запись присутствия с актуальным временем. */
+    private void markOnline(TeamGameSession session, User user) {
+        TeamSessionPresence presence = presenceRepository.findBySessionIdAndUserId(session.getId(), user.getId())
+                .orElse(null);
+        if (presence == null) {
+            presence = new TeamSessionPresence();
+            presence.setSession(session);
+            presence.setUserId(user.getId());
+        }
+        presence.setUsername(user.getUsername());
+        presence.setLastSeenAt(Instant.now());
+        presenceRepository.save(presence);
     }
 
+    /** Пользователи, чья последняя активность не старше окна присутствия. */
     private List<String> onlineIds(Long sessionId) {
-        Map<Long, String> members = onlineUsers.get(sessionId);
-        if (members == null) return List.of();
-        return members.keySet().stream().map(String::valueOf).toList();
+        Instant threshold = Instant.now().minusSeconds(PRESENCE_TTL_SECONDS);
+        return presenceRepository.findBySessionIdOrderByLastSeenAtDesc(sessionId).stream()
+                .filter(p -> p.getLastSeenAt() != null && p.getLastSeenAt().isAfter(threshold))
+                .map(p -> String.valueOf(p.getUserId()))
+                .toList();
     }
 
     private Map<String, String> parseSolved(TeamSessionProgress progress) {
@@ -384,14 +413,11 @@ public class TeamGameService {
         return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.forLanguageTag("ru"));
     }
 
-    private void addEvent(Long sessionId, String text) {
-        List<Map<String, Object>> list = events.computeIfAbsent(sessionId, k -> new ArrayList<>());
-        Map<String, Object> ev = new HashMap<>();
-        ev.put("text", text);
-        ev.put("time", Instant.now().toString());
-        list.add(ev);
-        if (list.size() > 100) {
-            list.remove(0);
-        }
+    private void addEvent(TeamGameSession session, String text) {
+        TeamSessionEvent event = new TeamSessionEvent();
+        event.setSession(session);
+        event.setText(text);
+        event.setCreatedAt(Instant.now());
+        eventRepository.save(event);
     }
 }

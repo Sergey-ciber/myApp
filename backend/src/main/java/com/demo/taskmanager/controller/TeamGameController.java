@@ -91,6 +91,14 @@ public class TeamGameController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/{sessionId}/heartbeat")
+    public ResponseEntity<Void> heartbeat(@PathVariable Long sessionId,
+                                          @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        teamGameService.heartbeat(sessionId, user);
+        return ResponseEntity.ok().build();
+    }
+
     private User currentUser(UserDetails userDetails) {
         if (userDetails == null) {
             throw new BadRequestException("Требуется авторизация");
