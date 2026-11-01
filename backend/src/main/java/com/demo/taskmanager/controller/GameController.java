@@ -42,8 +42,9 @@ public class GameController {
     }
 
     @GetMapping
-    public List<GameSummary> list() {
-        return gameService.listGames();
+    public List<GameSummary> list(@AuthenticationPrincipal UserDetails principal) {
+        User user = principal == null ? null : currentUser(principal);
+        return gameService.listGames(user);
     }
 
     /**

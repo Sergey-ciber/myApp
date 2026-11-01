@@ -73,6 +73,7 @@ public class GameService {
     private final ObjectMapper objectMapper;
     private final StandardQuestionRepository standardQuestionRepository;
     private final com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository;
+    private final com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
@@ -80,7 +81,8 @@ public class GameService {
                        TeamService teamService,
                        ObjectMapper objectMapper,
                        StandardQuestionRepository standardQuestionRepository,
-                       com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository) {
+                       com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository,
+                       com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
@@ -88,11 +90,36 @@ public class GameService {
         this.objectMapper = objectMapper;
         this.standardQuestionRepository = standardQuestionRepository;
         this.teamSessionProgressRepository = teamSessionProgressRepository;
+        this.teamMemberRepository = teamMemberRepository;
     }
 
     @Transactional(readOnly = true)
-    public List<GameSummary> listGames() {
-        return gameRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<GameSummary> listGames(User user) {
+        List<Game> games = gameRepository.findAllByOrderByCreatedAtDesc();
+        if (user == null) {
+            return games.stream()
+                    .filter(game -> game == null || !"TEAM".equalsIgnoreCase(game.getVisibility()))
+                    .map(GameSummary::from)
+                    .toList();
+        }
+        // найти все команды, в которых состоит текущий пользователь
+        List<com.demo.taskmanager.entity.TeamMember> myMemberships = teamMemberRepository.findByUserId(user.getId());
+        java.util.Set<Long> creatorTeamIds = new java.util.HashSet<>();
+        for (com.demo.taskmanager.entity.TeamMember membership : myMemberships) {
+            if (membership.getTeam() != null && membership.getTeam().getCreator() != null) {
+                creatorTeamIds.add(membership.getTeam().getCreator().getId());
+            }
+        }
+        return games.stream()
+                .filter(game -> {
+                    if (game == null) return false;
+                    String visibility = game.getVisibility();
+                    if (visibility == null || !"TEAM".equalsIgnoreCase(visibility)) {
+                        return true;
+                    }
+                    if (game.getCreator() == null) return false;
+                    return creatorTeamIds.contains(game.getCreator().getId());
+                })
                 .map(GameSummary::from)
                 .toList();
     }
