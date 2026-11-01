@@ -572,6 +572,7 @@ public class GameService {
                         standardQuestion.setQuestionText(questionText);
                         standardQuestion.setMediaType(sq.mediaType());
                         standardQuestion.setMediaUrl(sq.mediaUrl());
+                        standardQuestion.setMediaUrls(normalizeMediaUrls(sq.mediaUrls()));
                         standardQuestion.setOrderIndex(q);
                         Integer passThreshold = sq.passThreshold();
                         if (passThreshold == null || passThreshold <= 0 || passThreshold > answers.size()) {
@@ -746,6 +747,7 @@ public class GameService {
                         standardQuestion.setQuestionText(questionText);
                         standardQuestion.setMediaType(sq.mediaType());
                         standardQuestion.setMediaUrl(sq.mediaUrl());
+                        standardQuestion.setMediaUrls(normalizeMediaUrls(sq.mediaUrls()));
                         standardQuestion.setOrderIndex(q);
                         Integer passThreshold = sq.passThreshold();
                         if (passThreshold == null || passThreshold <= 0 || passThreshold > answers.size()) {
