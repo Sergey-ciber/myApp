@@ -94,9 +94,10 @@ public class TeamGameService {
         Team team = teamService.findTeamEntity(teamId);
 
         // Один игрок не может параллельно проходить одну и ту же игру в разных командах:
-        // блокируем вход во вторую активную (LOBBY / IN_PROGRESS) сессию этой игры.
+        // блокируем вход, только если в другой команде уже идёт запущенная партия (IN_PROGRESS).
+        // Лобби (LOBBY) не блокирует — игрок может сидеть в нескольких лобби разных команд.
         List<TeamGameSession> activeForGame = sessionRepository
-                .findByGameIdAndStatusInOrderByCreatedAtDesc(gameId, List.of("LOBBY", "IN_PROGRESS"));
+                .findByGameIdAndStatusInOrderByCreatedAtDesc(gameId, List.of("IN_PROGRESS"));
         for (TeamGameSession existing : activeForGame) {
             if (existing.getTeam() == null || existing.getTeam().getId().equals(teamId)) {
                 continue;
