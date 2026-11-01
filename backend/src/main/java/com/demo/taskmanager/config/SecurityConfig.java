@@ -45,7 +45,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/files/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/files/**", "/ws/**").permitAll()
                         .anyRequest().authenticated())
                 // без токена отвечаем 401 (а не 403), чтобы клиент знал, что нужен вход
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(

@@ -225,6 +225,29 @@ public class TeamService {
         teamRepository.incrementWinsForMember(user.getId());
     }
 
+    @Transactional(readOnly = true)
+    public List<com.demo.taskmanager.dto.TeamMemberResponse> getMembers(Team team) {
+        if (team == null) return List.of();
+        List<TeamMember> members = memberRepository.findByTeamIdOrderByJoinedAtAscIdAsc(team.getId());
+        members.sort(java.util.Comparator.comparing((TeamMember member) -> member.getRole() == TeamRole.ADMIN).reversed()
+                .thenComparing(member -> member.getUser() == null ? "" : member.getUser().getUsername()));
+        return members.stream()
+                .filter(member -> member.getUser() != null)
+                .map(com.demo.taskmanager.dto.TeamMemberResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isMember(Long teamId, User user) {
+        if (teamId == null || user == null) return false;
+        return memberRepository.findByTeamIdAndUserId(teamId, user.getId()).isPresent();
+    }
+
+    @Transactional(readOnly = true)
+    public Team findTeamEntity(Long id) {
+        return findTeam(id);
+    }
+
     private Team findTeam(Long id) {
         return teamRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Команда не найдена"));

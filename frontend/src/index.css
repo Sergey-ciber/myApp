@@ -1041,6 +1041,19 @@ body {
 .assoc-normal-guessed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .assoc-normal-guessed-item { background: rgba(45, 138, 78, 0.16); color: #7ee2b8; border: 1px solid rgba(125, 226, 184, 0.35); padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; }
 
+/* Командный режим: присутствие участников */
+.assoc-team-presence { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.assoc-presence-chip { background: #2a2a36; color: #a0a0b0; border: 1px solid #3a3a4a; padding: 5px 12px; border-radius: 999px; font-size: 13px; }
+.assoc-presence-chip.online { color: #7ee2b8; border-color: rgba(125, 226, 184, 0.45); background: rgba(45, 138, 78, 0.14); }
+.assoc-team-flash { animation: assoc-fade-in 0.3s ease; }
+
+/* Лента событий команды */
+.assoc-event-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+.assoc-event-item { font-size: 13px; color: #c0c0cc; background: #1c1c26; border-radius: 8px; padding: 6px 10px; }
+.assoc-team-role { font-size: 11px; color: #ff8c00; margin-left: 6px; }
+.assoc-team-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.assoc-team-member { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #e0e0e8; }
+
 /* Навигация и индикаторы обычного уровня */
 .assoc-normal-nav {
   display: flex;

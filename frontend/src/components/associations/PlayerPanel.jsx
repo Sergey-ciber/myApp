@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiMessage } from '../../api/client'
 import { fetchGame, fetchLeaderboard, startGame, submitResult, restartGame } from '../../api/games'
+import { fetchTeams } from '../../api/teams'
+import { createTeamGameLobby } from '../../api/teamGames'
 import GameBoard from './GameBoard'
 import NormalLevelBoard from './NormalLevelBoard'
 import Leaderboard from './Leaderboard'
+import TeamGameLobby from './TeamGameLobby'
+import TeamGamePlay from './TeamGamePlay'
 import { formatMinutes, formatTime } from './constants'
 
 /** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
@@ -53,6 +57,22 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [levelStats, setLevelStats] = useState([])
   const [finished, setFinished] = useState(false)
   const [totalTime, setTotalTime] = useState(0)
+  const [teamMode, setTeamMode] = useState(false)
+  const [teams, setTeams] = useState([])
+  const [selectedTeamId, setSelectedTeamId] = useState(null)
+  const [teamSessionId, setTeamSessionId] = useState(null)
+  const [teamState, setTeamState] = useState(null)
+  const [teamError, setTeamError] = useState('')
+
+  useEffect(() => {
+    fetchTeams()
+      .then((data) => {
+        const list = Array.isArray(data) ? data : []
+        // Играть командой можно только в командах, где пользователь состоит.
+        setTeams(list.filter((t) => t && t.currentUserMember))
+      })
+      .catch(() => setTeams([]))
+  }, [])
 
   // Загружаем информацию об игре (без запуска таймера): игрок видит экран описания.
   useEffect(() => {
@@ -98,6 +118,25 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setError(apiMessage(err))
     } finally {
       setStarting(false)
+    }
+  }
+
+  const startTeamPlay = async () => {
+    if (!game) return
+    if (!teams || teams.length === 0) {
+      setTeamError('Вы не состоите ни в одной команде')
+      return
+    }
+    if (!selectedTeamId) {
+      setSelectedTeamId(teams[0].id)
+    }
+    setTeamError('')
+    try {
+      const lobby = await createTeamGameLobby(selectedTeamId || teams[0].id, game.id)
+      setTeamSessionId(lobby.sessionId)
+      setTeamMode(true)
+    } catch (err) {
+      setTeamError(apiMessage(err))
     }
   }
 
@@ -189,12 +228,32 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         </div>
       </div>
 
-      {!gameStarted ? (
+      {teamMode ? (
+        teamState ? (
+          <TeamGamePlay
+            sessionId={teamSessionId}
+            initialState={teamState}
+            onExit={onExit}
+            currentUserId={currentUserId}
+          />
+        ) : (
+          <TeamGameLobby
+            sessionId={teamSessionId}
+            onStarted={(state) => setTeamState(state)}
+            onError={(err) => setTeamError(err)}
+          />
+        )
+      ) : !gameStarted ? (
         <GameInfoScreen
           game={game}
           levelsCount={levels.length}
           starting={starting}
           onStart={startPlaying}
+          teams={teams}
+          selectedTeamId={selectedTeamId}
+          onSelectTeam={setSelectedTeamId}
+          onStartTeam={startTeamPlay}
+          teamError={teamError}
         />
       ) : finished ? (
         <StatisticsScreen
@@ -236,7 +295,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
 }
 
 /** Экран информации об игре перед стартом. */
-function GameInfoScreen({ game, levelsCount, starting, onStart }) {
+function GameInfoScreen({ game, levelsCount, starting, onStart, teams, selectedTeamId, onSelectTeam, onStartTeam, teamError }) {
   const media = Array.isArray(game.mediaUrls) ? game.mediaUrls : []
   const description = (game.description || '').trim()
   const date = formatGameDate(game.gameDate)
@@ -300,10 +359,32 @@ function GameInfoScreen({ game, levelsCount, starting, onStart }) {
           </div>
         )}
 
-        <div className="assoc-info-actions">
+        {teamError && <div className="alert alert-error">{teamError}</div>}
+        <div className="assoc-info-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-primary assoc-info-start" onClick={onStart} disabled={starting}>
-            {starting ? 'Запускаем…' : 'Начать игру'}
+            {starting ? 'Запускаем…' : 'Играть одному'}
           </button>
+          {teams && teams.length > 0 ? (
+            <>
+              <select
+                className="assoc-input"
+                style={{ width: 'auto' }}
+                value={selectedTeamId || teams[0].id}
+                onChange={(e) => onSelectTeam && onSelectTeam(Number(e.target.value))}
+              >
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-secondary" onClick={onStartTeam}>
+                Играть командой
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-secondary" disabled title="Не состоите в команде">
+              Играть командой
+            </button>
+          )}
         </div>
       </div>
     </div>
