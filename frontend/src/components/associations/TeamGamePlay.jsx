@@ -619,7 +619,7 @@ export default function TeamGamePlay({
             </span>
           )}
           {levelEndTimeMs ? (
-            <span className="badge" style={{ color: levelRemainingSec <= 10 ? '#ff4d4f' : '#ff8c00', fontWeight: 700 }} title="Обратный отсчёт до окончания уровня">⏲ Уровень: {formatTime(levelRemainingSec)}</span>
+            <span className="badge" style={{ color: levelRemainingSec <= 10 ? '#ff4d4f' : '#fbfbfa', fontWeight: 700 }} title="Обратный отсчёт до окончания уровня">⏲ Уровень: {formatTime(levelRemainingSec)}</span>
           ) : levelTimeLimitSec ? (
             <span className="badge" title="Таймер уровня">⏲ Уровень: {formatTime(levelRemainingSec || levelTimeLimitSec)}</span>
           ) : null}

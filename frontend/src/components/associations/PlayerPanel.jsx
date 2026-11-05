@@ -594,7 +594,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
 
   return (
     <div className="assoc-player">
-      {onExit && (
+      {/*
+        В командном режиме верхний блок не нужен: TeamGamePlay сам показывает
+        кнопку «← К списку игр» и шапку партии с таймерами и хостом.
+        В остальных режимах блок остаётся на месте.
+      */}
+      {!teamMode && onExit && (
         <button type="button" className="btn btn-secondary assoc-back-btn" onClick={onExit}>
           ← К списку игр
         </button>
@@ -611,19 +616,21 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         <div className="page-loader">Восстанавливаем участие в командной игре…</div>
       )}
 
-      <div className="assoc-player-top">
-        <div className="assoc-player-heading">
-          <h2 className="assoc-player-title">{(teamState?.game || game).title}</h2>
-          <span className="assoc-player-author">
-            автор: {(teamState?.game || game).creatorUsername || 'неизвестен'} · лимит: {formatMinutes((teamState?.game || game).timeLimitMinutes)} мин.
-          </span>
+      {!teamMode && (
+        <div className="assoc-player-top">
+          <div className="assoc-player-heading">
+            <h2 className="assoc-player-title">{game.title}</h2>
+            <span className="assoc-player-author">
+              автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
+            </span>
+          </div>
+          {gameStarted && !finished && (
+            <button type="button" className="btn btn-danger" onClick={() => setShowQuitModal(true)}>
+              Завершить игру
+            </button>
+          )}
         </div>
-        {gameStarted && !finished && !teamMode && (
-          <button type="button" className="btn btn-danger" onClick={() => setShowQuitModal(true)}>
-            Завершить игру
-          </button>
-        )}
-      </div>
+      )}
 
       {showQuitModal && (
         <div className="modal-overlay" onClick={() => setShowQuitModal(false)}>
