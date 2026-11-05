@@ -14,6 +14,8 @@
   --glitched-long-duration: 3s;   /* Скорость медленного глитча (для линий) */
   --answer-block: linear-gradient(135deg, #365565 50%, #2f5d71 100%); /* Градиент для  блоков с подсказками / ответами*/
   --border-leaft-color: #fd6a06;
+  --answer-block-color: #2b056c;
+  --hint-block-color: rgb(11 97 3);
 }
 
 * { box-sizing: border-box; }
@@ -1347,14 +1349,16 @@ padding-bottom: 10px;
   gap: 10px;
 }
 
-/* ---------- Режим создания/редактирования игры: блоки вопросов и ответов ---------- */
+/* ---------- Режим создания/редактирования игры: блоки вопросов, ответов и подсказок ---------- */
+
+/* --- Вопрос --- серый фон --- */
 .question-block {
-  background: #3a3a4a !important;
-  border-left: 3px solid #6b7280 !important;
-  color: #e5e7eb !important;
+  background: #3a3a4a;
+  border-left: 3px solid #6b7280;
+  color: #e5e7eb;
 }
 .question-block .field > span {
-  color: #d1d5db !important;
+  color: #d1d5db;
   font-weight: 500;
 }
 .question-block input,
@@ -1372,21 +1376,22 @@ padding-bottom: 10px;
   box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.35);
 }
 
+/* --- Ответы --- зелёный фон (дизайн-токен --success) --- */
 .answers-block {
-  background: rgb(104 46 3);
-  border: 1px solid rgb(7 3 0);
+  background: var(--answer-block-color);
+  border: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 10px;
   border-left: 3px solid var(--border-leaft-color);
 }
 .answers-block .field > span {
-  color: #eceef3 !important;
+  color: #e5e7eb;
   font-weight: 500;
 }
 .answers-block input {
-  background: #f0fdf4;
-  border: 1px solid #86efac;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   color: #14532d;
 }
 .answers-block input:focus {
@@ -1395,39 +1400,40 @@ padding-bottom: 10px;
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
 }
 .answers-block input:disabled {
-  background: #dcfce7;
+  background: rgba(255, 255, 255, 0.7);
   color: #166534;
 }
 .answers-block .btn-small {
   flex-shrink: 0;
 }
 
+/* --- Подсказки --- акцентный синий фон (дизайн-токен --primary) --- */
 .hint-block {
-  background: rgb(4 108 108) !important;
-  border-left: 3px solid var(--border-leaft-color) !important;
-  color: #f3e8ed !important;
+  background: var(--hint-block-color);
+  border-left: 3px solid var(--border-leaft-color);
+  color: #e5e7eb;
 }
 .hint-block .field > span {
-  color: #e8dce2 !important;
+  color: #fef3c7;
   font-weight: 500;
 }
 .hint-block input,
 .hint-block textarea,
 .hint-block select {
-  background: #fdf2f8;
-  border: 1px solid #f9a8d4;
-  color: #500724;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #1e3a5f;
 }
 .hint-block input:focus,
 .hint-block textarea:focus,
 .hint-block select:focus {
   outline: none;
-  border-color: #f472b6;
-  box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.35);
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.35);
 }
 .hint-block input:disabled {
-  background: #fce7f3;
-  color: #831843;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1e3a5f;
 }
 .hint-block .btn-small {
   flex-shrink: 0;

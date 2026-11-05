@@ -1066,7 +1066,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                     <button type="button" className="btn btn-small btn-secondary" onClick={() => addQuestion(levelIndex)}>Добавить вопрос</button>
                   </div>
                   {(level.questions || []).map((q, qIndex) => (
-                    <div key={qIndex} className="assoc-panel" style={{ background: '#1f1f2b', marginBottom: 10 }}>
+                    <div key={qIndex} className="assoc-panel question-block" style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <span style={{ color: '#ffffff' }}>Вопрос {qIndex + 1}</span>
                         <button type="button" className="btn btn-small btn-danger" onClick={() => removeQuestion(levelIndex, qIndex)}>Удалить</button>
@@ -1086,7 +1086,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       <div style={{ marginBottom: 8 }}>
                         <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Варианты ответов</span>
                       </div>
-                      <div className="field-row" style={{ alignItems: 'flex-start', marginBottom: (q.answers || []).length > 1 ? 8 : 0 }}>
+                      <div className="answers-block" style={{ marginBottom: (q.answers || []).length > 1 ? 8 : 0 }}>
                         <label className="field">
                           <span>Вариант ответа 1 *</span>
                           <input
@@ -1095,22 +1095,22 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                             className={showErrors && !(q.answers?.[0] || '').trim() ? 'input-invalid' : ''}
                           />
                         </label>
+                        {(q.answers || []).map((answer, answerIndex) => answerIndex > 0 ? (
+                          <div key={answerIndex} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                            <label className="field" style={{ flex: 1 }}>
+                              <span>Вариант ответа {answerIndex + 1}</span>
+                              <input
+                                value={answer || ''}
+                                onChange={(event) => updateAnswer(levelIndex, qIndex, answerIndex, event.target.value)}
+                                className={showErrors && !(answer || '').trim() ? 'input-invalid' : ''}
+                              />
+                            </label>
+                            <button type="button" className="btn btn-small btn-danger" onClick={() => removeAnswer(levelIndex, qIndex, answerIndex)}>Удалить</button>
+                          </div>
+                        ) : null)}
+                        <button type="button" className="btn btn-small btn-secondary" onClick={() => addAnswer(levelIndex, qIndex)}>+ Добавить вариант ответа</button>
                       </div>
-                      {(q.answers || []).map((answer, answerIndex) => answerIndex > 0 ? (
-                        <div key={answerIndex} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                          <label className="field" style={{ flex: 1 }}>
-                            <span>Вариант ответа {answerIndex + 1}</span>
-                            <input
-                              value={answer || ''}
-                              onChange={(event) => updateAnswer(levelIndex, qIndex, answerIndex, event.target.value)}
-                              className={showErrors && !(answer || '').trim() ? 'input-invalid' : ''}
-                            />
-                          </label>
-                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeAnswer(levelIndex, qIndex, answerIndex)}>Удалить</button>
-                        </div>
-                      ) : null)}
-                      <button type="button" className="btn btn-small btn-secondary" onClick={() => addAnswer(levelIndex, qIndex)}>+ Добавить вариант ответа</button>
-                      <div className="field-row" style={{ marginTop: 12 }}>
+                    <div className="field-row" style={{ marginTop: 12 }}>
                         <label className="field field--compact">
                           <span>Порог прохождения *</span>
                           <input
@@ -1130,7 +1130,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                             <button type="button" className="btn btn-small btn-secondary" onClick={() => addHint(levelIndex, qIndex)}>Добавить подсказку</button>
                           </div>
                           {(q.hints || []).map((hint, hintIndex) => (
-                            <div key={hintIndex} className="assoc-panel" style={{ background: '#262636', marginBottom: 10 }}>
+                            <div key={hintIndex} className="assoc-panel hint-block" style={{ marginBottom: 10 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                 <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
                                 <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex, qIndex)}>Удалить</button>
@@ -1186,7 +1186,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                     <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки</span>
                   </div>
                   {(level.hints || []).map((hint, hintIndex) => (
-                    <div key={hintIndex} className="assoc-panel" style={{ background: '#1f1f2b', marginBottom: 10 }}>
+                    <div key={hintIndex} className="assoc-panel hint-block" style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
                         <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex)}>Удалить</button>
