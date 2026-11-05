@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import {
-  disconnectTeamGame, endTeamGame, getTeamGameState, heartbeatTeamGame,
-  joinTeamGame, leaveTeamGame, requestTeamHint, submitTeamAnswer,
+  disconnectTeamGame, endTeamGame, getTeamGameState, heartbeatTeamGame, joinTeamGame, leaveTeamGame,
+  revealTeamHint, revealTeamHintById, submitTeamAnswer,
 } from '../../api/teamGames'
 import { apiMessage } from '../../api/client'
 import { formatTime } from './constants'
@@ -46,12 +46,63 @@ function finishReasonText(reason) {
   }
 }
 
+function shortQuestionText(text, max = 42) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+  return `${clean.slice(0, max - 1)}…`
+}
+
+function questionStatusText(questionState) {
+  if (!questionState) return 'не решён'
+  if (questionState.isSolved) return 'решён'
+  if (Array.isArray(questionState.revealedHintIds) && questionState.revealedHintIds.length > 0) {
+    return 'есть подсказки'
+  }
+  return 'не решён'
+}
+
+function questionStorageKey(sessionId) {
+  return `teamGameQuestion:${sessionId}`
+}
+
+/**
+ * Ответы вопроса из состояния партии — строго по question_id.
+ *
+ * Возвращает пустой список, если вопрос не найден или не решён.
+ */
+function answersOfQuestion(state, questionId) {
+  if (!state || questionId == null) return []
+  const qState = state.questionStates?.[String(questionId)]
+  return Array.isArray(qState?.answers) ? qState.answers : []
+}
+
+/** Относится ли событие к вопросу, который сейчас открыт у игрока. */
+function isSelectedQuestion(selectedQuestionId, questionId) {
+  if (selectedQuestionId == null || questionId == null) return false
+  return String(selectedQuestionId) === String(questionId)
+}
+
+/**
+ * Текст последнего угаданного ответа вопроса — только для выбранного вопроса.
+ *
+ * Если событие относится к другому вопросу, ответ не показывается:
+ * игрок увидит его, когда переключится на этот вопрос.
+ */
+function answerOfQuestion(state, questionId) {
+  if (!state || questionId == null) return ''
+  const answers = answersOfQuestion(state, questionId)
+  return answers.length > 0 ? answers[answers.length - 1] : ''
+}
+
 /**
  * Игровой экран командной партии (co-op).
  *
  * Все действия уходят на сервер, а сервер рассылает события комнате
- * /topic/team_session_{sessionId}: sync_correct_answer, sync_hint_used,
- * sync_level_up, PRESENCE, end_team_game.
+ * /topic/team_session_{sessionId}: sync_correct_answer, question_solved,
+ * hint_revealed, sync_level_up, PRESENCE, end_team_game.
+ *
+ * Вопросы уровня независимы: каждый игрок может выбрать свой вопрос
+ * (выбор хранится локально), а открытые подсказки и решения общие для команды.
  *
  * Права:
  *  - хост (тот, кто запустил игру) видит «Завершить игру»;
@@ -65,6 +116,7 @@ export default function TeamGamePlay({
   const [error, setError] = useState('')
   const [answer, setAnswer] = useState('')
   const [checking, setChecking] = useState(false)
+  const [hintLoading, setHintLoading] = useState(false)
   const [wrong, setWrong] = useState(false)
   const [flash, setFlash] = useState('')
   const [hintNotice, setHintNotice] = useState(null)
@@ -72,18 +124,46 @@ export default function TeamGamePlay({
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [finishedFromServer, setFinishedFromServer] = useState(false)
   const [fullscreenImage, setFullscreenImage] = useState(null)
+  const [selectedQuestionId, setSelectedQuestionId] = useState(() => {
+    try {
+      return localStorage.getItem(questionStorageKey(sessionId))
+    } catch {
+      return null
+    }
+  })
   const expiryFetchRef = useRef(null)
   const wrongTimer = useRef(null)
   const flashTimer = useRef(null)
   const hintTimer = useRef(null)
+  // Текущий выбранный вопрос и состояние — нужны обработчику WebSocket,
+  // чтобы не показывать ответ чужого вопроса.
+  const selectedQuestionIdRef = useRef(selectedQuestionId)
+  const stateRef = useRef(state)
+  // Авторитетные флаги «я — host», посчитанные сервером: { userId: true/false }.
+  // Приходят и в REST-ответах (currentUserHost), и в broadcast-событиях.
+  const [hostFlags, setHostFlags] = useState({})
   const [now, setNow] = useState(Date.now())
-  const [hintCooldownUntil, setHintCooldownUntil] = useState(0)
 
-  const applyState = useCallback((s) => {
+  useEffect(() => {
+    selectedQuestionIdRef.current = selectedQuestionId
+  }, [selectedQuestionId])
+
+  /**
+   * Применяет состояние партии.
+   *
+   * Флаг роли host берём только из персональных ответов сервера
+   * (REST). В broadcast-событиях currentUserHost относится к автору
+   * события, поэтому там роль приходит отдельной картой isHostByUser.
+   */
+  const applyState = useCallback((s, personal = false) => {
     if (!s) return
+    stateRef.current = s
     setState(s)
     setLoading(false)
-  }, [])
+    if (personal && (s.currentUserHost === true || s.currentUserHost === false)) {
+      setHostFlags((prev) => ({ ...prev, [String(currentUserId)]: s.currentUserHost }))
+    }
+  }, [currentUserId])
 
   const showFlash = useCallback((text, ms = 2500) => {
     setFlash(text)
@@ -115,15 +195,15 @@ export default function TeamGamePlay({
     const lastAttempt = expiryFetchRef.current || 0
     if (now - lastAttempt < 5000) return
     expiryFetchRef.current = now
-    getTeamGameState(sessionId).then(applyState).catch(() => {})
+    getTeamGameState(sessionId).then((s) => applyState(s, true)).catch(() => {})
   }, [now, state?.status, state?.endsAt, sessionId, applyState])
 
   // Подключение к партии: получаем полный слепок состояния.
   useEffect(() => {
     if (initialState) {
-      applyState(initialState)
+      applyState(initialState, true)
       joinTeamGame(sessionId)
-        .then((s) => applyState(s))
+        .then((s) => applyState(s, true))
         .catch((err) => {
           // Сессия исчезла — возвращаем игрока к списку игр.
           // Завершённая сессия не ошибка: join вернёт её актуальное состояние.
@@ -133,7 +213,7 @@ export default function TeamGamePlay({
         })
     } else {
       getTeamGameState(sessionId)
-        .then((s) => applyState(s))
+        .then((s) => applyState(s, true))
         .catch((err) => {
           // Сессия исчезла — возвращаем игрока к экрану игры без ошибки.
           if (err?.response?.status === 404) {
@@ -150,7 +230,10 @@ export default function TeamGamePlay({
     }, 30000)
     return () => {
       clearInterval(heartbeat)
-      leaveTeamGame(sessionId).catch(() => {})
+      // ВАЖНО: не выходим из игры при размонтировании.
+      // Размонтирование бывает и при перезагрузке страницы — это не выход.
+      // Явный выход выполняется только по кнопке «Покинуть игру» (handleLeave).
+      disconnectTeamGame(sessionId).catch(() => {})
     }
   }, [sessionId, initialState, applyState, onMissing])
 
@@ -166,18 +249,52 @@ export default function TeamGamePlay({
         stompClient.subscribe('/topic/team_session_' + sessionId, (message) => {
           try {
             const payload = JSON.parse(message.body)
+            // Флаги host от сервера: смотрим свой user_id.
+            if (payload.isHostByUser && typeof payload.isHostByUser === 'object') {
+              setHostFlags(payload.isHostByUser)
+            }
             if (payload.state) applyState(payload.state)
 
             switch (payload.type) {
-              case 'sync_correct_answer':
-                // Слово угадано — показываем его всем участникам.
-                setWrong(false)
-                setAnswer('')
-                showFlash(`✅ ${payload.username || 'Игрок'} разгадал: ${payload.answer}`)
+              case 'host_changed': {
+                // Сменился владелец сессии: роль каждого участника
+                // определяется сервером, клиент только применяет её.
+                showFlash(payload.newHostUsername
+                  ? `👑 Хостом теперь ${payload.newHostUsername}`
+                  : '👑 Владелец партии изменился')
                 break
+              }
+              case 'sync_correct_answer': {
+                // Слово угадано. Текст ответа берём из своего состояния и
+                // показываем только если открыт именно этот вопрос.
+                setWrong(false)
+                if (String(payload.userId) === String(currentUserId)) {
+                  setAnswer('')
+                }
+                const shown = isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)
+                  ? answerOfQuestion(payload.state || stateRef.current, payload.questionId)
+                  : ''
+                showFlash(shown
+                  ? `✅ ${payload.username || 'Игрок'} разгадал: ${shown}`
+                  : `✅ ${payload.username || 'Игрок'} разгадал ответ`)
+                break
+              }
+              case 'question_solved': {
+                if (String(payload.userId) === String(currentUserId)) {
+                  setAnswer('')
+                }
+                const shown = isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)
+                  ? answerOfQuestion(payload.state || stateRef.current, payload.questionId)
+                  : ''
+                showFlash(shown
+                  ? `🎯 Вопрос решён: ${shown}`
+                  : '🎯 Вопрос решён')
+                break
+              }
+              case 'hint_revealed':
               case 'sync_hint_used':
                 showHint(payload)
-                showFlash(`💡 ${payload.username || 'Команда'} взяла подсказку`
+                showFlash(`💡 ${payload.username || 'Команда'} открыл(а) подсказку`
                   + (payload.penaltySeconds ? ` (+${payload.penaltySeconds} сек.)` : ''))
                 break
               case 'sync_level_up':
@@ -199,7 +316,7 @@ export default function TeamGamePlay({
                 setFinishedFromServer(true)
                 if (!payload.state) {
                   // Событие без слепка (старый формат) — добираем актуальное состояние.
-                  getTeamGameState(sessionId).then(applyState).catch(() => {})
+                  getTeamGameState(sessionId).then((s) => applyState(s, true)).catch(() => {})
                 }
                 showFlash(finishReasonText(payload.endReason || payload.reason))
                 if (onEnded) onEnded(payload.state)
@@ -233,12 +350,16 @@ export default function TeamGamePlay({
   const levels = game?.levels || []
   const levelIndex = state?.currentLevelIndex || 0
   const level = levels[levelIndex]
-  const solved = state?.solved || {}
   const penalty = state?.penaltyTime || 0
   const events = state?.events || []
   const memberNames = state?.memberNames || {}
   const onlineUserIds = state?.onlineUserIds || []
-  const isHost = state?.currentUserHost === true
+  /**
+   * Роль host определяется сервером и приходит флагом по нашему user_id.
+   * Никаких вычислений на клиенте: один broadcast может содержать разные
+   * флаги для разных участников, и каждый берёт свой.
+   */
+  const isHost = hostFlags[String(currentUserId)] === true
   const hostUsername = state?.hostUsername
   const status = String(state?.status || '').toLowerCase()
   const isFinished = status === 'finished' || finishedFromServer
@@ -255,27 +376,102 @@ export default function TeamGamePlay({
   const levelEndTimeMs = state?.levelEndTime ? new Date(state.levelEndTime).getTime() : null
   const levelTimeLimitSec = level?.timeLimitMinutes ? Math.round(level.timeLimitMinutes * 60) : (levelEndTimeMs ? Math.max(0, Math.floor((levelEndTimeMs - startTimeMs) / 1000)) : null)
   const levelRemainingSec = levelEndTimeMs ? Math.max(0, Math.floor((levelEndTimeMs - now) / 1000)) : levelTimeLimitSec
-  const hintCooldownSec = hintCooldownUntil > now ? Math.max(0, Math.ceil((hintCooldownUntil - now) / 1000)) : 0
 
   const questions = level?.questions || []
-  const currentQuestion = questions[0]
+  const questionStates = state?.questionStates || {}
 
-  const questionSolvedCount = currentQuestion
-    ? Object.keys(solved).filter((k) => k && k.startsWith('l' + level.id + ':q' + currentQuestion.id + ':')).length
-    : 0
-  const passThreshold = currentQuestion?.passThreshold || 0
+  // Выбранный вопрос хранится локально: у каждого игрока он свой.
+  const currentQuestion = questions.find((q) => String(q.id) === String(selectedQuestionId)) || questions[0]
+  const currentQuestionState = currentQuestion ? questionStates[String(currentQuestion.id)] : null
+  const currentHints = currentQuestionState?.hints || []
+  const currentSolved = currentQuestionState?.isSolved === true
+  const allHintsRevealed = currentQuestionState?.allHintsRevealed === true
 
-  const solvedWords = Object.values(solved || {}).filter(Boolean)
+  /**
+   * Подсказки вопроса с вычисленным состоянием.
+   *
+   * Доступность определяется только временем (availableAt от сервера),
+   * поэтому открыть можно любую подсказку, время которой наступило,
+   * не открывая предыдущие.
+   */
+  const hintRows = currentHints.map((hint, idx) => {
+    const availableAtMs = hint.availableAt ? new Date(hint.availableAt).getTime() : null
+    // Доступность определяем ТОЛЬКО по серверному availableAt и текущему client now.
+    // Не доверяем кэшированному hint.isAvailable — оно могло быть вычислено
+    // на сервере в прошлый раз, когда время ещё не пришло.
+    const timeReached = availableAtMs == null || now >= availableAtMs
+    const isAvailable = timeReached
+    const remainingSec = availableAtMs == null
+      ? 0
+      : Math.max(0, Math.ceil((availableAtMs - now) / 1000))
+    let status = 'unavailable'
+    if (hint.isRevealed) status = 'revealed'
+    else if (isAvailable) status = 'available'
+    return {
+      ...hint,
+      index: idx,
+      status,
+      isAvailable,
+      remainingSec,
+    }
+  })
+
+  const availableHints = hintRows.filter((h) => h.status === 'available')
+  // Ближайшая по времени недоступная подсказка — отсчёт показываем всегда,
+  // независимо от того, открыты ли предыдущие.
+  const upcomingHint = hintRows
+    .filter((h) => h.status === 'unavailable')
+    .sort((a, b) => a.remainingSec - b.remainingSec)[0] || null
+  const nextHintRemainingSec = upcomingHint ? upcomingHint.remainingSec : 0
+
+  // Количество угаданных ответов — из состояния вопроса (по question_id).
+  const questionSolvedCount = currentQuestionState?.matchedCount ?? 0
+  const passThreshold = currentQuestionState?.passThreshold || currentQuestion?.passThreshold || 0
+
+  /**
+   * Угаданные ответы — строго по выбранному вопросу.
+   *
+   * Сервер отдаёт их в questionStates[questionId].answers, поэтому ответы
+   * других вопросов сюда не попадают и в DOM не попадают тоже.
+   */
+  const solvedWords = currentQuestionState?.answers || []
+
+  // При смене уровня или загрузке состояния возвращаемся к сохранённому вопросу,
+  // если он существует; иначе — к первому вопросу уровня.
+  useEffect(() => {
+    if (!questions.length) return
+    const exists = questions.some((q) => String(q.id) === String(selectedQuestionId))
+    if (!exists) {
+      setSelectedQuestionId(String(questions[0].id))
+    }
+  }, [questions, selectedQuestionId])
+
+  // Смена вопроса очищает введённый ответ и ошибку: блок вопроса
+  // отображается целиком для выбранного вопроса.
+  useEffect(() => {
+    setAnswer('')
+    setError('')
+    setWrong(false)
+  }, [selectedQuestionId, levelIndex])
+
+  useEffect(() => {
+    if (selectedQuestionId == null) return
+    try {
+      localStorage.setItem(questionStorageKey(sessionId), String(selectedQuestionId))
+    } catch {
+      // localStorage может быть недоступен — выбор просто не сохранится
+    }
+  }, [sessionId, selectedQuestionId])
 
   const handleSubmit = async () => {
-    if (!currentQuestion || checking) return
+    if (!currentQuestion || checking || currentSolved) return
     const trimmed = (answer || '').trim()
     if (!trimmed) return
     setChecking(true)
     setWrong(false)
     try {
       const res = await submitTeamAnswer(sessionId, currentQuestion.id, trimmed)
-      if (res) applyState(res)
+      if (res) applyState(res, true)
       setAnswer('')
     } catch (err) {
       setWrong(true)
@@ -286,15 +482,27 @@ export default function TeamGamePlay({
     }
   }
 
-  const handleHint = async () => {
-    if (!currentQuestion) return
-    if (hintCooldownSec > 0) return
+  /**
+   * Открыть подсказку вопроса.
+   *
+   * hintId не указан — сервер отдаст ближайшую по времени доступную.
+   * Указан — откроется именно эта подсказка: доступность зависит только
+   * от времени, предыдущие открывать не обязательно.
+   */
+  const handleHint = async (hintId = null) => {
+    if (!currentQuestion || hintLoading || currentSolved) return
+    setHintLoading(true)
+    setError('')
     try {
-      const res = await requestTeamHint(sessionId, currentQuestion.id, 0)
-      if (res) applyState(res)
-      setHintCooldownUntil(Date.now() + 60000)
+      const res = hintId == null
+        ? await revealTeamHint(sessionId, currentQuestion.id)
+        : await revealTeamHintById(sessionId, currentQuestion.id, hintId)
+      if (res) applyState(res, true)
     } catch (err) {
+      // Локальное состояние не трогаем: показываем только сообщение об ошибке.
       setError(apiMessage(err))
+    } finally {
+      setHintLoading(false)
     }
   }
 
@@ -307,7 +515,7 @@ export default function TeamGamePlay({
     try {
       const res = await endTeamGame(sessionId)
       if (res) {
-        applyState(res)
+        applyState(res, true)
         if (onEnded) onEnded(res)
       }
     } catch (err) {
@@ -341,7 +549,7 @@ export default function TeamGamePlay({
         )}
         <div className="alert alert-error">Не удалось загрузить данные игры. Попробуйте обновить или переподключиться.</div>
         <button type="button" className="btn btn-primary" onClick={() => {
-          getTeamGameState(sessionId).then(applyState).catch((e) => setError(apiMessage(e)))
+          getTeamGameState(sessionId).then((s) => applyState(s, true)).catch((e) => setError(apiMessage(e)))
         }}>Переподключиться</button>
       </div>
     )
@@ -370,6 +578,18 @@ export default function TeamGamePlay({
         </div>
       </div>
     )
+  }
+
+  // Текст статуса подсказки для выбранного вопроса.
+  let hintStatusText = 'Для этого вопроса нет подсказок'
+  if (currentSolved) {
+    hintStatusText = 'Вопрос решён — новые подсказки недоступны'
+  } else if (allHintsRevealed) {
+    hintStatusText = 'Все подсказки по этому вопросу получены'
+  } else if (upcomingHint) {
+    hintStatusText = `Следующая подсказка по этому вопросу через ${formatTime(nextHintRemainingSec)}`
+  } else if (availableHints.length > 0) {
+    hintStatusText = `Доступно подсказок: ${availableHints.length}`
   }
 
   return (
@@ -403,7 +623,17 @@ export default function TeamGamePlay({
           ) : levelTimeLimitSec ? (
             <span className="badge" title="Таймер уровня">⏲ Уровень: {formatTime(levelRemainingSec || levelTimeLimitSec)}</span>
           ) : null}
-          <span className="badge" title="Таймер подсказки">💡 Подсказка: {hintCooldownSec > 0 ? `${hintCooldownSec}с` : 'доступна'}</span>
+          <span className="badge" title="Подсказка по выбранному вопросу">
+            💡 {currentSolved
+              ? 'вопрос решён'
+              : allHintsRevealed
+                ? 'все получены'
+                : nextHintRemainingSec > 0
+                  ? `через ${formatTime(nextHintRemainingSec)}`
+                  : availableHints.length > 0
+                    ? `доступно ${availableHints.length}`
+                    : 'нет подсказок'}
+          </span>
         </div>
         {/* Завершить игру может только хост, остальные — покинуть. */}
         {isHost ? (
@@ -475,9 +705,40 @@ export default function TeamGamePlay({
         <h3 className="assoc-normal-question">{level?.title}</h3>
         {renderMedia(level?.mediaUrls, setFullscreenImage)}
 
+        {/* Выпадающий список вопросов: у каждого игрока свой выбор. */}
+        {questions.length > 1 && (
+          <div className="assoc-normal-nav">
+            <label className="field assoc-normal-select">
+              <span>Вопрос</span>
+              <select
+                value={currentQuestion ? String(currentQuestion.id) : ''}
+                onChange={(e) => {
+                  setSelectedQuestionId(e.target.value)
+                  setAnswer('')
+                  setError('')
+                }}
+              >
+                {questions.map((q, idx) => {
+                  const qState = questionStates[String(q.id)]
+                  return (
+                    <option key={q.id} value={String(q.id)}>
+                      {`${idx + 1}. ${shortQuestionText(q.questionText)} — ${questionStatusText(qState)}`}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          </div>
+        )}
+
         {currentQuestion ? (
           <>
-            <p className="assoc-normal-question">{currentQuestion.questionText}</p>
+            <div className="assoc-team-question-head">
+              <p className="assoc-normal-question">{currentQuestion.questionText}</p>
+              <span className={'assoc-team-question-status' + (currentSolved ? ' solved' : '')}>
+                {currentSolved ? '✅ Решён' : 'Не решён'}
+              </span>
+            </div>
             {renderMedia(currentQuestion.mediaUrls, setFullscreenImage)}
             <p className="assoc-normal-progress">
               Правильно: <strong>{questionSolvedCount}</strong> из <strong>{passThreshold}</strong>
@@ -487,7 +748,7 @@ export default function TeamGamePlay({
           <p className="assoc-normal-hints-empty">В этом уровне нет вопросов</p>
         )}
 
-        {/* Подсказка, полученная командой */}
+        {/* Подсказка, полученная командой (краткое уведомление) */}
         {hintNotice && (
           <div className="assoc-team-hint-notice">
             {hintNotice.imageUrl && (
@@ -497,6 +758,81 @@ export default function TeamGamePlay({
             {hintNotice.penaltySeconds ? (
               <span className="assoc-team-hint-penalty">штраф: +{hintNotice.penaltySeconds} сек.</span>
             ) : null}
+          </div>
+        )}
+
+        {/*
+          Подсказки выбранного вопроса — по одной на каждую.
+          Доступность каждой определяется только временем, поэтому кнопка
+          появляется у любой подсказки, время которой наступило.
+        */}
+        {currentQuestion && (
+          <div className="assoc-team-hints">
+            <div className="assoc-team-hints-title">Подсказки по вопросу</div>
+            {hintRows.length === 0 ? (
+              <p className="assoc-normal-hints-empty">Для этого вопроса нет подсказок</p>
+            ) : (
+              <ul className="assoc-team-hints-list">
+                {hintRows.map((hint) => (
+                  <li
+                    key={hint.id ?? hint.index}
+                    className={'assoc-team-hint-item assoc-team-hint-' + hint.status}
+                  >
+                    <div className="assoc-team-hint-head">
+                      <span>Подсказка {hint.index + 1}</span>
+                      {hint.status === 'revealed' ? (
+                        <span className="assoc-team-hint-badge opened">Открыта</span>
+                      ) : hint.status === 'available' ? (
+                        <span className="assoc-team-hint-badge available">Доступна</span>
+                      ) : (
+                        <span className="assoc-team-hint-badge locked">Недоступна</span>
+                      )}
+                      {hint.status === 'revealed' && hint.penaltyTime ? (
+                        <span className="assoc-team-hint-penalty">
+                          штраф: +{Math.round(Number(hint.penaltyTime) * 60)} сек.
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {hint.status === 'revealed' && (
+                      <>
+                        {hint.text && <span className="assoc-team-hint-text">{hint.text}</span>}
+                        {hint.imageUrl && (
+                          <img
+                            src={hint.imageUrl}
+                            alt="Подсказка"
+                            className="assoc-team-hint-image"
+                            onClick={() => setFullscreenImage(hint.imageUrl)}
+                          />
+                        )}
+                        {renderMedia(hint.mediaUrls, setFullscreenImage)}
+                      </>
+                    )}
+
+                    {hint.status === 'available' && (
+                      <button
+                        type="button"
+                        className="btn btn-primary assoc-team-hint-button"
+                        onClick={() => handleHint(hint.id)}
+                        disabled={hintLoading || currentSolved}
+                      >
+                        {hintLoading ? 'Получаем подсказку…' : '💡 Получить подсказку'}
+                      </button>
+                    )}
+
+                    {hint.status === 'unavailable' && (
+                      <span className="assoc-team-hint-countdown">
+                        Появится через {formatTime(hint.remainingSec)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="assoc-team-hint-action">
+              <span className="assoc-team-hint-status">{hintStatusText}</span>
+            </div>
           </div>
         )}
 
@@ -517,14 +853,11 @@ export default function TeamGamePlay({
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-            placeholder="Командный ответ"
-            disabled={checking || !currentQuestion}
+            placeholder={currentSolved ? 'Вопрос уже решён' : 'Командный ответ'}
+            disabled={checking || !currentQuestion || currentSolved}
           />
-          <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={checking || !currentQuestion}>
+          <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={checking || !currentQuestion || currentSolved}>
             Отправить
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={handleHint} disabled={!currentQuestion || hintCooldownSec > 0}>
-            💡 Подсказка{hintCooldownSec > 0 ? ` (${hintCooldownSec}с)` : ''}
           </button>
         </div>
       </div>

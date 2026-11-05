@@ -28,6 +28,14 @@ export const submitTeamAnswer = (sessionId, questionId, answer) =>
 export const requestTeamHint = (sessionId, questionId, hintIndex) =>
   api.post(`/team-games/${sessionId}/hint`, { sessionId, questionId, hintIndex }).then((res) => res.data)
 
+/** Открыть следующую по порядку подсказку вопроса (сервер проверяет время и порядок). */
+export const revealTeamHint = (sessionId, questionId) =>
+  api.post(`/team-games/${sessionId}/questions/${questionId}/hints/reveal`).then((res) => res.data)
+
+/** Открыть конкретную подсказку вопроса; повторный вызов идемпотентен. */
+export const revealTeamHintById = (sessionId, questionId, hintId) =>
+  api.post(`/team-games/${sessionId}/questions/${questionId}/hints/${hintId}/reveal`).then((res) => res.data)
+
 /** Завершить партию — может только хост, иначе сервер вернёт 403. */
 export const endTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/end`, { sessionId }).then((res) => res.data)

@@ -56,6 +56,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   // Ключ хранилища должен быть стабильным между рендерами,
   // иначе useCallback/effect с ним в зависимостях перезапускаются постоянно.
   const pk = useCallback((s) => playerKey(gameId || currentUserId, s), [gameId, currentUserId])
+  /**
+   * Ключи командной сессии хранятся с привязкой к пользователю, а не к игре,
+   * выбранной в списке: при перезагрузке страницы выбранная игра ещё не
+   * определена, и состояние участия иначе потерялось бы.
+   */
+  const tpk = useCallback((s) => playerKey(currentUserId, s), [currentUserId])
   const [game, setGame] = useState(null)
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -71,10 +77,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [levelStats, setLevelStats] = useState(() => readPJson(pk('stats')) || [])
   const [finished, setFinished] = useState(() => readP(pk('finished')) === '1')
   const [totalTime, setTotalTime] = useState(() => { const v=Number(readP(pk('total'))); return Number.isFinite(v)?v:0 })
-  const [teamMode, setTeamMode] = useState(() => readP(pk('teamMode')) === '1')
+  const [teamMode, setTeamMode] = useState(() => readP(tpk('teamMode')) === '1')
   const [teams, setTeams] = useState([])
-  const [selectedTeamId, setSelectedTeamId] = useState(() => { const v=Number(readP(pk('teamId'))); return Number.isFinite(v)?v:null })
-  const [teamSessionId, setTeamSessionId] = useState(() => readP(pk('teamSession')) || null)
+  const [selectedTeamId, setSelectedTeamId] = useState(() => { const v=Number(readP(tpk('teamId'))); return Number.isFinite(v)?v:null })
+  const [teamSessionId, setTeamSessionId] = useState(() => readP(tpk('teamSession')) || null)
   const [teamState, setTeamState] = useState(null)
   const [teamError, setTeamError] = useState('')
   const [showQuitModal, setShowQuitModal] = useState(false)
@@ -84,6 +90,22 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   // id уже проверенной сессии — чтобы не проверять одну и ту же сессию снова
   const checkedSessionRef = useRef(null)
 
+  /**
+   * Пользователь известен не сразу: при первом рендере currentUserId может быть
+   * пустым (данные пользователя ещё загружаются), и ключи участия тогда
+   * недоступны. Когда пользователь появился — читаем участие заново.
+   */
+  const restoredUserRef = useRef(null)
+  useEffect(() => {
+    if (!currentUserId) return
+    if (restoredUserRef.current === currentUserId) return
+    restoredUserRef.current = currentUserId
+    setTeamMode(readP(tpk('teamMode')) === '1')
+    setTeamSessionId(readP(tpk('teamSession')) || null)
+    const teamIdValue = Number(readP(tpk('teamId')))
+    setSelectedTeamId(Number.isFinite(teamIdValue) && teamIdValue > 0 ? teamIdValue : null)
+  }, [currentUserId, tpk])
+
   /** Выйти из командного режима: сессия недоступна или партия завершена. */
   const resetTeamMode = useCallback(() => {
     setTeamMode(false)
@@ -91,9 +113,9 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setTeamSessionId(null)
     setTeamError('')
     checkedSessionRef.current = null
-    writeP(pk('teamMode'), null)
-    writeP(pk('teamSession'), null)
-  }, [pk])
+    writeP(tpk('teamMode'), null)
+    writeP(tpk('teamSession'), null)
+  }, [tpk])
 
   /**
    * События команды: любой участник запустил партию (STARTED) —
@@ -119,10 +141,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setTeamMode(true)
     setTeamSessionChecked(true)
     setTeamError('')
-    if (teamId) writeP(pk('teamId'), teamId)
-    writeP(pk('teamMode'), '1')
-    writeP(pk('teamSession'), sessionId)
-  }, [pk, resetTeamMode, teamSessionId])
+    if (teamId) writeP(tpk('teamId'), teamId)
+    writeP(tpk('teamMode'), '1')
+    writeP(tpk('teamSession'), sessionId)
+  }, [tpk, resetTeamMode, teamSessionId])
 
   /** Партию завершили — показываем экран результатов с причиной завершения. */
   const handleTeamGameEnded = useCallback((finalState) => {
@@ -147,14 +169,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setTeamState(state)
       setTeamMode(true)
       setTeamSessionChecked(true)
-      writeP(pk('teamMode'), '1')
-      writeP(pk('teamSession'), state.sessionId)
-      writeP(pk('teamId'), session.teamId)
+      writeP(tpk('teamMode'), '1')
+      writeP(tpk('teamSession'), state.sessionId)
+      writeP(tpk('teamId'), session.teamId)
       writeP(pk('started'), null)
     } catch (err) {
       setTeamError(apiMessage(err))
     }
-  }, [pk])
+  }, [tpk])
   // есть ли сохранённая незавершённая сессия (для кнопки «Продолжить игру»)
   const [resumable, setResumable] = useState(() => {
     const levelIndex = Number(readP(pk('level'))) || 0
@@ -197,12 +219,6 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     getTeamGameState(teamSessionId)
       .then((state) => {
         if (cancelled || !state) return
-        // Сессия относится к другой игре — тоже выходим из командного режима.
-        const stateGameId = state.game?.id
-        if (gameId && stateGameId && Number(stateGameId) !== Number(gameId)) {
-          resetTeamMode()
-          return
-        }
         const sessionStatus = String(state.status || '').toLowerCase()
         if (sessionStatus === 'active' || sessionStatus === 'finished') {
           // Активную партию показываем, а завершённую — экраном результатов.
@@ -219,7 +235,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         // Сессии больше нет — возвращаем игрока на экран игры.
         resetTeamMode()
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      // Освобождаем отметку: эффект перезапустится (например, когда
+      // загрузится выбранная игра), и проверка сессии должна повториться.
+      if (checkedSessionRef.current === teamSessionId) {
+        checkedSessionRef.current = null
+      }
+    }
   }, [teamMode, teamSessionId, gameId, resetTeamMode])
 
   // Автоматически подключаемся к партии, которую запустил любой участник команды.
@@ -277,7 +300,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         }
         // командный режим
         if (state.teamMode != null) {
-          writeP(pk('teamMode'), String(state.teamMode ? 1 : 0))
+          writeP(tpk('teamMode'), String(state.teamMode ? 1 : 0))
           setTeamMode((prev) => (prev ? prev : Boolean(state.teamMode)))
         }
         // игра была начата — возвращаем игрока сразу на нужный уровень
@@ -322,7 +345,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setTotalTime(0)
       setGameStarted(true)
       writeP(pk('started'),'1'); writeP(pk('level'),'0'); writeP(pk('question'),null); writePJson(pk('stats'),[]); writeP(pk('finished'),null); writeP(pk('total'),null)
-      writeP(pk('teamMode'),null); writeP(pk('teamSession'),null); writeP(pk('teamId'),null)
+      writeP(tpk('teamMode'),null); writeP(tpk('teamSession'),null); writeP(tpk('teamId'),null)
       setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
       gameStateRef.current = {
         ...gameStateRef.current,
@@ -363,7 +386,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       writeP(pk('question'), Number(resumable.questionIndex) || 0)
       writePJson(pk('stats'), Array.isArray(resumable.levelStats) ? resumable.levelStats : [])
       writeP(pk('finished'), null); writeP(pk('total'), null)
-      writeP(pk('teamMode'), null); writeP(pk('teamSession'), null); writeP(pk('teamId'), null)
+      writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
       gameStateRef.current = {
         ...gameStateRef.current,
         started: true,
@@ -400,7 +423,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setTeamState(state)
       setTeamMode(true)
       setTeamSessionChecked(true)
-      writeP(pk('teamMode'),'1'); writeP(pk('teamSession'), state.sessionId); writeP(pk('teamId'), tid)
+      writeP(tpk('teamMode'),'1'); writeP(tpk('teamSession'), state.sessionId); writeP(tpk('teamId'), tid)
       writeP(pk('started'),null)
     } catch (err) {
       setTeamError(apiMessage(err))
@@ -547,7 +570,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setQuitting(false)
     setGameStarted(false)
     writeP(pk('started'), null)
-    writeP(pk('teamMode'), null); writeP(pk('teamSession'), null); writeP(pk('teamId'), null)
+    writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
     // прогресс сохранён — игрок сможет продолжить игру позже
     setResumable((prev) => ({ ...prev, hasProgress: true }))
     if (onExit) onExit()
@@ -582,14 +605,17 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         <ActiveTeamGames onJoin={handleJoinActiveTeamGame} />
       )}
       {teamMode && !teamState && (
-        <ActiveTeamGames onJoin={handleJoinActiveTeamGame} />
+        // Восстанавливаем участие после перезагрузки страницы:
+        // пока тянем актуальное состояние сессии — показываем загрузку,
+        // а не приглашение присоединиться заново.
+        <div className="page-loader">Восстанавливаем участие в командной игре…</div>
       )}
 
       <div className="assoc-player-top">
         <div className="assoc-player-heading">
-          <h2 className="assoc-player-title">{game.title}</h2>
+          <h2 className="assoc-player-title">{(teamState?.game || game).title}</h2>
           <span className="assoc-player-author">
-            автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
+            автор: {(teamState?.game || game).creatorUsername || 'неизвестен'} · лимит: {formatMinutes((teamState?.game || game).timeLimitMinutes)} мин.
           </span>
         </div>
         {gameStarted && !finished && !teamMode && (

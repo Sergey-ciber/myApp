@@ -13,6 +13,7 @@
   --glitched-duration: 0.9s;      /* Скорость обычного глитча */
   --glitched-long-duration: 3s;   /* Скорость медленного глитча (для линий) */
   --answer-block: linear-gradient(135deg, #365565 50%, #2f5d71 100%); /* Градиент для  блоков с подсказками / ответами*/
+  --border-leaft-color: #fd6a06;
 }
 
 * { box-sizing: border-box; }
@@ -244,7 +245,11 @@ body {
   border-color: var(--primary);
 }
 .field input:disabled { background: #f1f2f4; color: var(--text-muted); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-row { display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+padding-bottom: 10px;
+}
 .form-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 .spacer { flex: 1; }
 .hint { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
@@ -458,7 +463,7 @@ body {
 
 .assoc-admin { display: flex; flex-direction: column; gap: 26px; }
 .assoc-panel {
-  background: #ac480d;
+  background: #070707;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
   padding: 20px 22px;
@@ -1164,6 +1169,143 @@ body {
 }
 .assoc-team-hint-notice img { max-height: 120px; border-radius: 8px; cursor: zoom-in; }
 .assoc-team-hint-penalty { color: #ff8c00; font-size: 13px; font-weight: 600; }
+
+/* Командный режим: выбранный вопрос и его подсказки */
+.assoc-team-question-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.assoc-team-question-status {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd9a8;
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  background: rgba(255, 140, 0, 0.12);
+  white-space: nowrap;
+}
+.assoc-team-question-status.solved {
+  color: #7ee2b8;
+  border-color: rgba(125, 226, 184, 0.45);
+  background: rgba(45, 138, 78, 0.16);
+}
+.assoc-team-hints {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+  border-radius: 12px;
+  border: 1px solid #3a3a4a;
+  border-left: 3px solid #ff8c00;
+  background: #12121a;
+}
+.assoc-team-hints-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffd9a8;
+  letter-spacing: 0.02em;
+}
+.assoc-team-hints-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.assoc-team-hint-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 140, 0, 0.08);
+  border: 1px solid rgba(255, 140, 0, 0.22);
+}
+.assoc-team-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffb45c;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* Состояния подсказки: открыта / доступна / недоступна */
+.assoc-team-hint-badge {
+  flex: 0 0 auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 1px solid transparent;
+}
+.assoc-team-hint-badge.opened {
+  color: #7ee2b8;
+  border-color: rgba(125, 226, 184, 0.45);
+  background: rgba(45, 138, 78, 0.16);
+}
+.assoc-team-hint-badge.available {
+  color: #ffd9a8;
+  border-color: rgba(255, 140, 0, 0.45);
+  background: rgba(255, 140, 0, 0.12);
+}
+.assoc-team-hint-badge.locked {
+  color: #9a9aae;
+  border-color: rgba(154, 154, 174, 0.35);
+  background: rgba(154, 154, 174, 0.08);
+}
+.assoc-team-hint-item.assoc-team-hint-available {
+  border-color: rgba(255, 140, 0, 0.4);
+}
+.assoc-team-hint-item.assoc-team-hint-unavailable {
+  opacity: 0.85;
+  border-style: dashed;
+}
+.assoc-team-hint-button {
+  align-self: flex-start;
+}
+.assoc-team-hint-countdown {
+  color: #b9b9c8;
+  font-size: 13px;
+}
+.assoc-team-hint-text {
+  color: #f0e6d8;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.assoc-team-hint-image {
+  max-height: 160px;
+  border-radius: 8px;
+  cursor: zoom-in;
+  align-self: flex-start;
+}
+.assoc-team-hint-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.assoc-team-hint-status {
+  color: #c8c8d4;
+  font-size: 14px;
+}
+.assoc-normal-select select {
+  min-width: 320px;
+  max-width: 100%;
+}
 .assoc-normal-guessed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .assoc-normal-guessed-item { background: rgba(45, 138, 78, 0.16); color: #7ee2b8; border: 1px solid rgba(125, 226, 184, 0.35); padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; }
 
@@ -1203,6 +1345,127 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ---------- Режим создания/редактирования игры: блоки вопросов и ответов ---------- */
+.question-block {
+  background: #3a3a4a !important;
+  border-left: 3px solid #6b7280 !important;
+  color: #e5e7eb !important;
+}
+.question-block .field > span {
+  color: #d1d5db !important;
+  font-weight: 500;
+}
+.question-block input,
+.question-block textarea,
+.question-block select {
+  background: #e5e7eb;
+  border: 1px solid #4b5563;
+  color: #111827;
+}
+.question-block input:focus,
+.question-block textarea:focus,
+.question-block select:focus {
+  outline: none;
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.35);
+}
+
+.answers-block {
+  background: rgb(104 46 3);
+  border: 1px solid rgb(7 3 0);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-left: 3px solid var(--border-leaft-color);
+}
+.answers-block .field > span {
+  color: #eceef3 !important;
+  font-weight: 500;
+}
+.answers-block input {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #14532d;
+}
+.answers-block input:focus {
+  outline: none;
+  border-color: #4ade80;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
+}
+.answers-block input:disabled {
+  background: #dcfce7;
+  color: #166534;
+}
+.answers-block .btn-small {
+  flex-shrink: 0;
+}
+
+.hint-block {
+  background: rgb(4 108 108) !important;
+  border-left: 3px solid var(--border-leaft-color) !important;
+  color: #f3e8ed !important;
+}
+.hint-block .field > span {
+  color: #e8dce2 !important;
+  font-weight: 500;
+}
+.hint-block input,
+.hint-block textarea,
+.hint-block select {
+  background: #fdf2f8;
+  border: 1px solid #f9a8d4;
+  color: #500724;
+}
+.hint-block input:focus,
+.hint-block textarea:focus,
+.hint-block select:focus {
+  outline: none;
+  border-color: #f472b6;
+  box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.35);
+}
+.hint-block input:disabled {
+  background: #fce7f3;
+  color: #831843;
+}
+.hint-block .btn-small {
+  flex-shrink: 0;
+}
+
+/* ---------- Кнопки сворачивания блоков ---------- */
+.assoc-block-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+}
+.assoc-block-toggle:hover { color: #ff8c00; }
+.assoc-block-toggle:focus-visible {
+  outline: 2px solid #ff8c00;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.assoc-block-toggle-icon {
+  color: #ff8c00;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.assoc-block-toggle[aria-expanded="true"] .assoc-block-toggle-icon {
+  transform: rotate(90deg);
 }
 .assoc-normal-hints-title { font-weight: 700; color: #ffffff; font-size: 14px; }
 .assoc-normal-hints-empty { margin: 0; font-size: 13px; color: #a0a0b0; }
