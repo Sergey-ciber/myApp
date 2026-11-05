@@ -33,7 +33,8 @@ export default function Associations() {
   const userId = user?.id
   const gameKey = userScopedKey('game', userId)
 
-  const [mode, setMode] = useState('admin')
+  const modeKey = userScopedKey('mode', userId)
+  const [mode, setMode] = useState(() => readStored(modeKey) || 'admin')
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -91,6 +92,10 @@ export default function Associations() {
     setMode('admin')
     setSelectedGameId(null)
   }, [userId])
+
+  useEffect(() => {
+    if (modeKey) writeStored(modeKey, mode)
+  }, [mode, modeKey])
 
   useEffect(() => {
     if (!selectedGameId || !gameKey) return

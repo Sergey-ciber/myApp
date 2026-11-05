@@ -1,0 +1,2 @@
+t:201
+{"id":50,"name":"Ком66642","avatarUrl":null,"creatorId":163,"creatorUsername":"ТестХ1793792466642","wins":0,"memberCount":1,"createdAt":"2026-11-04T11:41:06.727197100Z","members":[{"userId":163,"username":"ТестХ1793792466642","fullName":"ТестХ1793792466642","avatarUrl":null,"role":"ADMIN","joinedAt":"2026-11-04T11:41:06.727197100Z","avatar_url":null,"joined_at":"2026-11-04T11:41:06.727197100Z","user_id":163}],"currentUserCreator":true,"currentUserMember":true,"currentUserRole":"ADMIN","creator_id":163}

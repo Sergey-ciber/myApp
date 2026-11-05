@@ -1,5 +1,6 @@
 package com.demo.taskmanager.controller;
 
+import com.demo.taskmanager.dto.ActiveTeamSessionResponse;
 import com.demo.taskmanager.dto.TeamGameAnswerRequest;
 import com.demo.taskmanager.dto.TeamGameHintRequest;
 import com.demo.taskmanager.dto.TeamGameLobbyResponse;
@@ -20,6 +21,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
+/**
+ * Командные игры (co-op).
+ *
+ * Жизненный цикл сессии:
+ *  POST /api/team-games/start   — создать сессию и стать хостом;
+ *  GET  /api/team-games/active  — активные партии моих команд (карточки в списке игр);
+ *  POST /api/team-games/{id}/join — присоединиться к идущей партии;
+ *  POST /api/team-games/{id}/end  — завершить партию (только хост, иначе 403).
+ */
 @RestController
 @RequestMapping("/api/team-games")
 public class TeamGameController {
@@ -32,43 +44,30 @@ public class TeamGameController {
         this.userRepository = userRepository;
     }
 
-    @PostMapping("/lobby")
-    public ResponseEntity<TeamGameLobbyResponse> createLobby(@RequestBody TeamGameStartRequest request,
-                                                             @AuthenticationPrincipal UserDetails userDetails) {
-        User user = currentUser(userDetails);
-        return ResponseEntity.ok(teamGameService.createOrGetLobby(request.teamId(), request.gameId(), user));
+    /** Активные партии команд, в которых состоит текущий пользователь. */
+    @GetMapping("/active")
+    public ResponseEntity<List<ActiveTeamSessionResponse>> activeSessions(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(teamGameService.activeSessionsFor(currentUser(userDetails)));
     }
 
-    @GetMapping("/lobby/{sessionId}")
-    public ResponseEntity<TeamGameLobbyResponse> getLobby(@PathVariable Long sessionId,
+    /** Подготовка к игре: возвращает лобби команды и, если партия уже идёт, её сессию. */
+    @PostMapping("/lobby")
+    public ResponseEntity<TeamGameLobbyResponse> openLobby(@RequestBody TeamGameStartRequest request,
                                                           @AuthenticationPrincipal UserDetails userDetails) {
         User user = currentUser(userDetails);
-        return ResponseEntity.ok(teamGameService.getLobby(sessionId, user));
+        return ResponseEntity.ok(teamGameService.openLobby(request.teamId(), request.gameId(), user));
     }
 
-    @PostMapping("/{sessionId}/start")
-    public ResponseEntity<TeamGameStateResponse> start(@PathVariable Long sessionId,
-                                                       @AuthenticationPrincipal UserDetails userDetails) {
-        User user = currentUser(userDetails);
-        return ResponseEntity.ok(teamGameService.startGame(sessionId, user));
-    }
-
-    @PostMapping("/{sessionId}/answer")
-    public ResponseEntity<TeamGameStateResponse> answer(@PathVariable Long sessionId,
-                                                        @RequestBody TeamGameAnswerRequest request,
+    /** Запуск командной игры: создаёт сессию, автор становится хостом. */
+    @PostMapping("/start")
+    public ResponseEntity<TeamGameStateResponse> start(@RequestBody TeamGameStartRequest request,
                                                         @AuthenticationPrincipal UserDetails userDetails) {
         User user = currentUser(userDetails);
-        return ResponseEntity.ok(teamGameService.submitAnswer(sessionId, user, request));
+        return ResponseEntity.ok(teamGameService.startGame(request.teamId(), request.gameId(), user));
     }
 
-    @PostMapping("/{sessionId}/hint")
-    public ResponseEntity<TeamGameStateResponse> hint(@PathVariable Long sessionId,
-                                                      @RequestBody TeamGameHintRequest request,
-                                                      @AuthenticationPrincipal UserDetails userDetails) {
-        User user = currentUser(userDetails);
-        return ResponseEntity.ok(teamGameService.requestHint(sessionId, user, request));
-    }
-
+    /** Полный слепок состояния партии — по нему игрок попадает на текущий момент игры. */
     @GetMapping("/{sessionId}/state")
     public ResponseEntity<TeamGameStateResponse> state(@PathVariable Long sessionId,
                                                        @AuthenticationPrincipal UserDetails userDetails) {
@@ -83,11 +82,47 @@ public class TeamGameController {
         return ResponseEntity.ok(teamGameService.join(sessionId, user));
     }
 
+    /** Ответ: правильный ответ рассылается всем участникам комнаты. */
+    @PostMapping("/{sessionId}/answer")
+    public ResponseEntity<TeamGameStateResponse> answer(@PathVariable Long sessionId,
+                                                        @RequestBody TeamGameAnswerRequest request,
+                                                        @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.submitAnswer(sessionId, user, request));
+    }
+
+    /** Подсказка: штраф начисляется, событие рассылается всем участникам. */
+    @PostMapping("/{sessionId}/hint")
+    public ResponseEntity<TeamGameStateResponse> hint(@PathVariable Long sessionId,
+                                                      @RequestBody TeamGameHintRequest request,
+                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.requestHint(sessionId, user, request));
+    }
+
+    /** Завершение партии — только хост. Для остальных возвращается 403. */
+    @PostMapping("/{sessionId}/end")
+    public ResponseEntity<TeamGameStateResponse> end(@PathVariable Long sessionId,
+                                                     @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.endGame(sessionId, user));
+    }
+
+    /** Выход из партии: игра продолжается, хост передаёт права следующему игроку. */
     @PostMapping("/{sessionId}/leave")
     public ResponseEntity<Void> leave(@PathVariable Long sessionId,
                                       @AuthenticationPrincipal UserDetails userDetails) {
         User user = currentUser(userDetails);
         teamGameService.leave(sessionId, user);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Отключение (закрыта вкладка): участник пропадает, партия продолжается. */
+    @PostMapping("/{sessionId}/disconnect")
+    public ResponseEntity<Void> disconnect(@PathVariable Long sessionId,
+                                           @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        teamGameService.disconnect(sessionId, user);
         return ResponseEntity.ok().build();
     }
 
@@ -103,7 +138,7 @@ public class TeamGameController {
         if (userDetails == null) {
             throw new BadRequestException("Требуется авторизация");
         }
-        return userRepository.findByUsername(userDetails.getUsername())
+        return userRepository.findByUsernameIgnoreCase(userDetails.getUsername())
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
     }
 }

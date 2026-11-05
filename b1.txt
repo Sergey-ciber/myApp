@@ -1,0 +1,28 @@
+[ERROR] COMPILATION ERROR : 
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[261,33] cannot find symbol
+  symbol:   method isLevelComplete(com.demo.taskmanager.entity.GameLevel,java.util.Map<java.lang.String,java.lang.String>)
+  location: class com.demo.taskmanager.service.TeamGameService
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[462,17] cannot find symbol
+  symbol:   method findByTeamIdAndGameIdAndStatusOrderByCreatedAtDesc(java.lang.Long,java.lang.Long,java.lang.String)
+  location: variable sessionRepository of type com.demo.taskmanager.repository.TeamGameSessionRepository
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[592,17] cannot find symbol
+  symbol:   variable GamePlayResponse
+  location: class com.demo.taskmanager.service.TeamGameService
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project taskmanager-backend: Compilation failure: Compilation failure: 
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[261,33] cannot find symbol
+[ERROR]   symbol:   method isLevelComplete(com.demo.taskmanager.entity.GameLevel,java.util.Map<java.lang.String,java.lang.String>)
+[ERROR]   location: class com.demo.taskmanager.service.TeamGameService
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[462,17] cannot find symbol
+[ERROR]   symbol:   method findByTeamIdAndGameIdAndStatusOrderByCreatedAtDesc(java.lang.Long,java.lang.Long,java.lang.String)
+[ERROR]   location: variable sessionRepository of type com.demo.taskmanager.repository.TeamGameSessionRepository
+[ERROR] /C:/projects/DemoProject/backend/src/main/java/com/demo/taskmanager/service/TeamGameService.java:[592,17] cannot find symbol
+[ERROR]   symbol:   variable GamePlayResponse
+[ERROR]   location: class com.demo.taskmanager.service.TeamGameService
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+

@@ -1,0 +1,4 @@
+status:200
+hasGame:true
+levels:2
+cur:0

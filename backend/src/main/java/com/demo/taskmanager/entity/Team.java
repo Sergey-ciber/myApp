@@ -42,6 +42,10 @@ public class Team {
     @OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TeamInvitation> invitations = new ArrayList<>();
 
+    /** Сессии командных игр: удаляются вместе с командой. */
+    @OneToMany(mappedBy = "team", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TeamGameSession> gameSessions = new ArrayList<>();
+
     public void addMember(TeamMember member) {
         member.setTeam(this);
         members.add(member);
@@ -67,4 +71,5 @@ public class Team {
 
     public List<TeamMember> getMembers() { return members; }
     public List<TeamInvitation> getInvitations() { return invitations; }
+    public List<TeamGameSession> getGameSessions() { return gameSessions; }
 }

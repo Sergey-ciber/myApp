@@ -152,6 +152,31 @@ public class GameController {
         return gameService.leaderboard(id);
     }
 
+    @PostMapping("/{id}/progress")
+    public ResponseEntity<Void> saveProgress(@AuthenticationPrincipal UserDetails principal,
+                                             @PathVariable Long id,
+                                             @RequestBody java.util.Map<String, Object> body) {
+        gameService.saveProgress(id, currentUser(principal), body);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/progress")
+    public ResponseEntity<java.util.Map<String, Object>> loadProgress(@AuthenticationPrincipal UserDetails principal,
+                                                                       @PathVariable Long id) {
+        java.util.Map<String, Object> data = gameService.loadProgress(id, currentUser(principal));
+        if (data == null || data.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(data);
+    }
+
+    @DeleteMapping("/{id}/progress")
+    public ResponseEntity<Void> clearProgress(@AuthenticationPrincipal UserDetails principal,
+                                              @PathVariable Long id) {
+        gameService.clearProgress(id, currentUser(principal));
+        return ResponseEntity.noContent().build();
+    }
+
     private User currentUser(UserDetails principal) {
         return userService.getByUsername(principal.getUsername());
     }

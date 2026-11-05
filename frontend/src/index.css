@@ -369,11 +369,22 @@ body {
   inset: 0;
   background: rgba(9, 30, 66, 0.55);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 60px 16px;
+  padding: 16px;
   z-index: 100;
 }
+.modal {
+  background: #fff8e2;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 8px 30px rgba(9, 30, 66, 0.3);
+  color: #121111;
+}
+.modal-title { margin: 0 0 10px; font-size: 18px; font-weight: 700; }
+.modal-text { margin: 0 0 20px; font-size: 15px; line-height: 1.55; color: #3c3a37; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
 .modal {
   background: #fff8e2;
   border-radius: 12px;
@@ -557,6 +568,8 @@ body {
   font-family: inherit;
   color: #000000;
   background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .assoc-input:focus { outline: 2px solid rgba(0, 121, 191, 0.35); border-color: var(--primary); }
 .assoc-input:disabled { background: #eaf7ef; color: #1f6b3d; font-weight: 600; }
@@ -1030,7 +1043,7 @@ body {
 .assoc-normal-media {
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   width: 100%;
   max-width: 100%;
@@ -1038,13 +1051,13 @@ body {
   overflow: hidden;
 }
 .assoc-normal-media img {
-  max-width: 100%;
-  width: auto;
-  height: auto;
-  max-height: 320px;
+  width: 100%;
+  max-width: 320px;
+  height: 240px;
+  object-fit: cover;
   border-radius: 10px;
   display: block;
-  object-fit: contain;
+  cursor: zoom-in;
 }
 .assoc-normal-media audio,
 .assoc-normal-media video {
@@ -1053,19 +1066,104 @@ body {
   height: auto;
   display: block;
 }
-.assoc-normal-question { margin: 0; font-size: 20px; color: #ffffff; text-align: center; }
+.assoc-normal-question { margin: 0; font-size: 20px; color: #efdcc3; text-align: center; white-space: pre-wrap; word-break: break-word; }
 .assoc-normal-progress { margin: 0; font-size: 13px; color: #a0a0b0; }
 .assoc-normal-progress strong { color: #ff8c00; }
-.assoc-normal-answer { display: flex; gap: 10px; width: 100%; align-items: center; }
+.assoc-normal-answer { display: flex; gap: 10px; width: 100%; align-items: center; flex-wrap: wrap; }
 .assoc-normal-answer .assoc-input {
   background: #12121a;
   color: #ffffff;
   border-color: #3a3a4a;
   font-size: 16px;
 }
+/* Сообщение «Ответ не верный» над полем ввода — исчезает через 3 секунды */
+.assoc-normal-wrong-notice {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.16);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  animation: assoc-fade-in 0.2s ease;
+}
+@keyframes assoc-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 /* Список угаданных слов обычного уровня */
 .assoc-normal-guessed { width: 100%; margin-bottom: 14px; }
 .assoc-normal-guessed-title { font-weight: 700; color: #ffffff; font-size: 14px; margin-bottom: 8px; }
+.assoc-normal-guessed-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.assoc-normal-guessed-stat {
+  //background: rgba(255, 140, 0, 0.12);
+  //border: 1px solid rgba(255, 140, 0, 0.3);
+  color: #d9d9e3;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.assoc-normal-guessed-stat strong { color: #ff8c00; font-weight: 700; }
+.assoc-normal-guessed-empty { color: #a0a0b0; font-size: 13px; }
+
+/* Блок «Активные игры команды» вверху списка игр */
+.assoc-active-games {
+  width: 100%;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 140, 0, 0.12) 0%, rgba(255, 140, 0, 0.04) 100%);
+}
+.assoc-active-games-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.assoc-active-games-title { margin: 0; font-size: 18px; font-weight: 700; color: #ff8c00; }
+.assoc-active-games-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: rgba(255, 140, 0, 0.2);
+  color: #ff8c00;
+  font-size: 13px;
+  font-weight: 700;
+}
+.assoc-active-games-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.assoc-active-game {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 140, 0, 0.25);
+  border-radius: 12px;
+  background: rgba(18, 18, 26, 0.65);
+}
+.assoc-active-game-info { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.assoc-active-game-title { font-size: 16px; font-weight: 700; color: #ffffff; }
+.assoc-active-game-meta { font-size: 13px; color: #a0a0b0; }
+
+/* Подсказка, полученная командой в реальном времени */
+.assoc-team-hint-notice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  background: rgba(255, 140, 0, 0.12);
+  color: #ffd9a8;
+  font-size: 14px;
+}
+.assoc-team-hint-notice img { max-height: 120px; border-radius: 8px; cursor: zoom-in; }
+.assoc-team-hint-penalty { color: #ff8c00; font-size: 13px; font-weight: 600; }
 .assoc-normal-guessed-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .assoc-normal-guessed-item { background: rgba(45, 138, 78, 0.16); color: #7ee2b8; border: 1px solid rgba(125, 226, 184, 0.35); padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; }
 
@@ -1108,14 +1206,14 @@ body {
 }
 .assoc-normal-hints-title { font-weight: 700; color: #ffffff; font-size: 14px; }
 .assoc-normal-hints-empty { margin: 0; font-size: 13px; color: #a0a0b0; }
-.assoc-normal-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.assoc-normal-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: #efdcc3; }
 .assoc-normal-hint .assoc-hint-btn { animation: none; }
-.assoc-normal-hint-used { font-size: 13px; color: #7a7a88; }
-.assoc-normal-hint-penalty { font-size: 12px; color: #a0a0b0; }
+.assoc-normal-hint-used { font-size: 13px; color: #efdcc3; }
+.assoc-normal-hint-penalty { font-size: 12px; color: #efdcc3; }
 
 /* Модальное окно подсказки обычного уровня */
 .assoc-normal-hint-modal { text-align: center; }
-.assoc-normal-hint-letter { font-size: 18px; }
+.assoc-normal-hint-letter { font-size: 18px; color: #efdcc3; }
 .assoc-normal-hint-letter strong { font-size: 28px; color: #ff8c00; }
 .assoc-normal-hint-img {
   max-width: 100%;
@@ -1434,6 +1532,35 @@ body {
   font-weight: 700;
 }
 .teams-section-admin .teams-section-count { background: #fff3cd; color: #7a5a00; }
+/* Подгруппы внутри блока «Мои команды» */
+.teams-subsection { margin-top: 14px; }
+.teams-subsection:first-of-type { margin-top: 0; }
+.teams-subsection-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.teams-subsection-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a5a00;
+}
+.teams-subsection-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: rgba(138, 90, 0, 0.12);
+  color: #8a5a00;
+  font-size: 12px;
+  font-weight: 700;
+}
 .teams-section-empty {
   padding: 16px 18px;
   border: 1px dashed #d5dbe5;

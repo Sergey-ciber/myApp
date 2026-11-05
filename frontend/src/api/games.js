@@ -49,6 +49,18 @@ export const submitResult = (gameId, timeSeconds) =>
 export const fetchLeaderboard = (gameId) =>
   api.get(`/games/${gameId}/leaderboard`).then((res) => res.data)
 
+/** Сохранить прогресс игры (автосохранение): уровень и JSON-состояние. */
+export const saveGameProgress = (gameId, body) =>
+  api.post(`/games/${gameId}/progress`, body).then((res) => res.data)
+
+/** Загрузить сохранённый прогресс игры. */
+export const loadGameProgress = (gameId) =>
+  api.get(`/games/${gameId}/progress`).then((res) => (res.status === 204 || res.data == null ? null : res.data))
+
+/** Очистить сохранённый прогресс игры (выход или полное прохождение). */
+export const clearGameProgress = (gameId) =>
+  api.delete(`/games/${gameId}/progress`).then((res) => res.data)
+
 /** Загрузить медиафайл игры: возвращает публичный URL. */
 export const uploadGameMedia = (file) => {
   const form = new FormData()

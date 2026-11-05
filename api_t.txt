@@ -1,0 +1,9 @@
+users: Хост1793791607977=155 Участник1793791607977=156
+team=47
+game=121 (Виноградный день)
+START by host = 500 sessionId=undefined hostId=undefined currentUserHost=undefined status=500
+ACTIVE for u2 = 200 []
+JOIN by u2 = 500 currentUserHost=undefined hostId=undefined
+END by non-host = 500 {"error":"Internal Server Error","message":"Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","timestamp":"2026
+END by host = 500 status=500
+ACTIVE after end = 200 body=[]

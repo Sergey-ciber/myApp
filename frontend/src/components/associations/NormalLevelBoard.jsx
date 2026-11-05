@@ -10,7 +10,7 @@ const HINT_NAMES = ['Первая подсказка', 'Вторая подск�
  * блок подсказок с таймерами и поле ввода ответа.
  */
 export default function NormalLevelBoard({
-  game, level, progress, onLevelComplete,
+  game, level, progress, onLevelComplete, onSave, savedQuestionIndex,
 }) {
   const questions = useMemo(() => level.questions || [], [level.questions])
   const hints = useMemo(() => level.hints || [], [level.hints])
@@ -27,10 +27,26 @@ export default function NormalLevelBoard({
   const isQuestionSolved = (solvedMap, q) => matchedCount(solvedMap, q) >= effectiveThreshold(q)
 
   const [solved, setSolved] = useState(() => progress?.solved || {})
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
+    const qs = level.questions || []
+    const solvedMap = progress?.solved || {}
+    if (qs.length === 0) return 0
+    // сохранённый индекс вопроса (автосохранение) имеет приоритет,
+    // но только если вопрос ещё не разгадан
+    const savedIndex = Number(savedQuestionIndex)
+    if (Number.isFinite(savedIndex) && savedIndex >= 0 && savedIndex < qs.length) {
+      const q = qs[savedIndex]
+      if (!q || matchedCount(solvedMap, q) < effectiveThreshold(q)) return savedIndex
+    }
+    const firstOpen = qs.findIndex((q) => matchedCount(solvedMap, q) < effectiveThreshold(q))
+    return firstOpen >= 0 ? firstOpen : qs.length - 1
+  })
   const [answers, setAnswers] = useState({})
   const [checking, setChecking] = useState(false)
   const [actionError, setActionError] = useState('')
+  // Сообщение «Ответ не верный» над полем ввода: показывается на 3 секунды
+  const [wrongAnswerNotice, setWrongAnswerNotice] = useState(false)
+  const wrongNoticeTimer = useRef(null)
   const [acceptedAnswer, setAcceptedAnswer] = useState(null)
   const [alreadyGuessed, setAlreadyGuessed] = useState(false)
   const [penaltySeconds, setPenaltySeconds] = useState(0)
@@ -38,7 +54,7 @@ export default function NormalLevelBoard({
   // содержимое использованных подсказок: { [questionId]: { [hintIndex]: content } }
   const [hintContents, setHintContents] = useState({})
 
-  const levelStartedAt = useRef(Date.now())
+  const levelStartedAt = useRef(Date.now() - (Number(progress?.elapsedSeconds) || 0) * 1000)
   const [now, setNow] = useState(Date.now())
   const completedRef = useRef(false)
   // время старта таймеров подсказок для каждого вопроса (при первом открытии)
@@ -49,6 +65,17 @@ export default function NormalLevelBoard({
 
   const currentQuestion = questions[currentQuestionIndex]
   const solvedCount = questions.filter((q) => isQuestionSolved(solved, q)).length
+  /**
+   * Сводка по текущему вопросу:
+   *  - questionAnswersCount — сколько всего вариантов ответа у вопроса;
+   *  - questionPassThreshold — порог прохождения, заданный для вопроса;
+   *  - currentGuessedCount — сколько вариантов ответа уже угадано.
+   */
+  const questionAnswersCount = currentQuestion
+    ? (Number(currentQuestion.answersCount) || 0)
+    : 0
+  const questionPassThreshold = currentQuestion ? effectiveThreshold(currentQuestion) : 0
+  const currentGuessedCount = currentQuestion ? matchedCount(solved, currentQuestion) : 0
   const guessedWords = useMemo(() => {
     if (!currentQuestion) return []
     const list = []
@@ -85,6 +112,28 @@ export default function NormalLevelBoard({
     const timer = setTimeout(() => setAlreadyGuessed(false), 3000)
     return () => clearTimeout(timer)
   }, [alreadyGuessed])
+
+  // сообщение «Ответ не верный» над полем ввода — исчезает через 3 секунды
+  useEffect(() => {
+    if (!wrongAnswerNotice) return undefined
+    const timer = setTimeout(() => setWrongAnswerNotice(false), 3000)
+    return () => clearTimeout(timer)
+  }, [wrongAnswerNotice])
+
+  // при размонтировании снимаем таймер, чтобы не было утечки состояния
+  useEffect(() => () => {
+    if (wrongNoticeTimer.current) clearTimeout(wrongNoticeTimer.current)
+  }, [])
+
+  /** Показать сообщение «Ответ не верный» на 3 секунды. */
+  const showWrongAnswerNotice = () => {
+    if (wrongNoticeTimer.current) clearTimeout(wrongNoticeTimer.current)
+    setWrongAnswerNotice(true)
+    wrongNoticeTimer.current = setTimeout(() => {
+      wrongNoticeTimer.current = null
+      setWrongAnswerNotice(false)
+    }, 3000)
+  }
 
   const completeLevel = (payload) => {
     if (completedRef.current) return
@@ -147,8 +196,11 @@ export default function NormalLevelBoard({
         }
         // иначе остаёмся на том же вопросе: нужно дать ещё варианты ответа
       } else {
-        setActionError('Неверный ответ. Попробуйте ещё раз.')
+        // неверный ответ: очищаем поле ввода и показываем сообщение на 3 секунды
+        setAnswers((prev) => ({ ...prev, [question.id]: '' }))
+        showWrongAnswerNotice()
       }
+      if (onSave) onSave({ currentQuestionIndex, elapsedSeconds: netElapsed, usedHints, penaltySeconds })
     } catch (err) {
       setActionError(apiMessage(err))
     } finally {
@@ -199,6 +251,7 @@ export default function NormalLevelBoard({
     if (hint.penaltyTime != null) {
       setPenaltySeconds((prev) => prev + Math.round(Number(hint.penaltyTime) * 60))
     }
+    if (onSave) onSave({ currentQuestionIndex, elapsedSeconds: netElapsed, usedHints, penaltySeconds })
   }
 
   const secondsSinceHintStart = currentQuestion
@@ -274,7 +327,7 @@ export default function NormalLevelBoard({
                 <span>Вопрос</span>
                 <select
                   value={currentQuestionIndex}
-                  onChange={(event) => { setAcceptedAnswer(null); setCurrentQuestionIndex(Number(event.target.value)) }}
+                  onChange={(event) => { setAcceptedAnswer(null); setCurrentQuestionIndex(Number(event.target.value)); if (onSave) onSave({ currentQuestionIndex: Number(event.target.value), elapsedSeconds: netElapsed, usedHints, penaltySeconds }) }}
                 >
                   {questions.map((q, index) => (
                     <option key={q.id} value={index}>
@@ -294,7 +347,7 @@ export default function NormalLevelBoard({
           )}
 
           {/* Блок вопроса */}
-          <h3 className="assoc-normal-question">{currentQuestion?.questionText}</h3>
+          <h3 className="assoc-normal-question" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{currentQuestion?.questionText}</h3>
 
           {(currentQuestion?.mediaUrls?.length > 0 || (currentQuestion?.mediaType && currentQuestion?.mediaUrl)) && (
             <div className="assoc-normal-media" style={{ flexDirection: 'column' }}>
@@ -380,20 +433,39 @@ export default function NormalLevelBoard({
             })}
           </div>
 
-          {/* Список угаданных слов */}
-          {guessedWords.length > 0 && (
-            <div className="assoc-normal-guessed">
-              <div className="assoc-normal-guessed-title">Угаданные слова</div>
+          {/* Блок «Угаданные слова»: сводка и список угаданных слов текущего вопроса */}
+          <div className="assoc-normal-guessed">
+            <div className="assoc-normal-guessed-title">Угаданные слова</div>
+            <div className="assoc-normal-guessed-stats">
+              <span className="assoc-normal-guessed-stat">
+                Всего загадано: <strong>{questionAnswersCount}</strong>
+              </span>
+              <span className="assoc-normal-guessed-stat">
+                Порог прохождения: <strong>{questionPassThreshold}</strong>
+              </span>
+              <span className="assoc-normal-guessed-stat">
+                Угадано слов: <strong>{currentGuessedCount}</strong>
+              </span>
+            </div>
+            {guessedWords.length > 0 ? (
               <ul className="assoc-normal-guessed-list">
                 {guessedWords.map((w, idx) => (
                   <li key={idx} className="assoc-normal-guessed-item">{w}</li>
                 ))}
               </ul>
-            </div>
-          )}
+            ) : (
+              <div className="assoc-normal-guessed-empty">Пока ни одного слова не угадано</div>
+            )}
+          </div>
 
           {/* Блок ввода ответа */}
           <div className="assoc-normal-answer">
+            {/* Сообщение о неверном ответе — над полем ввода, исчезает через 3 секунды */}
+            {wrongAnswerNotice && (
+              <div className="assoc-normal-wrong-notice" role="alert">
+                Ответ не верный
+              </div>
+            )}
             <input
               className="assoc-input"
               value={answers[currentQuestion?.id] || ''}

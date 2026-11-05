@@ -1,0 +1,7 @@
+start:200
+{"sessionId":15,"status":"ACTIVE","currentLevelIndex":0,"game":{"id":121,"title":"Виноградный день","gameDate":"2026-10-01","createdAt":"2026-10-30T14:07:11.337074Z","active":true,"creatorId":2,"creatorUsername":"serg","timeLimitMinutes":60.0,"diffic
+state:200
+hint:200
+answer:200
+penalty:3
+solved:1

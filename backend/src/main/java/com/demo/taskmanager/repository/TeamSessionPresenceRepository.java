@@ -10,4 +10,5 @@ public interface TeamSessionPresenceRepository extends JpaRepository<TeamSession
     List<TeamSessionPresence> findBySessionIdOrderByLastSeenAtDesc(Long sessionId);
     Optional<TeamSessionPresence> findBySessionIdAndUserId(Long sessionId, Long userId);
     void deleteBySessionIdAndUserId(Long sessionId, Long userId);
+    void deleteBySessionId(Long sessionId);
 }

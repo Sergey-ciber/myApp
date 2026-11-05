@@ -1,0 +1,8 @@
+conname|child|parent
+fkcsdjku1wu1qb8y20ar5cmrew0|team_sessions|games
+fkqfbeg6otm4vd0hx2kwudu7gxr|team_sessions|teams
+fkr3aof4ew92ro3js7tayjhg6uy|team_session_progress|game_levels
+fk3w4eqwiquemthpr929q0mmab2|team_session_progress|team_game_sessions
+fks43g97d0i821w0uoliqbwsi7y|team_session_events|team_game_sessions
+fkpb5pm36w3jxy1xkw8ot98herj|team_session_presence|team_game_sessions
+(6 rows)

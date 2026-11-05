@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface TeamSessionEventRepository extends JpaRepository<TeamSessionEvent, Long> {
     List<TeamSessionEvent> findBySessionIdOrderByCreatedAtAsc(Long sessionId);
+    void deleteBySessionId(Long sessionId);
 }

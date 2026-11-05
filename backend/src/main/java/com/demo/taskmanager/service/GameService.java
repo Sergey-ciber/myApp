@@ -74,6 +74,7 @@ public class GameService {
     private final StandardQuestionRepository standardQuestionRepository;
     private final com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository;
     private final com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository;
+    private final com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
@@ -82,7 +83,8 @@ public class GameService {
                        ObjectMapper objectMapper,
                        StandardQuestionRepository standardQuestionRepository,
                        com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository,
-                       com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository) {
+                       com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository,
+                       com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
@@ -91,6 +93,7 @@ public class GameService {
         this.standardQuestionRepository = standardQuestionRepository;
         this.teamSessionProgressRepository = teamSessionProgressRepository;
         this.teamMemberRepository = teamMemberRepository;
+        this.userGameProgressRepository = userGameProgressRepository;
     }
 
     @Transactional(readOnly = true)
@@ -857,6 +860,9 @@ public class GameService {
             progressRepository.save(progress);
             teamService.registerWin(user);
         }
+        // Игра полностью пройдена: сохранённое состояние больше не нужно,
+        // иначе после перезагрузки игрок вернулся бы на последний уровень.
+        userGameProgressRepository.deleteByUserIdAndGameId(user.getId(), gameId);
         return ResultResponse.from(result);
     }
 
@@ -901,6 +907,82 @@ public class GameService {
                     best.getTimeSeconds(), best.getCompletedAt()));
         }
         return entries;
+    }
+
+    /**
+     * Сохранить состояние игры (автосохранение): индекс уровня, индекс вопроса
+     * и произвольный JSON-стейт клиента. Вызывается клиентом с задержкой (debounce),
+     * поэтому запись идемпотентна по паре (user, game).
+     */
+    @Transactional
+    public void saveProgress(Long gameId, User user, Map<String, Object> body) {
+        Game game = findGame(gameId);
+        com.demo.taskmanager.entity.UserGameProgress saved = userGameProgressRepository
+                .findByUserIdAndGameId(user.getId(), gameId)
+                .orElseGet(() -> {
+                    com.demo.taskmanager.entity.UserGameProgress progress =
+                            new com.demo.taskmanager.entity.UserGameProgress();
+                    progress.setUser(user);
+                    progress.setGame(game);
+                    return progress;
+                });
+        if (body != null) {
+            Object levelIndex = body.get("currentLevelIndex");
+            if (levelIndex instanceof Number number) {
+                saved.setCurrentLevelIndex(Math.max(0, number.intValue()));
+            }
+            Object questionIndex = body.get("currentQuestionIndex");
+            if (questionIndex instanceof Number number) {
+                saved.setCurrentQuestionIndex(Math.max(0, number.intValue()));
+            }
+            Object state = body.get("gameState");
+            if (state != null) {
+                try {
+                    saved.setGameStateJson(objectMapper.writeValueAsString(state));
+                } catch (JsonProcessingException e) {
+                    saved.setGameStateJson("{}");
+                }
+            }
+        }
+        saved.setUpdatedAt(Instant.now());
+        userGameProgressRepository.save(saved);
+    }
+
+    /**
+     * Загрузить сохранённое состояние игры. Если сохранения нет — возвращаем null,
+     * чтобы клиент начал игру с начала.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> loadProgress(Long gameId, User user) {
+        findGame(gameId);
+        com.demo.taskmanager.entity.UserGameProgress saved = userGameProgressRepository
+                .findByUserIdAndGameId(user.getId(), gameId)
+                .orElse(null);
+        if (saved == null) {
+            return null;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("currentLevelIndex", saved.getCurrentLevelIndex());
+        result.put("currentQuestionIndex", saved.getCurrentQuestionIndex());
+        result.put("updatedAt", saved.getUpdatedAt());
+        String stateJson = saved.getGameStateJson();
+        if (stateJson != null && !stateJson.isBlank()) {
+            try {
+                Map<String, Object> state = objectMapper.readValue(stateJson,
+                        new TypeReference<LinkedHashMap<String, Object>>() { });
+                result.put("gameState", state);
+            } catch (JsonProcessingException e) {
+                result.put("gameState", new LinkedHashMap<String, Object>());
+            }
+        }
+        return result;
+    }
+
+    /** Очистить сохранённое состояние: выход из игры или полное прохождение. */
+    @Transactional
+    public void clearProgress(Long gameId, User user) {
+        findGame(gameId);
+        userGameProgressRepository.deleteByUserIdAndGameId(user.getId(), gameId);
     }
 
     private Game findGame(Long id) {

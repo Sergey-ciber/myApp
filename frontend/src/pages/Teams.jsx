@@ -8,10 +8,8 @@ import TeamCard from '../components/teams/TeamCard'
 import { useAuth } from '../context/AuthContext'
 import { useInvitations } from '../context/InvitationsContext'
 
-const teamCreatorId = (team) => team.creator_id ?? team.creatorId
-
 /**
- * Раздел «Команды»: команды пользователя-администратора отдельно от остальных,
+ * Раздел «Команды»: команды, в которых состоит пользователь, отдельно от остальных,
  * создание, приглашения и управление участниками.
  */
 export default function Teams() {
@@ -77,8 +75,13 @@ export default function Teams() {
     await loadTeams()
   }
 
-  const adminTeams = teams.filter((team) => teamCreatorId(team) === user?.id)
-  const otherTeams = teams.filter((team) => teamCreatorId(team) !== user?.id)
+  // «Мои команды» — все, в которых авторизованный пользователь состоит:
+  // и созданные им (администратор), и те, куда его пригласили.
+  const isMyTeam = (team) => team.currentUserCreator || team.currentUserMember
+  const adminTeams = teams.filter((team) => team.currentUserCreator)
+  const memberTeams = teams.filter((team) => team.currentUserMember && !team.currentUserCreator)
+  const myTeams = teams.filter(isMyTeam)
+  const otherTeams = teams.filter((team) => !isMyTeam(team))
   const placeById = new Map(teams.map((team, index) => [team.id, index + 1]))
 
   return (
@@ -121,30 +124,63 @@ export default function Teams() {
               <div>
                 <h2 id="admin-teams-title" className="teams-section-title">
                   Мои команды
-                  <span className="teams-section-badge">Администратор</span>
+                  <span className="teams-section-badge">Участник</span>
                 </h2>
                 <p className="teams-section-description">
-                  Команды, которые вы создали и которыми управляете.
+                  Все команды, в которых вы состоите: созданные вами и те, куда вас пригласили.
                 </p>
               </div>
-              <span className="teams-section-count">{adminTeams.length}</span>
+              <span className="teams-section-count">{myTeams.length}</span>
             </div>
-            {adminTeams.length === 0 ? (
-              <div className="teams-section-empty">Вы пока не создали ни одной команды.</div>
+            {myTeams.length === 0 ? (
+              <div className="teams-section-empty">Вы пока не состоите ни в одной команде.</div>
             ) : (
-              <div className="teams-grid">
-                {adminTeams.map((team) => (
-                  <TeamCard
-                    key={team.id}
-                    team={team}
-                    place={placeById.get(team.id)}
-                    onEdit={setEditingTeam}
-                    onInvite={setInviteTeam}
-                    onLeave={handleLeave}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </div>
+              <>
+                {/* Команды, созданные текущим пользователем (он же администратор) */}
+                {adminTeams.length > 0 && (
+                  <div className="teams-subsection">
+                    <div className="teams-subsection-head">
+                      <span className="teams-subsection-title">Созданы мной</span>
+                      <span className="teams-subsection-count">{adminTeams.length}</span>
+                    </div>
+                    <div className="teams-grid">
+                      {adminTeams.map((team) => (
+                        <TeamCard
+                          key={team.id}
+                          team={team}
+                          place={placeById.get(team.id)}
+                          onEdit={setEditingTeam}
+                          onInvite={setInviteTeam}
+                          onLeave={handleLeave}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Команды, куда пользователя пригласили */}
+                {memberTeams.length > 0 && (
+                  <div className="teams-subsection">
+                    <div className="teams-subsection-head">
+                      <span className="teams-subsection-title">Пригласили меня</span>
+                      <span className="teams-subsection-count">{memberTeams.length}</span>
+                    </div>
+                    <div className="teams-grid">
+                      {memberTeams.map((team) => (
+                        <TeamCard
+                          key={team.id}
+                          team={team}
+                          place={placeById.get(team.id)}
+                          onEdit={setEditingTeam}
+                          onInvite={setInviteTeam}
+                          onLeave={handleLeave}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </section>
 
@@ -153,7 +189,7 @@ export default function Teams() {
               <div>
                 <h2 id="other-teams-title" className="teams-section-title">Остальные команды</h2>
                 <p className="teams-section-description">
-                  Команды, в которых вы состоите, и все остальные команды платформы.
+                  Все остальные команды платформы, в которых вы не состоите.
                 </p>
               </div>
               <span className="teams-section-count">{otherTeams.length}</span>

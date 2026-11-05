@@ -18,7 +18,11 @@ import com.demo.taskmanager.repository.GameResultRepository;
 import com.demo.taskmanager.repository.TeamInvitationRepository;
 import com.demo.taskmanager.repository.TeamMemberRepository;
 import com.demo.taskmanager.repository.TeamRepository;
+import com.demo.taskmanager.repository.TeamSessionEventRepository;
+import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
+import com.demo.taskmanager.repository.TeamSessionProgressRepository;
 import com.demo.taskmanager.repository.UserRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,17 +42,29 @@ public class TeamService {
     private final TeamInvitationRepository invitationRepository;
     private final GameResultRepository resultRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final TeamSessionPresenceRepository teamSessionPresenceRepository;
+    private final TeamSessionProgressRepository teamSessionProgressRepository;
+    private final TeamSessionEventRepository teamSessionEventRepository;
 
     public TeamService(TeamRepository teamRepository,
                        TeamMemberRepository memberRepository,
                        TeamInvitationRepository invitationRepository,
                        GameResultRepository resultRepository,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       SimpMessagingTemplate messagingTemplate,
+                       TeamSessionPresenceRepository teamSessionPresenceRepository,
+                       TeamSessionProgressRepository teamSessionProgressRepository,
+                       TeamSessionEventRepository teamSessionEventRepository) {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
         this.resultRepository = resultRepository;
         this.userRepository = userRepository;
+        this.messagingTemplate = messagingTemplate;
+        this.teamSessionPresenceRepository = teamSessionPresenceRepository;
+        this.teamSessionProgressRepository = teamSessionProgressRepository;
+        this.teamSessionEventRepository = teamSessionEventRepository;
     }
 
     /** Все команды платформы, отсортированные по рейтингу (победам). */
@@ -92,6 +108,13 @@ public class TeamService {
     public void deleteTeam(Long teamId, User currentUser) {
         Team team = findTeam(teamId);
         requireCreator(team, currentUser);
+        // Сессии командных игр и их служебные записи удаляем явно:
+        // иначе внешние ключи не дают удалить команду.
+        for (com.demo.taskmanager.entity.TeamGameSession session : team.getGameSessions()) {
+            teamSessionPresenceRepository.deleteBySessionId(session.getId());
+            teamSessionProgressRepository.deleteBySessionId(session.getId());
+            teamSessionEventRepository.deleteBySessionId(session.getId());
+        }
         teamRepository.delete(team);
     }
 
@@ -137,7 +160,26 @@ public class TeamService {
 
         TeamInvitation invitation = new TeamInvitation(team, currentUser, invitee);
         invitationRepository.save(invitation);
-        return InvitationResponse.from(invitation);
+        InvitationResponse response = InvitationResponse.from(invitation);
+        // Мгновенно сообщаем приглашённому о новом приглашении через WebSocket:
+        // иначе счётчик в колокольчике обновлялся бы только раз в 30 секунд.
+        notifyInvitation(invitee.getId(), response);
+        return response;
+    }
+
+    /** Канал пользователя: /topic/user_invitations_{userId}. */
+    private static final String INVITATION_TOPIC_PREFIX = "/topic/user_invitations_";
+
+    /** Отправить приглашённому событие о новом приглашении. */
+    private void notifyInvitation(Long inviteeId, InvitationResponse invitation) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("type", "INVITATION_RECEIVED");
+            payload.put("invitation", invitation);
+            messagingTemplate.convertAndSend(INVITATION_TOPIC_PREFIX + inviteeId, payload);
+        } catch (Exception e) {
+            // доставка в реальном времени — вспомогательная, ошибка не должна ломать приглашение
+        }
     }
 
     @Transactional(readOnly = true)
@@ -241,6 +283,17 @@ public class TeamService {
     public boolean isMember(Long teamId, User user) {
         if (teamId == null || user == null) return false;
         return memberRepository.findByTeamIdAndUserId(teamId, user.getId()).isPresent();
+    }
+
+    /** id команд, в которых состоит пользователь. */
+    @Transactional(readOnly = true)
+    public List<Long> teamIdsOf(User user) {
+        if (user == null) return List.of();
+        return memberRepository.findByUserId(user.getId()).stream()
+                .map(member -> member.getTeam() == null ? null : member.getTeam().getId())
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -316,7 +316,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     } else {
       setLevels([])
     }
-    setCollapsedLevels({})
+    setCollapsedLevels((game.levels || []).reduce((acc, _, idx) => ({ ...acc, [idx]: true }), {}))
     setEditingId(game.id)
     setShowErrors(false)
     setError('')

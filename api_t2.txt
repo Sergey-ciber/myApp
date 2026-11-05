@@ -1,0 +1,7 @@
+team=48 game=121
+START by host = 200 session=13 hostId=157 isHost=true status=ACTIVE
+ACTIVE for u2 = 200 [{"sessionId":13,"teamId":48,"teamName":"ТестХост85476","teamAvatarUrl":null,"gameId":121,"gameTitle":"Виноградный день","hostId":157,"hostUsername":"Хост1793791685476","status":"ACTIVE","currentLevelIndex":0,"levelsCount":2,"startedAt":"2026-11-04T11:28:06.079836Z"}]
+JOIN by u2 = 200 isHost=false hostId=157 hostName=Хост1793791685476
+END by non-host = 403 {"error":"Forbidden","message":"Завершить игру может только тот, кто её запустил","timestamp":"2026-11-04T11:28:06.196714700Z","status":403}
+END by host = 200 status=FINISHED
+ACTIVE after end = 200 body=[]

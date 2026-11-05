@@ -48,7 +48,7 @@ const withPrefix = (value, prefix, oldPrefix = '') => {
  * подсказки открывают первые буквы доступных неразгаданных ячеек.
  */
 export default function GameBoard({
-  game, level, progress, onLevelComplete,
+  game, level, progress, onLevelComplete, onSave,
 }) {
   const [values, setValues] = useState(() => {
     const cells = emptyValues()
@@ -68,10 +68,10 @@ export default function GameBoard({
   const [hintNotice, setHintNotice] = useState(false)
   const hintWasAvailable = useRef(false)
   const [clock, setClock] = useState(() => ({
-    baseElapsed: 0,
+    baseElapsed: Number(progress?.elapsedSeconds) || 0,
     loadedAt: Date.now(),
   }))
-  const [elapsed, setElapsed] = useState(0)
+  const [elapsed, setElapsed] = useState(() => Number(progress?.elapsedSeconds) || 0)
   const [wrong, setWrong] = useState({})
   const [checking, setChecking] = useState({})
   const [timeUp, setTimeUp] = useState(false)
@@ -83,6 +83,15 @@ export default function GameBoard({
 
   const elapsedSeconds = () =>
     clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
+
+  /** Синхронизируем локальный таймер с серверным прогрессом (учёт времени офлайн). */
+  const syncElapsedFromProgress = (freshElapsed) => {
+    const secondsSinceLoaded = Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
+    const fresh = Number(freshElapsed) || 0
+    const base = Math.max(0, fresh - secondsSinceLoaded)
+    setClock({ baseElapsed: base, loadedAt: Date.now() })
+    setElapsed(fresh)
+  }
 
   // тикающий таймер
   useEffect(() => {
@@ -180,6 +189,8 @@ export default function GameBoard({
       setSolved(nextSolved)
       if (result.progress?.hintLevel != null) setHintLevel(result.progress.hintLevel)
       if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
+      if (result.progress?.elapsedSeconds != null) syncElapsedFromProgress(result.progress.elapsedSeconds)
+      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes })
       if (result.correct) {
         clearWrong(key)
         setValues((prev) => prev.map((words, c) => (c === columnIndex
@@ -255,6 +266,8 @@ export default function GameBoard({
       setSolved(nextSolved)
       setHintLevel(fresh?.hintLevel ?? Math.min(maxHintLevel, hintLevel + 1))
       setHintPrefixes(nextPrefixes)
+      if (fresh?.elapsedSeconds != null) syncElapsedFromProgress(fresh.elapsedSeconds)
+      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel: fresh?.hintLevel ?? hintLevel + 1, hintPrefixes: nextPrefixes })
       setValues((prev) => prev.map((words, c) => words.map((word, p) => {
         if (c === 0 || nextSolved[cellKey(c, p)]) return word
         return withPrefix(word, nextPrefixes[cellKey(c, p)] || '',

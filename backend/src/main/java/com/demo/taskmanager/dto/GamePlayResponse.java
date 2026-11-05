@@ -86,13 +86,13 @@ public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instan
             }
         } else if (level.getQuestions() != null) {
             for (com.demo.taskmanager.entity.LevelQuestion q : level.getQuestions()) {
-                result.add(new GameQuestionViewResponse(q.getId(), q.getQuestion(), null, null, q.getOrderIndex(), List.of(), null));
+                result.add(new GameQuestionViewResponse(q.getId(), q.getQuestion(), null, null, q.getOrderIndex(), List.of(), 1, 1));
             }
         }
         return result;
     }
 
-    public record GameQuestionViewResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> mediaUrls, Integer passThreshold) {
+    public record GameQuestionViewResponse(Long id, String questionText, String mediaType, String mediaUrl, Integer orderIndex, List<String> mediaUrls, Integer passThreshold, Integer answersCount) {
         public static GameQuestionViewResponse from(StandardQuestion question) {
             List<String> mediaUrls = question.getMediaUrls() == null
                     ? List.of()
@@ -103,7 +103,7 @@ public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instan
                 passThreshold = Math.max(1, answersCount);
             }
             return new GameQuestionViewResponse(question.getId(), question.getQuestionText(), question.getMediaType(),
-                    question.getMediaUrl(), question.getOrderIndex(), mediaUrls, passThreshold);
+                    question.getMediaUrl(), question.getOrderIndex(), mediaUrls, passThreshold, answersCount);
         }
     }
 
