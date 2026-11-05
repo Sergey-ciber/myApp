@@ -11,7 +11,14 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
+
+    /** Поиск без учёта регистра — логин нечувствителен к регистру букв. */
+    Optional<User> findByUsernameIgnoreCase(String username);
+
     boolean existsByUsername(String username);
+
+    /** Проверка занятости логина без учёта регистра. */
+    boolean existsByUsernameIgnoreCase(String username);
 
     /** Поиск по логину и полному имени для приглашения в команду. */
     @Query("select u from User u where :query = '' " +

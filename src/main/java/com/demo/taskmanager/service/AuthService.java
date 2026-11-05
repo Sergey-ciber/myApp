@@ -32,14 +32,16 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
+        String username = request.username().trim();
+        // Логины нечувствительны к регистру, поэтому «Иван» и «иван» — один и тот же логин.
+        if (userRepository.existsByUsernameIgnoreCase(username)) {
             throw new BadRequestException("Пользователь с таким логином уже существует");
         }
 
         User user = new User();
-        user.setUsername(request.username().trim());
+        user.setUsername(username);
         user.setPassword(passwordEncoder.encode(request.password()));
-        user.setFullName(request.username().trim());
+        user.setFullName(username);
         userRepository.save(user);
 
         String token = jwtService.generateToken(user.getUsername());
@@ -47,10 +49,12 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        String username = request.username().trim();
+        // Логин нечувствителен к регистру.
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.username(), request.password()));
+                new UsernamePasswordAuthenticationToken(username, request.password()));
 
-        User user = userRepository.findByUsername(request.username())
+        User user = userRepository.findByUsernameIgnoreCase(username)
                 .orElseThrow(() -> new BadRequestException("Пользователь не найден"));
 
         String token = jwtService.generateToken(user.getUsername());
