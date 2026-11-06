@@ -388,6 +388,11 @@ tasks.example.com {
 - **Без Docker:** `mvn package` даёт jar — запускайте его через systemd, а
   `frontend/dist` раздавайте nginx-ом с тем же правилом `try_files ... /index.html`
   и проксированием `/api/` (см. `frontend/nginx.conf`).
+- **Ошибка 500 «null id in TeamSessionPresence» при старте командной игры.**
+  Признак того, что база создана старой версией приложения: у таблиц
+  `team_session_presence`, `team_session_progress` и `team_session_events`
+  остались FK на неиспользуемую таблицу `team_game_sessions`. Лечится разовой
+  миграцией `deploy/fix-legacy-team-game-session-fks.sql` (идемпотентна).
 
 ## Деплой из git (CI/CD)
 
