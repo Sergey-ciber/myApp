@@ -151,6 +151,8 @@ npm run dev
 | POST | `/api/invitations/{id}/decline` | Отклонить приглашение |
 | DELETE | `/api/teams/{id}/members/{userId}` | Исключить участника (только создатель) |
 | DELETE | `/api/teams/{id}/leave` | Покинуть команду |
+| GET | `/api/team-games/{sessionId}/statistics` | Статистика времени по уровням командной игры: чистое, штрафное и общее время, итог по игре (доступна участникам команды) |
+| GET | `/api/game-sessions/{sessionId}/statistics` | То же, контрактный alias |
 
 Все эндпоинты, кроме `/api/auth/**` и `/api/files/**`, требуют заголовок
 `Authorization: Bearer <token>`.
@@ -256,10 +258,20 @@ npm run dev
   исключить любого участника, кроме себя; участники могут покинуть команду.
   Если уходит создатель, права переходят самому раннему участнику, а если
   участников больше не осталось — команда удаляется.
+- **Статистика времени**: после завершения командной игры (хостом или по
+  таймеру) всем участникам показывается таблица по уровням — чистое время,
+  штраф за подсказки и общее время уровня плюс итог по всей игре. Время
+  считается на сервере и хранится в `team_level_stats`, поэтому одинаково у
+  всех участников и сохраняется после перезагрузки страницы. Уровни, которые
+  не начинались, в таблицу не попадают; при таймауте уровня чистое время равно
+  его лимиту. Те же правила и общий компонент таблицы используются в одиночном
+  режиме.
 - **Схема БД**: `teams` (`id`, `name`, `avatar_url`, `creator_id`, `wins`,
   `created_at`), `team_members` (`team_id`, `user_id`, `role`, `joined_at`),
   `team_invitations` (`id`, `team_id`, `inviter_id`, `invitee_id`, `status`:
-  `pending`/`accepted`/`declined`).
+  `pending`/`accepted`/`declined`), `team_level_stats` (`session_id`,
+  `level_id`, `level_index`, `title`, `started_at`, `ended_at`,
+  `pure_seconds`, `penalty_seconds`, `timed_out`).
 
 ## Сборка релизов
 

@@ -7,6 +7,7 @@ import com.demo.taskmanager.dto.TeamGameHintRequest;
 import com.demo.taskmanager.dto.TeamGameLobbyResponse;
 import com.demo.taskmanager.dto.TeamGameStartRequest;
 import com.demo.taskmanager.dto.TeamGameStateResponse;
+import com.demo.taskmanager.dto.TeamGameStatisticsResponse;
 import com.demo.taskmanager.dto.TeamMemberResponse;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameLevel;
@@ -17,6 +18,7 @@ import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.Team;
 import com.demo.taskmanager.entity.TeamGameSession;
 import com.demo.taskmanager.entity.TeamHintState;
+import com.demo.taskmanager.entity.TeamLevelStat;
 import com.demo.taskmanager.entity.TeamMember;
 import com.demo.taskmanager.entity.TeamQuestionState;
 import com.demo.taskmanager.entity.TeamSessionEvent;
@@ -30,6 +32,7 @@ import com.demo.taskmanager.repository.GameRepository;
 import com.demo.taskmanager.repository.StandardQuestionRepository;
 import com.demo.taskmanager.repository.TeamGameSessionRepository;
 import com.demo.taskmanager.repository.TeamHintStateRepository;
+import com.demo.taskmanager.repository.TeamLevelStatRepository;
 import com.demo.taskmanager.repository.TeamQuestionStateRepository;
 import com.demo.taskmanager.repository.TeamSessionEventRepository;
 import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
@@ -41,6 +44,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -86,6 +90,7 @@ public class TeamGameService {
     private final TeamSessionPresenceRepository presenceRepository;
     private final TeamQuestionStateRepository questionStateRepository;
     private final TeamHintStateRepository hintStateRepository;
+    private final TeamLevelStatRepository levelStatRepository;
     private final GameRepository gameRepository;
     private final TeamService teamService;
     private final StandardQuestionRepository standardQuestionRepository;
@@ -98,6 +103,7 @@ public class TeamGameService {
                            TeamSessionPresenceRepository presenceRepository,
                            TeamQuestionStateRepository questionStateRepository,
                            TeamHintStateRepository hintStateRepository,
+                           TeamLevelStatRepository levelStatRepository,
                            GameRepository gameRepository,
                            TeamService teamService,
                            StandardQuestionRepository standardQuestionRepository,
@@ -109,6 +115,7 @@ public class TeamGameService {
         this.presenceRepository = presenceRepository;
         this.questionStateRepository = questionStateRepository;
         this.hintStateRepository = hintStateRepository;
+        this.levelStatRepository = levelStatRepository;
         this.gameRepository = gameRepository;
         this.teamService = teamService;
         this.standardQuestionRepository = standardQuestionRepository;
@@ -171,6 +178,7 @@ public class TeamGameService {
         TeamGameSession session = findActiveSession(teamId, gameId);
         if (session != null) {
             ensureTiming(session);
+            ensureLevelStat(session);
             try { markOnline(session, user); } catch (Exception ignored) {}
             addEvent(session, "Игрок " + user.getUsername() + " присоединился");
             TeamGameStateResponse state = buildState(session, user);
@@ -205,6 +213,7 @@ public class TeamGameService {
         sessionRepository.save(session);
         if (!levelsStart.isEmpty()) {
             ensureQuestionStates(session, levelsStart.get(0));
+            startLevelStat(session, levelsStart.get(0), startedAt);
         }
 
         markOnline(session, user);
@@ -500,6 +509,7 @@ public class TeamGameService {
         TeamGameSession session = requireSession(sessionId, user);
         ensureTiming(session);
         if (session.isActive()) {
+            ensureLevelStat(session);
             try {
                 markOnline(session, user);
             } catch (Exception e) {
@@ -518,6 +528,7 @@ public class TeamGameService {
             return buildState(session, user);
         }
         ensureTiming(session);
+        ensureLevelStat(session);
         try {
             markOnline(session, user);
         } catch (Exception e) {
@@ -613,6 +624,8 @@ public class TeamGameService {
             return;
         }
         Instant levelStartedAt = Instant.now();
+        // Уровень решён: фиксируем его чистое и штрафное время до перехода дальше.
+        closeCurrentLevelStat(session, levelStartedAt, false);
         session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
         session.setCurrentLevel(session.getCurrentLevelIndex());
         session.setLevelStartedAt(levelStartedAt);
@@ -623,6 +636,7 @@ public class TeamGameService {
         if (session.getCurrentLevelIndex() < levels.size()) {
             // Отсчёт подсказок нового уровня начинается заново.
             ensureQuestionStates(session, levels.get(session.getCurrentLevelIndex()));
+            startLevelStat(session, levels.get(session.getCurrentLevelIndex()), levelStartedAt);
         }
         ensureProgress(session);
         addEvent(session, "Переход на уровень " + (session.getCurrentLevelIndex() + 1));
@@ -677,16 +691,21 @@ public class TeamGameService {
             return;
         }
         if (session.getCurrentLevelIndex() >= levels.size() - 1) {
+            // Последний уровень истёк: чистое время равно полному лимиту уровня.
+            closeCurrentLevelStat(session, now, true);
             finishSessionInternal(session, TeamGameSession.END_REASON_TIME_EXPIRED, null,
                     "Время игры истекло");
             return;
         }
+        // Уровень завершился по таймауту: чистое время равно лимиту уровня.
+        closeCurrentLevelStat(session, now, true);
         session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
         session.setCurrentLevel(session.getCurrentLevelIndex());
         session.setLevelStartedAt(now);
         setLevelEndTime(session, levels.get(session.getCurrentLevelIndex()), now);
         sessionRepository.save(session);
         ensureQuestionStates(session, levels.get(session.getCurrentLevelIndex()));
+        startLevelStat(session, levels.get(session.getCurrentLevelIndex()), now);
 
         TeamGameStateResponse state = buildState(session, null);
         Map<String, Object> payload = event("sync_level_up", session, null, state);
@@ -701,6 +720,9 @@ public class TeamGameService {
     private void finishSessionInternal(TeamGameSession session, String reason, User user,
                                        String eventText) {
         Instant endedAt = Instant.now();
+        // Закрываем текущий уровень по фактическому времени (но не больше лимита):
+        // так статистика остаётся корректной и при завершении игры хостом.
+        closeCurrentLevelStat(session, endedAt, false);
         session.setStatus(TeamGameSession.STATUS_FINISHED);
         session.setSessionStatus(TeamGameSession.STATUS_FINISHED);
         session.setEndedAt(endedAt);
@@ -718,6 +740,159 @@ public class TeamGameService {
         payload.put("endReason", reason);
         broadcast(session.getId(), payload);
         broadcastToTeam(session, payload);
+    }
+
+    // ------------------------------------------------------------------
+    // Статистика времени по уровням
+    // ------------------------------------------------------------------
+
+    /**
+     * Серверная статистика времени по уровням партии.
+     *
+     * Данные берутся только из БД (team_level_stats), поэтому одинаковы для
+     * всех участников и переживают перезагрузку страницы. Уровни, которые
+     * не начинались, в ответ не попадают.
+     */
+    @Transactional(readOnly = true)
+    public TeamGameStatisticsResponse getStatistics(Long sessionId, User user) {
+        TeamGameSession session = requireSession(sessionId, user);
+        List<TeamLevelStat> stored = levelStatRepository
+                .findBySessionIdOrderByLevelIndexAsc(session.getId());
+        Map<Long, TeamLevelStat> byLevelId = new LinkedHashMap<>();
+        for (TeamLevelStat stat : stored) {
+            if (stat.getLevelId() != null) {
+                byLevelId.put(stat.getLevelId(), stat);
+            }
+        }
+
+        List<TeamGameStatisticsResponse.LevelStat> levels = new ArrayList<>();
+        long totalSeconds = 0;
+        for (GameLevel level : sortedLevels(session.getGame())) {
+            TeamLevelStat stat = byLevelId.get(level.getId());
+            // Уровень не начинался или ещё идёт — в статистику не включаем.
+            if (stat == null || stat.getEndedAt() == null) {
+                continue;
+            }
+            long pure = Math.max(0, stat.getPureSeconds());
+            long penalty = Math.max(0, stat.getPenaltySeconds());
+            long totalLevel = pure + penalty;
+            String title = stat.getTitle() == null || stat.getTitle().isBlank()
+                    ? level.getTitle() : stat.getTitle();
+            levels.add(new TeamGameStatisticsResponse.LevelStat(
+                    level.getId(),
+                    stat.getLevelIndex(),
+                    title,
+                    stat.getStartedAt(),
+                    stat.getEndedAt(),
+                    pure,
+                    penalty,
+                    totalLevel,
+                    stat.isTimedOut()
+            ));
+            totalSeconds += totalLevel;
+        }
+
+        return new TeamGameStatisticsResponse(
+                session.getId(),
+                session.getStatus(),
+                session.getEndReason(),
+                session.getStartTime(),
+                session.getEndedAt(),
+                totalSeconds,
+                levels
+        );
+    }
+
+    /** Создаёт запись времени уровня, если её ещё нет (например, для старых сессий). */
+    private void ensureLevelStat(TeamGameSession session) {
+        if (session == null || !session.isActive()) {
+            return;
+        }
+        GameLevel level = currentLevel(session);
+        if (level == null || level.getId() == null) {
+            return;
+        }
+        if (levelStatRepository.findBySessionIdAndLevelId(session.getId(), level.getId()).isPresent()) {
+            return;
+        }
+        startLevelStat(session, level, levelAnchor(session));
+    }
+
+    /** Начинает отсчёт уровня: запись создаётся один раз. */
+    private void startLevelStat(TeamGameSession session, GameLevel level, Instant startedAt) {
+        if (session == null || level == null || level.getId() == null) {
+            return;
+        }
+        if (levelStatRepository.findBySessionIdAndLevelId(session.getId(), level.getId()).isPresent()) {
+            return;
+        }
+        Instant started = startedAt != null ? startedAt : levelAnchor(session);
+        TeamLevelStat stat = new TeamLevelStat();
+        stat.setSession(session);
+        stat.setLevelId(level.getId());
+        stat.setLevelIndex(session.getCurrentLevelIndex());
+        stat.setTitle(level.getTitle());
+        stat.setStartedAt(started);
+        stat.setPureSeconds(0);
+        stat.setPenaltySeconds(0);
+        stat.setTimedOut(false);
+        levelStatRepository.save(stat);
+    }
+
+    /**
+     * Закрывает текущий уровень и сохраняет его время.
+     *
+     * timedOut=true — уровень истёк по своему лимиту, чистое время равно
+     * полному лимиту уровня. Иначе чистое время равно фактическому времени
+     * прохождения и ограничивается лимитом уровня.
+     * Повторный вызов для уже закрытого уровня ничего не меняет.
+     */
+    private void closeCurrentLevelStat(TeamGameSession session, Instant endedAt, boolean timedOut) {
+        GameLevel level = currentLevel(session);
+        if (level == null || level.getId() == null) {
+            return;
+        }
+        TeamLevelStat stat = levelStatRepository
+                .findBySessionIdAndLevelId(session.getId(), level.getId())
+                .orElseGet(() -> {
+                    TeamLevelStat created = new TeamLevelStat();
+                    created.setSession(session);
+                    created.setLevelId(level.getId());
+                    created.setLevelIndex(session.getCurrentLevelIndex());
+                    created.setTitle(level.getTitle());
+                    created.setStartedAt(levelAnchor(session));
+                    return created;
+                });
+        if (stat.getEndedAt() != null) {
+            return;
+        }
+        Instant started = stat.getStartedAt() != null ? stat.getStartedAt() : levelAnchor(session);
+        Instant end = endedAt != null ? endedAt : Instant.now();
+        long limit = levelLimitSeconds(level);
+        long elapsed = Math.max(0, Duration.between(started, end).getSeconds());
+        long pure = timedOut && limit > 0 ? limit : (limit > 0 ? Math.min(elapsed, limit) : elapsed);
+
+        stat.setStartedAt(started);
+        stat.setEndedAt(end);
+        stat.setPureSeconds(pure);
+        stat.setPenaltySeconds(penaltySecondsOf(session, level));
+        stat.setTimedOut(timedOut);
+        levelStatRepository.save(stat);
+    }
+
+    /** Суммарный штраф уровня в секундах; источник — прогресс уровня (минуты). */
+    private long penaltySecondsOf(TeamGameSession session, GameLevel level) {
+        return progressRepository.findBySessionIdAndLevelId(session.getId(), level.getId())
+                .map(p -> Math.max(0L, Math.round(p.getPenaltyTime() * 60)))
+                .orElse(0L);
+    }
+
+    /** Лимит уровня в секундах; 0 — уровень без ограничения по времени. */
+    private long levelLimitSeconds(GameLevel level) {
+        if (level == null || level.getTimeLimitMinutes() <= 0) {
+            return 0L;
+        }
+        return Math.max(0L, Math.round(level.getTimeLimitMinutes() * 60));
     }
 
     /**

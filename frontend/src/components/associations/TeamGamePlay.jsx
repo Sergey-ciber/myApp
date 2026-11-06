@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import {
-  disconnectTeamGame, endTeamGame, getTeamGameState, heartbeatTeamGame, joinTeamGame, leaveTeamGame,
+  disconnectTeamGame, endTeamGame, getTeamGameState, getTeamGameStatistics, heartbeatTeamGame, joinTeamGame, leaveTeamGame,
   revealTeamHint, revealTeamHintById, submitTeamAnswer,
 } from '../../api/teamGames'
 import { apiMessage } from '../../api/client'
 import { formatTime } from './constants'
+import GameStatisticsTable from './GameStatisticsTable'
 
 const WS_URL = import.meta.env.VITE_WS_URL || '/ws'
 
@@ -124,6 +125,9 @@ export default function TeamGamePlay({
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [finishedFromServer, setFinishedFromServer] = useState(false)
   const [fullscreenImage, setFullscreenImage] = useState(null)
+  const [statistics, setStatistics] = useState(null)
+  const [statisticsLoading, setStatisticsLoading] = useState(false)
+  const [statisticsError, setStatisticsError] = useState('')
   const [selectedQuestionId, setSelectedQuestionId] = useState(() => {
     try {
       return localStorage.getItem(questionStorageKey(sessionId))
@@ -197,6 +201,41 @@ export default function TeamGamePlay({
     expiryFetchRef.current = now
     getTeamGameState(sessionId).then((s) => applyState(s, true)).catch(() => {})
   }, [now, state?.status, state?.endsAt, sessionId, applyState])
+
+  /**
+   * Статистику времени после финиша запрашиваем только у сервера.
+   * Небольшие повторы нужны на случай, если финиш пришёл broadcasтом
+   * до коммита транзакции завершения сессии.
+   */
+  const loadStatistics = useCallback(async () => {
+    setStatisticsLoading(true)
+    setStatisticsError('')
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const data = await getTeamGameStatistics(sessionId)
+        const empty = !data?.levels || data.levels.length === 0
+        if (empty && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 600))
+          continue
+        }
+        setStatistics(data)
+        setStatisticsLoading(false)
+        return
+      } catch (err) {
+        if (attempt === 2) {
+          setStatisticsError(apiMessage(err))
+          setStatisticsLoading(false)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 600))
+      }
+    }
+  }, [sessionId])
+
+  const finishedNow = String(state?.status || '').toLowerCase() === 'finished' || finishedFromServer
+  useEffect(() => {
+    if (finishedNow) loadStatistics()
+  }, [finishedNow, loadStatistics])
 
   // Подключение к партии: получаем полный слепок состояния.
   useEffect(() => {
@@ -559,20 +598,44 @@ export default function TeamGamePlay({
     const completed = String(endReason).toLowerCase() === 'completed'
     return (
       <div className="assoc-start-screen">
-        <div className="assoc-info-card">
-          <div className="assoc-win-emoji" aria-hidden="true">{completed ? '🏆' : '🏁'}</div>
-          <h2 className="assoc-info-title">{finishTitle}</h2>
-          <p className="assoc-info-description">
-            Штрафное время команды: +{formatTime(Math.round(penalty * 60))}
-          </p>
-          <p className="assoc-info-description">
-            Пройдено уровней: {Math.min(levelIndex + (completed ? 1 : 0), levels.length)} из {levels.length}
-          </p>
-          <div className="assoc-info-actions">
-            {onExit && (
-              <button type="button" className="btn btn-secondary" onClick={onExit}>
-                К списку игр
-              </button>
+        <div className="assoc-team-finish">
+          <div className="assoc-info-card">
+            <div className="assoc-win-emoji" aria-hidden="true">{completed ? '🏆' : '🏁'}</div>
+            <h2 className="assoc-info-title">{finishTitle}</h2>
+            <p className="assoc-info-description">
+              Штрафное время команды: +{formatTime(Math.round(penalty * 60))}
+            </p>
+            <p className="assoc-info-description">
+              Пройдено уровней: {Math.min(levelIndex + (completed ? 1 : 0), levels.length)} из {levels.length}
+            </p>
+            <div className="assoc-info-actions">
+              {onExit && (
+                <button type="button" className="btn btn-secondary" onClick={onExit}>
+                  К списку игр
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="assoc-statistics-card assoc-team-statistics">
+            <h3 className="assoc-statistics-title">Статистика времени по уровням</h3>
+            {statisticsLoading && !statistics && (
+              <p className="assoc-info-description">Загружаем статистику…</p>
+            )}
+            {statisticsError && (
+              <>
+                <p className="assoc-win-error">{statisticsError}</p>
+                <button type="button" className="btn btn-secondary" onClick={loadStatistics}>
+                  Повторить
+                </button>
+              </>
+            )}
+            {!statisticsError && statistics && (
+              <GameStatisticsTable
+                levels={statistics.levels}
+                totalSeconds={statistics.totalSeconds}
+                emptyText="Ни один уровень не был начат"
+              />
             )}
           </div>
         </div>

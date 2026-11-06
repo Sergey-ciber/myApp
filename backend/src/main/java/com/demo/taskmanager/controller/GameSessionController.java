@@ -1,6 +1,7 @@
 package com.demo.taskmanager.controller;
 
 import com.demo.taskmanager.dto.TeamGameStateResponse;
+import com.demo.taskmanager.dto.TeamGameStatisticsResponse;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -11,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,6 +39,13 @@ public class GameSessionController {
     public ResponseEntity<TeamGameStateResponse> end(@PathVariable Long sessionId,
                                                      @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(teamGameService.endGame(sessionId, currentUser(userDetails)));
+    }
+
+    /** Контрактный alias: статистика времени по уровням завершённой партии. */
+    @GetMapping("/{sessionId}/statistics")
+    public ResponseEntity<TeamGameStatisticsResponse> statistics(@PathVariable Long sessionId,
+                                                                 @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(teamGameService.getStatistics(sessionId, currentUser(userDetails)));
     }
 
     /** Контрактный alias: открыть следующую подсказку вопроса. */

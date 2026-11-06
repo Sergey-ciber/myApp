@@ -10,7 +10,8 @@ import Leaderboard from './Leaderboard'
 import TeamGamePlay from './TeamGamePlay'
 import ActiveTeamGames from './ActiveTeamGames'
 import useTeamChannel from './useTeamChannel'
-import { formatMinutes, formatTime } from './constants'
+import GameStatisticsTable from './GameStatisticsTable'
+import { formatMinutes } from './constants'
 
 /** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
 function mediaKind(url) {
@@ -828,38 +829,21 @@ function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canRes
 
 /** Экран итоговой статистики после последнего уровня. */
 function StatisticsScreen({ stats, totalTime, resultError, leaderboard, leaderboardLoading, currentUserId, onPlayAgain, onHome }) {
+  const rows = (stats || []).map((stat, index) => ({
+    levelId: stat.levelId,
+    levelIndex: index,
+    title: stat.name,
+    pureSeconds: stat.netTime,
+    penaltySeconds: stat.penaltyTime,
+    totalSeconds: stat.totalTime,
+  }))
   return (
     <div className="assoc-statistics">
       <div className="assoc-statistics-card">
         <div className="assoc-win-emoji" aria-hidden="true">🏆</div>
         <h3 className="assoc-statistics-title">Игра завершена!</h3>
 
-        <table className="assoc-statistics-table">
-          <thead>
-            <tr>
-              <th>Уровень</th>
-              <th>Чистое время</th>
-              <th>Штраф за подсказки</th>
-              <th>Итоговое время</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((stat) => (
-              <tr key={stat.levelId}>
-                <td>{stat.name}</td>
-                <td>{formatTime(stat.netTime)}</td>
-                <td>{stat.penaltyTime > 0 ? `+${formatTime(stat.penaltyTime)}` : '—'}</td>
-                <td>{formatTime(stat.totalTime)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan="3">Общее время игры</td>
-              <td><strong>{formatTime(totalTime)}</strong></td>
-            </tr>
-          </tfoot>
-        </table>
+        <GameStatisticsTable levels={rows} totalSeconds={totalTime} />
 
         {resultError && <p className="assoc-win-error">{resultError}</p>}
 

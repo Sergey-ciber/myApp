@@ -51,3 +51,7 @@ export const disconnectTeamGame = (sessionId) =>
 /** Heartbeat: продлевает отметку «онлайн». */
 export const heartbeatTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/heartbeat`).then((res) => res.data)
+
+/** Серверная статистика времени по уровням (доступна всем участникам команды). */
+export const getTeamGameStatistics = (sessionId) =>
+  api.get(`/team-games/${sessionId}/statistics`).then((res) => res.data)

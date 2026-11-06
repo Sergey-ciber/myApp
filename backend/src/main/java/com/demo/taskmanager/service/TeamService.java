@@ -19,6 +19,7 @@ import com.demo.taskmanager.repository.TeamInvitationRepository;
 import com.demo.taskmanager.repository.TeamMemberRepository;
 import com.demo.taskmanager.repository.TeamRepository;
 import com.demo.taskmanager.repository.TeamHintStateRepository;
+import com.demo.taskmanager.repository.TeamLevelStatRepository;
 import com.demo.taskmanager.repository.TeamQuestionStateRepository;
 import com.demo.taskmanager.repository.TeamSessionEventRepository;
 import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
@@ -50,6 +51,7 @@ public class TeamService {
     private final TeamSessionEventRepository teamSessionEventRepository;
     private final TeamQuestionStateRepository teamQuestionStateRepository;
     private final TeamHintStateRepository teamHintStateRepository;
+    private final TeamLevelStatRepository teamLevelStatRepository;
 
     public TeamService(TeamRepository teamRepository,
                        TeamMemberRepository memberRepository,
@@ -61,7 +63,8 @@ public class TeamService {
                        TeamSessionProgressRepository teamSessionProgressRepository,
                        TeamSessionEventRepository teamSessionEventRepository,
                        TeamQuestionStateRepository teamQuestionStateRepository,
-                       TeamHintStateRepository teamHintStateRepository) {
+                       TeamHintStateRepository teamHintStateRepository,
+                       TeamLevelStatRepository teamLevelStatRepository) {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
@@ -73,6 +76,7 @@ public class TeamService {
         this.teamSessionEventRepository = teamSessionEventRepository;
         this.teamQuestionStateRepository = teamQuestionStateRepository;
         this.teamHintStateRepository = teamHintStateRepository;
+        this.teamLevelStatRepository = teamLevelStatRepository;
     }
 
     /** Все команды платформы, отсортированные по рейтингу (победам). */
@@ -124,6 +128,7 @@ public class TeamService {
             teamSessionEventRepository.deleteBySessionId(session.getId());
             teamQuestionStateRepository.deleteBySessionId(session.getId());
             teamHintStateRepository.deleteBySessionId(session.getId());
+            teamLevelStatRepository.deleteBySessionId(session.getId());
         }
         teamRepository.delete(team);
     }

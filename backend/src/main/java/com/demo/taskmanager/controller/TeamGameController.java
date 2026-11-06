@@ -6,6 +6,7 @@ import com.demo.taskmanager.dto.TeamGameHintRequest;
 import com.demo.taskmanager.dto.TeamGameLobbyResponse;
 import com.demo.taskmanager.dto.TeamGameStartRequest;
 import com.demo.taskmanager.dto.TeamGameStateResponse;
+import com.demo.taskmanager.dto.TeamGameStatisticsResponse;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -125,6 +126,14 @@ public class TeamGameController {
                                                      @AuthenticationPrincipal UserDetails userDetails) {
         User user = currentUser(userDetails);
         return ResponseEntity.ok(teamGameService.endGame(sessionId, user));
+    }
+
+    /** Статистика времени по уровням: доступна всем участникам команды. */
+    @GetMapping("/{sessionId}/statistics")
+    public ResponseEntity<TeamGameStatisticsResponse> statistics(@PathVariable Long sessionId,
+                                                                 @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.getStatistics(sessionId, user));
     }
 
     /** Выход из партии: игра продолжается, хост передаёт права следующему игроку. */

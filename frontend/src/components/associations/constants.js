@@ -63,6 +63,19 @@ export function formatTime(totalSeconds) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+/**
+ * Секунды для таблицы статистики: "ММ:СС", а начиная с часа — "ЧЧ:ММ:СС".
+ * 7 -> "00:07", 75 -> "01:15", 3725 -> "01:02:05".
+ */
+export function formatStatTime(totalSeconds) {
+  const safe = Math.max(0, Math.round(Number(totalSeconds) || 0))
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  const seconds = safe % 60
+  const pad = (value) => String(value).padStart(2, '0')
+  return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`
+}
+
 /** Минуты без лишних нулей: 10 -> "10", 2.5 -> "2.5". */
 export function formatMinutes(value) {
   const minutes = Number(value)
