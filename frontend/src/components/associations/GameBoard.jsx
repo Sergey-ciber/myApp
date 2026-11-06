@@ -48,7 +48,7 @@ const withPrefix = (value, prefix, oldPrefix = '') => {
  * подсказки открывают первые буквы доступных неразгаданных ячеек.
  */
 export default function GameBoard({
-  game, level, progress, onLevelComplete, onSave,
+  game, level, progress, onLevelComplete, onSave, onCheckAnswer,
 }) {
   const [values, setValues] = useState(() => {
     const cells = emptyValues()
@@ -77,6 +77,14 @@ export default function GameBoard({
   const [timeUp, setTimeUp] = useState(false)
   const [actionError, setActionError] = useState('')
   const completedRef = useRef(false)
+
+  /** Синхронизируем solved из props — важно для командного режима, где solved
+   * обновляется через WebSocket, а не через локальные действия. */
+  useEffect(() => {
+    if (progress?.solved) {
+      setSolved(progress.solved)
+    }
+  }, [progress?.solved])
 
   const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
   const remainingSeconds = Math.max(0, limitSeconds - elapsed)
@@ -184,7 +192,14 @@ export default function GameBoard({
     setChecking((prev) => ({ ...prev, [key]: true }))
     setActionError('')
     try {
-      const result = await checkAnswer(game.id, columnIndex + 1, position + 1, text)
+      let result
+      if (onCheckAnswer) {
+        // Командный режим: используем командный API
+        await onCheckAnswer(columnIndex + 1, position + 1, text)
+        // Результат придёт через WebSocket — не завершаем уровень здесь
+        return
+      }
+      result = await checkAnswer(game.id, columnIndex + 1, position + 1, text)
       const nextSolved = result.progress?.solved || {}
       setSolved(nextSolved)
       if (result.progress?.hintLevel != null) setHintLevel(result.progress.hintLevel)

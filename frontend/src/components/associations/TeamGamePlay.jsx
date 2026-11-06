@@ -3,10 +3,11 @@ import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import {
   disconnectTeamGame, endTeamGame, getTeamGameState, getTeamGameStatistics, heartbeatTeamGame, joinTeamGame, leaveTeamGame,
-  revealTeamHint, revealTeamHintById, submitTeamAnswer,
+  revealTeamHint, revealTeamHintById, submitPyramidTeamAnswer, submitTeamAnswer,
 } from '../../api/teamGames'
 import { apiMessage } from '../../api/client'
 import { formatTime } from './constants'
+import GameBoard from './GameBoard'
 import GameStatisticsTable from './GameStatisticsTable'
 
 const WS_URL = import.meta.env.VITE_WS_URL || '/ws'
@@ -125,6 +126,7 @@ export default function TeamGamePlay({
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [finishedFromServer, setFinishedFromServer] = useState(false)
   const [fullscreenImage, setFullscreenImage] = useState(null)
+  const [solvedPyramid, setSolvedPyramid] = useState({})
   const [statistics, setStatistics] = useState(null)
   const [statisticsLoading, setStatisticsLoading] = useState(false)
   const [statisticsError, setStatisticsError] = useState('')
@@ -310,6 +312,11 @@ export default function TeamGamePlay({
                 if (String(payload.userId) === String(currentUserId)) {
                   setAnswer('')
                 }
+                // Обновляем solvedPyramid для пирамиды (ASSOCIATIONS уровень)
+                if (payload.column != null && payload.position != null) {
+                  const key = `${payload.column}:${payload.position}`
+                  setSolvedPyramid((prev) => ({ ...prev, [key]: payload.answer || true }))
+                }
                 const shown = isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)
                   ? answerOfQuestion(payload.state || stateRef.current, payload.questionId)
                   : ''
@@ -338,6 +345,7 @@ export default function TeamGamePlay({
                 break
               case 'sync_level_up':
                 setAnswer('')
+                setSolvedPyramid({})
                 showFlash('🎉 Уровень пройден! Открыт следующий уровень')
                 break
               case 'sync_state':
@@ -485,6 +493,26 @@ export default function TeamGamePlay({
     }
   }, [questions, selectedQuestionId])
 
+  // Синхронизация solvedPyramid при смене уровня.
+  // Формат ключей совпадает с GameBoard.jsx: "column:position" (1-based).
+  useEffect(() => {
+    if (level?.type !== 'ASSOCIATIONS') {
+      setSolvedPyramid({})
+      return
+    }
+    // Восстанавливаем из solved карты состояния.
+    // Значения ретактированы сервером (пустые строки), поэтому проверяем
+    // только наличие ключа — сам факт наличия ключа означает разгаданную ячейку.
+    const levelSolved = state?.solved || {}
+    const pyramidSolved = {}
+    for (const [key] of Object.entries(levelSolved)) {
+      if (/^\d+:\d+$/.test(key)) {
+        pyramidSolved[key] = true
+      }
+    }
+    setSolvedPyramid(pyramidSolved)
+  }, [levelIndex, level?.type, state?.solved])
+
   // Смена вопроса очищает введённый ответ и ошибку: блок вопроса
   // отображается целиком для выбранного вопроса.
   useEffect(() => {
@@ -512,6 +540,26 @@ export default function TeamGamePlay({
       const res = await submitTeamAnswer(sessionId, currentQuestion.id, trimmed)
       if (res) applyState(res, true)
       setAnswer('')
+    } catch (err) {
+      setWrong(true)
+      setError(apiMessage(err))
+      setTimeout(() => setWrong(false), 2000)
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  /** Отправить ответ для пирамиды (ASSOCIATIONS уровень). */
+  const handleSubmitPyramid = async (column, position, text) => {
+    if (!text || checking) return
+    const trimmed = text.trim()
+    const key = `${column}:${position}`
+    if (solvedPyramid[key]) return
+    setChecking(true)
+    setWrong(false)
+    try {
+      const res = await submitPyramidTeamAnswer(sessionId, column, position, trimmed)
+      if (res) applyState(res, true)
     } catch (err) {
       setWrong(true)
       setError(apiMessage(err))
@@ -764,7 +812,29 @@ export default function TeamGamePlay({
       {flash && <div className="alert alert-success assoc-team-flash">{flash}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="assoc-normal-card">
+      {/* Для ASSOCIATIONS уровней рендерим пирамиду как в одиночной игре */}
+      {level?.type === 'ASSOCIATIONS' ? (
+        <GameBoard
+          key={`${sessionId}-${levelIndex}`}
+          game={game}
+          level={level}
+          progress={{
+            solved: solvedPyramid,
+            elapsedSeconds: gameElapsedSec,
+          }}
+          onLevelComplete={(payload) => {
+            showFlash('🎉 Уровень пройден! Открыт следующий уровень')
+          }}
+          onSave={(progressData) => {
+            // Сохраняем solvedPyramid локально
+            if (progressData?.solved) {
+              setSolvedPyramid(progressData.solved)
+            }
+          }}
+          onCheckAnswer={(column, position, text) => handleSubmitPyramid(column, position, text)}
+        />
+      ) : (
+        <div className="assoc-normal-card">
         <h3 className="assoc-normal-question">{level?.title}</h3>
         {renderMedia(level?.mediaUrls, setFullscreenImage)}
 
@@ -924,6 +994,7 @@ export default function TeamGamePlay({
           </button>
         </div>
       </div>
+      )}
 
       {/* Лента событий команды */}
       <div className="assoc-info-block" style={{ marginTop: 16 }}>

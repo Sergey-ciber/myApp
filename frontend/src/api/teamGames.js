@@ -48,6 +48,10 @@ export const leaveTeamGame = (sessionId) =>
 export const disconnectTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/disconnect`).then((res) => res.data)
 
+/** Ответ для уровня типа «Игра в ассоциации» (пирамида, колонка/позиция). */
+export const submitPyramidTeamAnswer = (sessionId, column, position, answer) =>
+  api.post(`/team-games/${sessionId}/pyramid/answer`, { sessionId, column, position, answer }).then((res) => res.data)
+
 /** Heartbeat: продлевает отметку «онлайн». */
 export const heartbeatTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/heartbeat`).then((res) => res.data)
