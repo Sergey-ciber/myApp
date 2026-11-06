@@ -1053,10 +1053,63 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
               <MediaUploader urls={level.mediaUrls || []} onChange={(urls) => updateLevelMedia(levelIndex, urls)} />
 
               {level.type === 'ASSOCIATIONS' && (
-                <div style={{ marginTop: 18 }}>
-                  <h4 style={{ margin: '0 0 12px', color: '#ffffff' }}>Пирамида ассоциаций (31 слово)</h4>
-                  {renderLevelPyramid(levelIndex)}
-                </div>
+                <>
+                  <div style={{ marginTop: 18 }}>
+                    <h4 style={{ margin: '0 0 12px', color: '#ffffff' }}>Пирамида ассоциаций (31 слово)</h4>
+                    {renderLevelPyramid(levelIndex)}
+                  </div>
+
+                  <div style={{ marginTop: 18 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <span style={{ color: '#e5e7eb', fontWeight: 600 }}>Подсказки</span>
+                      <button type="button" className="btn btn-small btn-secondary" onClick={() => addHint(levelIndex)}>Добавить подсказку</button>
+                    </div>
+                    {(level.hints || []).map((hint, hintIndex) => (
+                      <div key={hintIndex} className="assoc-panel hint-block" style={{ marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <span style={{ color: '#ffffff' }}>Подсказка {hintIndex + 1}</span>
+                          <button type="button" className="btn btn-small btn-danger" onClick={() => removeHint(levelIndex, hintIndex)}>Удалить</button>
+                        </div>
+                        <div className="field-row">
+                          <label className="field">
+                            <span>Тип подсказки *</span>
+                            <select value={hint.type} onChange={(event) => updateHint(levelIndex, hintIndex, { type: event.target.value })}>
+                              {HINT_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Время появления (мин. от начала уровня) *</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={hint.triggerTime}
+                              onChange={(event) => updateHint(levelIndex, hintIndex, { triggerTime: event.target.value })}
+                              placeholder="например, 3"
+                              className={showErrors && (hint.triggerTime === undefined || hint.triggerTime === null || hint.triggerTime?.toString().trim() === '') ? 'input-invalid' : ''}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Штрафное время (мин.)</span>
+                            <input type="number" min="0" step="any" value={hint.penaltyTime} onChange={(event) => updateHint(levelIndex, hintIndex, { penaltyTime: event.target.value })} placeholder="например, 1" />
+                          </label>
+                        </div>
+                        {hint.type === 'GENERAL' && (
+                          <div>
+                            <label className="field" style={{ marginBottom: 10 }}>
+                              <span>Текст подсказки</span>
+                              <textarea rows={3} value={hint.text} onChange={(event) => updateHint(levelIndex, hintIndex, { text: event.target.value })} placeholder="Текст общей подсказки" />
+                            </label>
+                            <MediaUploader
+                              urls={hint.mediaUrls || []}
+                              onChange={(urls) => updateHint(levelIndex, hintIndex, { mediaUrls: urls })}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
 
               {level.type === 'NORMAL' && (
