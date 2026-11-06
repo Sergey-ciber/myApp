@@ -29,6 +29,7 @@ com\demo\taskmanager\service\TeamService.class
 com\demo\taskmanager\dto\TeamGameLobbyResponse.class
 com\demo\taskmanager\dto\ResultResponse.class
 com\demo\taskmanager\repository\LevelWordRepository.class
+com\demo\taskmanager\dto\TeamGameStatisticsResponse.class
 com\demo\taskmanager\dto\FileUploadResponse.class
 com\demo\taskmanager\entity\StandardAnswer.class
 com\demo\taskmanager\dto\TeamResponse.class
@@ -39,6 +40,7 @@ com\demo\taskmanager\config\SecurityConfig.class
 com\demo\taskmanager\dto\CheckAnswerResponse.class
 com\demo\taskmanager\entity\Task$Status.class
 com\demo\taskmanager\entity\TeamInvitation.class
+com\demo\taskmanager\repository\TeamLevelStatRepository.class
 com\demo\taskmanager\dto\GameRequest$LevelRequest.class
 com\demo\taskmanager\entity\LevelWord.class
 com\demo\taskmanager\repository\TeamInvitationRepository.class
@@ -83,6 +85,7 @@ com\demo\taskmanager\repository\TeamSessionEventRepository.class
 com\demo\taskmanager\repository\TeamMemberRepository.class
 com\demo\taskmanager\dto\GamePlayResponse$GameLevelView.class
 com\demo\taskmanager\entity\TeamQuestionState.class
+com\demo\taskmanager\dto\TeamGameStatisticsResponse$LevelStat.class
 com\demo\taskmanager\repository\StandardAnswerRepository.class
 com\demo\taskmanager\dto\UserSummaryResponse.class
 com\demo\taskmanager\controller\TeamController.class
@@ -126,6 +129,7 @@ com\demo\taskmanager\service\TeamGameService.class
 com\demo\taskmanager\repository\TaskRepository.class
 com\demo\taskmanager\dto\TeamDetailsResponse.class
 com\demo\taskmanager\service\BoardService.class
+com\demo\taskmanager\entity\TeamLevelStat.class
 com\demo\taskmanager\security\JwtAuthFilter.class
 com\demo\taskmanager\exception\NotFoundException.class
 com\demo\taskmanager\entity\TeamRole.class

@@ -43,6 +43,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameH
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameLobbyResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameStartRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameStateResponse.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameStatisticsResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamMemberResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamResponse.java
@@ -67,6 +68,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\Team.j
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamGameSession.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamHintState.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamInvitation.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamLevelStat.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamMember.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamQuestionState.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamRole.java
@@ -93,6 +95,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\Ta
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamGameSessionRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamHintStateRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamInvitationRepository.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamLevelStatRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamMemberRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamQuestionStateRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TeamRepository.java
