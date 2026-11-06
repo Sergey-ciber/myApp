@@ -73,6 +73,8 @@ public class GameService {
     private final ObjectMapper objectMapper;
     private final StandardQuestionRepository standardQuestionRepository;
     private final com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository;
+    private final com.demo.taskmanager.repository.TeamQuestionStateRepository teamQuestionStateRepository;
+    private final com.demo.taskmanager.repository.TeamHintStateRepository teamHintStateRepository;
     private final com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository;
     private final com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository;
 
@@ -83,6 +85,8 @@ public class GameService {
                        ObjectMapper objectMapper,
                        StandardQuestionRepository standardQuestionRepository,
                        com.demo.taskmanager.repository.TeamSessionProgressRepository teamSessionProgressRepository,
+                       com.demo.taskmanager.repository.TeamQuestionStateRepository teamQuestionStateRepository,
+                       com.demo.taskmanager.repository.TeamHintStateRepository teamHintStateRepository,
                        com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository,
                        com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository) {
         this.gameRepository = gameRepository;
@@ -92,6 +96,8 @@ public class GameService {
         this.objectMapper = objectMapper;
         this.standardQuestionRepository = standardQuestionRepository;
         this.teamSessionProgressRepository = teamSessionProgressRepository;
+        this.teamQuestionStateRepository = teamQuestionStateRepository;
+        this.teamHintStateRepository = teamHintStateRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userGameProgressRepository = userGameProgressRepository;
     }
@@ -672,6 +678,8 @@ public class GameService {
         if (game.getLevels() != null) {
             for (GameLevel oldLevel : new ArrayList<>(game.getLevels())) {
                 teamSessionProgressRepository.deleteByLevelId(oldLevel.getId());
+                teamQuestionStateRepository.deleteByLevelId(oldLevel.getId());
+                teamHintStateRepository.deleteByLevelId(oldLevel.getId());
             }
         }
         game.getLevels().clear();

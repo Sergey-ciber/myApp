@@ -36,11 +36,31 @@ public class GameSessionController {
     @PostMapping("/{sessionId}/end")
     public ResponseEntity<TeamGameStateResponse> end(@PathVariable Long sessionId,
                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(teamGameService.endGame(sessionId, currentUser(userDetails)));
+    }
+
+    /** Контрактный alias: открыть следующую подсказку вопроса. */
+    @PostMapping("/{sessionId}/questions/{questionId}/hints/reveal")
+    public ResponseEntity<TeamGameStateResponse> revealNextHint(@PathVariable Long sessionId,
+                                                                @PathVariable Long questionId,
+                                                                @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(teamGameService.revealHint(sessionId, currentUser(userDetails), questionId, null));
+    }
+
+    /** Контрактный alias: открыть конкретную подсказку вопроса (идемпотентно). */
+    @PostMapping("/{sessionId}/questions/{questionId}/hints/{hintId}/reveal")
+    public ResponseEntity<TeamGameStateResponse> revealHint(@PathVariable Long sessionId,
+                                                            @PathVariable Long questionId,
+                                                            @PathVariable Long hintId,
+                                                            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(teamGameService.revealHint(sessionId, currentUser(userDetails), questionId, hintId));
+    }
+
+    private User currentUser(UserDetails userDetails) {
         if (userDetails == null) {
             throw new BadRequestException("Требуется авторизация");
         }
-        User user = userRepository.findByUsernameIgnoreCase(userDetails.getUsername())
+        return userRepository.findByUsernameIgnoreCase(userDetails.getUsername())
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
-        return ResponseEntity.ok(teamGameService.endGame(sessionId, user));
     }
 }

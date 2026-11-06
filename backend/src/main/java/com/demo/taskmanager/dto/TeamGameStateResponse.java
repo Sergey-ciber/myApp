@@ -20,8 +20,11 @@ public record TeamGameStateResponse(
         Map<String, String> solved,
         double penaltyTime,
         Map<String, Object> hints,
+        /** Состояние вопросов и подсказок текущего уровня: ключ — id вопроса. */
+        Map<String, Object> questionStates,
         Instant startTime,
         Instant startedAt,
+        Instant levelStartedAt,
         Instant levelEndTime,
         List<Map<String, Object>> events,
         List<String> onlineUserIds,

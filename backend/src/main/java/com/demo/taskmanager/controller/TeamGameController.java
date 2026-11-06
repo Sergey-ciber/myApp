@@ -100,6 +100,25 @@ public class TeamGameController {
         return ResponseEntity.ok(teamGameService.requestHint(sessionId, user, request));
     }
 
+    /** Открыть следующую по порядку подсказку конкретного вопроса. */
+    @PostMapping("/{sessionId}/questions/{questionId}/hints/reveal")
+    public ResponseEntity<TeamGameStateResponse> revealNextHint(@PathVariable Long sessionId,
+                                                                @PathVariable Long questionId,
+                                                                @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.revealHint(sessionId, user, questionId, null));
+    }
+
+    /** Открыть конкретную подсказку вопроса; повторный вызов идемпотентен. */
+    @PostMapping("/{sessionId}/questions/{questionId}/hints/{hintId}/reveal")
+    public ResponseEntity<TeamGameStateResponse> revealHint(@PathVariable Long sessionId,
+                                                            @PathVariable Long questionId,
+                                                            @PathVariable Long hintId,
+                                                            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.revealHint(sessionId, user, questionId, hintId));
+    }
+
     /** Завершение партии — только хост. Для остальных возвращается 403. */
     @PostMapping("/{sessionId}/end")
     public ResponseEntity<TeamGameStateResponse> end(@PathVariable Long sessionId,

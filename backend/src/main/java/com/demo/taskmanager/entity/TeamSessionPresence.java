@@ -4,6 +4,13 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
+/**
+ * Отметка присутствия участника командной сессии.
+ *
+ * Запись живёт, пока игрок участвует в партии: обычный heartbeat только
+ * обновляет last_seen_at, а joined_at остаётся неизменным — по нему
+ * детерминированно выбирается новый host, если прежний явно вышел из игры.
+ */
 @Entity
 @Table(name = "team_session_presence")
 public class TeamSessionPresence {
@@ -24,6 +31,16 @@ public class TeamSessionPresence {
 
     @Column(name = "last_seen_at", nullable = false)
     private Instant lastSeenAt = Instant.now();
+
+    /**
+     * Момент присоединения участника к сессии.
+     *
+     * Не меняется при heartbeat. Nullable — чтобы добавление колонки к
+     * уже существующей таблице проходило без ошибки; для старых записей
+     * значение восстанавливается из last_seen_at при первом обновлении.
+     */
+    @Column(name = "joined_at")
+    private Instant joinedAt;
 
     public Long getId() {
         return id;
@@ -63,5 +80,13 @@ public class TeamSessionPresence {
 
     public void setLastSeenAt(Instant lastSeenAt) {
         this.lastSeenAt = lastSeenAt;
+    }
+
+    public Instant getJoinedAt() {
+        return joinedAt;
+    }
+
+    public void setJoinedAt(Instant joinedAt) {
+        this.joinedAt = joinedAt;
     }
 }

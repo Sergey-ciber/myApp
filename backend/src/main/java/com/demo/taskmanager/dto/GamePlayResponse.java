@@ -132,10 +132,13 @@ public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instan
         }
     }
 
-    public record GameHintView(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime, Integer orderIndex, List<String> mediaUrls) {
+    public record GameHintView(Long id, HintType type, String text, String imageUrl, Double triggerTime, Double penaltyTime,
+                               Integer orderIndex, Long questionId, List<String> mediaUrls) {
         public static GameHintView from(LevelHint hint) {
             return new GameHintView(hint.getId(), hint.getType(), hint.getText(), hint.getImageUrl(), hint.getTriggerTime(),
-                    hint.getPenaltyTime(), hint.getOrderIndex(), hint.getMediaUrls() == null ? List.of() : List.copyOf(hint.getMediaUrls()));
+                    hint.getPenaltyTime(), hint.getOrderIndex(),
+                    hint.getQuestion() == null ? null : hint.getQuestion().getId(),
+                    hint.getMediaUrls() == null ? List.of() : List.copyOf(hint.getMediaUrls()));
         }
     }
 }

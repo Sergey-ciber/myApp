@@ -18,6 +18,8 @@ import com.demo.taskmanager.repository.GameResultRepository;
 import com.demo.taskmanager.repository.TeamInvitationRepository;
 import com.demo.taskmanager.repository.TeamMemberRepository;
 import com.demo.taskmanager.repository.TeamRepository;
+import com.demo.taskmanager.repository.TeamHintStateRepository;
+import com.demo.taskmanager.repository.TeamQuestionStateRepository;
 import com.demo.taskmanager.repository.TeamSessionEventRepository;
 import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
 import com.demo.taskmanager.repository.TeamSessionProgressRepository;
@@ -46,6 +48,8 @@ public class TeamService {
     private final TeamSessionPresenceRepository teamSessionPresenceRepository;
     private final TeamSessionProgressRepository teamSessionProgressRepository;
     private final TeamSessionEventRepository teamSessionEventRepository;
+    private final TeamQuestionStateRepository teamQuestionStateRepository;
+    private final TeamHintStateRepository teamHintStateRepository;
 
     public TeamService(TeamRepository teamRepository,
                        TeamMemberRepository memberRepository,
@@ -55,7 +59,9 @@ public class TeamService {
                        SimpMessagingTemplate messagingTemplate,
                        TeamSessionPresenceRepository teamSessionPresenceRepository,
                        TeamSessionProgressRepository teamSessionProgressRepository,
-                       TeamSessionEventRepository teamSessionEventRepository) {
+                       TeamSessionEventRepository teamSessionEventRepository,
+                       TeamQuestionStateRepository teamQuestionStateRepository,
+                       TeamHintStateRepository teamHintStateRepository) {
         this.teamRepository = teamRepository;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
@@ -65,6 +71,8 @@ public class TeamService {
         this.teamSessionPresenceRepository = teamSessionPresenceRepository;
         this.teamSessionProgressRepository = teamSessionProgressRepository;
         this.teamSessionEventRepository = teamSessionEventRepository;
+        this.teamQuestionStateRepository = teamQuestionStateRepository;
+        this.teamHintStateRepository = teamHintStateRepository;
     }
 
     /** Все команды платформы, отсортированные по рейтингу (победам). */
@@ -114,6 +122,8 @@ public class TeamService {
             teamSessionPresenceRepository.deleteBySessionId(session.getId());
             teamSessionProgressRepository.deleteBySessionId(session.getId());
             teamSessionEventRepository.deleteBySessionId(session.getId());
+            teamQuestionStateRepository.deleteBySessionId(session.getId());
+            teamHintStateRepository.deleteBySessionId(session.getId());
         }
         teamRepository.delete(team);
     }

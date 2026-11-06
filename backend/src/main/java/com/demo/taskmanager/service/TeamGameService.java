@@ -16,7 +16,9 @@ import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.Team;
 import com.demo.taskmanager.entity.TeamGameSession;
+import com.demo.taskmanager.entity.TeamHintState;
 import com.demo.taskmanager.entity.TeamMember;
+import com.demo.taskmanager.entity.TeamQuestionState;
 import com.demo.taskmanager.entity.TeamSessionEvent;
 import com.demo.taskmanager.entity.TeamSessionPresence;
 import com.demo.taskmanager.entity.TeamSessionProgress;
@@ -27,6 +29,8 @@ import com.demo.taskmanager.exception.NotFoundException;
 import com.demo.taskmanager.repository.GameRepository;
 import com.demo.taskmanager.repository.StandardQuestionRepository;
 import com.demo.taskmanager.repository.TeamGameSessionRepository;
+import com.demo.taskmanager.repository.TeamHintStateRepository;
+import com.demo.taskmanager.repository.TeamQuestionStateRepository;
 import com.demo.taskmanager.repository.TeamSessionEventRepository;
 import com.demo.taskmanager.repository.TeamSessionPresenceRepository;
 import com.demo.taskmanager.repository.TeamSessionProgressRepository;
@@ -41,10 +45,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Командные игры (co-op) с синхронизацией в реальном времени.
@@ -78,6 +84,8 @@ public class TeamGameService {
     private final TeamSessionProgressRepository progressRepository;
     private final TeamSessionEventRepository eventRepository;
     private final TeamSessionPresenceRepository presenceRepository;
+    private final TeamQuestionStateRepository questionStateRepository;
+    private final TeamHintStateRepository hintStateRepository;
     private final GameRepository gameRepository;
     private final TeamService teamService;
     private final StandardQuestionRepository standardQuestionRepository;
@@ -88,6 +96,8 @@ public class TeamGameService {
                            TeamSessionProgressRepository progressRepository,
                            TeamSessionEventRepository eventRepository,
                            TeamSessionPresenceRepository presenceRepository,
+                           TeamQuestionStateRepository questionStateRepository,
+                           TeamHintStateRepository hintStateRepository,
                            GameRepository gameRepository,
                            TeamService teamService,
                            StandardQuestionRepository standardQuestionRepository,
@@ -97,6 +107,8 @@ public class TeamGameService {
         this.progressRepository = progressRepository;
         this.eventRepository = eventRepository;
         this.presenceRepository = presenceRepository;
+        this.questionStateRepository = questionStateRepository;
+        this.hintStateRepository = hintStateRepository;
         this.gameRepository = gameRepository;
         this.teamService = teamService;
         this.standardQuestionRepository = standardQuestionRepository;
@@ -181,6 +193,7 @@ public class TeamGameService {
         session.setCurrentLevelIndex(0);
         session.setCurrentLevel(0);
         session.setStartTime(startedAt);
+        session.setLevelStartedAt(startedAt);
         session.setDurationMinutes(durationMinutes);
         session.setEndsAt(startedAt.plusSeconds(durationSeconds(durationMinutes)));
         session.setGameStateJson("{}");
@@ -190,6 +203,9 @@ public class TeamGameService {
             setLevelEndTime(session, levelsStart.get(0), startedAt);
         }
         sessionRepository.save(session);
+        if (!levelsStart.isEmpty()) {
+            ensureQuestionStates(session, levelsStart.get(0));
+        }
 
         markOnline(session, user);
         ensureProgress(session);
@@ -229,17 +245,19 @@ public class TeamGameService {
      */
     @Transactional
     public TeamGameStateResponse submitAnswer(Long sessionId, User user, TeamGameAnswerRequest request) {
-        TeamGameSession session = requireActiveSession(sessionId, user);
+        // Блокируем сессию: несколько игроков могут отвечать одновременно на разные вопросы.
+        TeamGameSession session = lockActiveSession(sessionId, user);
         if (request == null || request.questionId() == null || request.answer() == null) {
             throw new BadRequestException("Укажите ответ");
         }
         StandardQuestion question = standardQuestionRepository.findById(request.questionId())
                 .orElseThrow(() -> new NotFoundException("Вопрос не найден"));
-        if (question.getLevel() == null || question.getLevel().getGame() == null
-                || !question.getLevel().getGame().getId().equals(session.getGame().getId())) {
-            throw new NotFoundException("Вопрос не найден");
+        GameLevel level = currentLevel(session);
+        if (level == null || question.getLevel() == null
+                || !question.getLevel().getId().equals(level.getId())
+                || !level.getGame().getId().equals(session.getGame().getId())) {
+            throw new BadRequestException("Вопрос не относится к текущему уровню");
         }
-        GameLevel level = question.getLevel();
         String normalized = normalize(request.answer());
         StandardAnswer matched = null;
         if (question.getAnswers() != null) {
@@ -271,15 +289,29 @@ public class TeamGameService {
         progressRepository.save(progress);
         persistState(session, level, solved, progress.getPenaltyTime());
 
-        addEvent(session, "Игрок " + user.getUsername() + " разгадал слово \"" + matched.getAnswerText() + "\"");
+        boolean questionSolved = isQuestionSolved(question, solved);
+        boolean newlySolved = questionSolved && markQuestionSolved(session, level, question, user);
+        // В ленте событий не пишем сам ответ — он виден только в блоке своего вопроса.
+        addEvent(session, "Игрок " + user.getUsername() + " разгадал ответ на вопрос №"
+                + (question.getOrderIndex() + 1));
         boolean levelComplete = isLevelComplete(level, solved);
 
         TeamGameStateResponse state = buildState(session, user);
         Map<String, Object> payload = event("sync_correct_answer", session, user, state);
-        payload.put("answer", matched.getAnswerText());
+        // Текст ответа не рассылаем: клиент берёт его из своего состояния
+        // (questionStates[questionId].answers) и показывает только для выбранного вопроса.
         payload.put("questionId", question.getId());
+        payload.put("questionSolved", questionSolved);
         payload.put("levelCompleted", levelComplete);
         broadcast(session.getId(), payload);
+
+        if (newlySolved) {
+            // Отдельное событие для выпадающего списка вопросов: статус «решён».
+            Map<String, Object> solvedPayload = event("question_solved", session, user, state);
+            solvedPayload.put("questionId", question.getId());
+            solvedPayload.put("solvedAt", Instant.now().toString());
+            broadcast(session.getId(), solvedPayload);
+        }
 
         if (levelComplete) {
             advance(session, user, state);
@@ -288,42 +320,140 @@ public class TeamGameService {
     }
 
     /**
-     * Использование подсказки: начисляет штраф, обновляет состояние
-     * и рассылает событие sync_hint_used.
+     * Открытие подсказки по конкретному вопросу.
+     *
+     * hintId == null — открываем ближайшую по времени доступную подсказку вопроса.
+     * hintId задан — открываем именно эту подсказку: её доступность
+     * определяется только временем, предыдущие открывать не обязательно.
+     * Повторный вызов для уже открытой подсказки идемпотентен: возвращаем
+     * актуальное состояние без ошибки и без повторного штрафа.
+     */
+    @Transactional
+    public TeamGameStateResponse revealHint(Long sessionId, User user, Long questionId, Long hintId) {
+        TeamGameSession session = lockActiveSession(sessionId, user);
+        return revealHintInternal(session, user, questionId, hintId);
+    }
+
+    /**
+     * Старый контракт /hint: hintIndex — порядковый номер подсказки внутри
+     * вопроса. Оставлен для совместимости, внутри использует ту же логику.
      */
     @Transactional
     public TeamGameStateResponse requestHint(Long sessionId, User user, TeamGameHintRequest request) {
-        TeamGameSession session = requireActiveSession(sessionId, user);
-        if (request == null || request.hintIndex() == null) {
-            throw new BadRequestException("Укажите подсказку");
+        if (request == null || request.questionId() == null) {
+            throw new BadRequestException("Укажите вопрос и подсказку");
+        }
+        TeamGameSession session = lockActiveSession(sessionId, user);
+        StandardQuestion question = requireQuestion(session, request.questionId());
+        List<LevelHint> hints = hintsForQuestion(currentLevel(session), question);
+        Integer index = request.hintIndex();
+        if (index == null || index < 0 || index >= hints.size()) {
+            throw new BadRequestException("Подсказка не найдена");
+        }
+        return revealHintInternal(session, user, question.getId(), hints.get(index).getId());
+    }
+
+    private TeamGameStateResponse revealHintInternal(TeamGameSession session, User user,
+                                                     Long questionId, Long hintId) {
+        if (questionId == null) {
+            throw new BadRequestException("Укажите вопрос");
         }
         GameLevel level = currentLevel(session);
         if (level == null) {
             throw new BadRequestException("Нет активного уровня");
         }
-        List<LevelHint> hints = level.getHints() == null ? List.of()
-                : level.getHints().stream().sorted(Comparator.comparingInt(LevelHint::getOrderIndex)).toList();
-        if (request.hintIndex() < 0 || request.hintIndex() >= hints.size()) {
-            throw new BadRequestException("Подсказка не найдена");
-        }
-        LevelHint hint = hints.get(request.hintIndex());
+        StandardQuestion question = requireQuestion(session, questionId, level);
         TeamSessionProgress progress = ensureProgressForLevel(session, level);
-        double penalty = progress.getPenaltyTime() + (hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime());
+        Map<String, String> solved = parseSolved(progress);
+        List<LevelHint> hints = hintsForQuestion(level, question);
+
+        // Подсказка из запроса обязана относиться именно к этому вопросу.
+        LevelHint requested = null;
+        if (hintId != null) {
+            requested = hints.stream().filter(h -> hintId.equals(h.getId())).findFirst()
+                    .orElseThrow(() -> new BadRequestException("Подсказка не относится к этому вопросу"));
+        }
+
+        // Идемпотентность: уже открытая подсказка возвращает состояние как есть,
+        // без ошибки, повторного штрафа и повторной записи.
+        if (requested != null) {
+            TeamHintState existing = hintStateRepository
+                    .findBySessionIdAndHintId(session.getId(), requested.getId()).orElse(null);
+            if (existing != null && existing.isRevealed()) {
+                return buildState(session, user);
+            }
+        }
+
+        if (isQuestionSolved(question, solved)) {
+            throw new BadRequestException("Вопрос уже решён — новые подсказки недоступны");
+        }
+
+        if (hints.isEmpty()) {
+            throw new BadRequestException("Для этого вопроса нет подсказок");
+        }
+        Map<Long, TeamHintState> revealed = revealedHints(session, level);
+        LevelHint hint;
+        if (requested != null) {
+            // Явный запрос: открываем именно эту подсказку.
+            // Доступность определяется только временем — предыдущие подсказки
+            // открывать не обязательно.
+            hint = requested;
+        } else {
+            // Без hintId берём ближайшую по времени ещё не открытую подсказку.
+            hint = hints.stream()
+                    .filter(h -> h.getId() != null && !isHintRevealed(revealed, h.getId()))
+                    .min(Comparator.comparing(h -> hintAvailableAt(session, level, h)))
+                    .orElse(null);
+            if (hint == null) {
+                throw new BadRequestException("Все подсказки по этому вопросу уже получены");
+            }
+        }
+        // Время проверяется только на сервере и отсчитывается от старта уровня.
+        Instant availableAt = hintAvailableAt(session, level, hint);
+        Instant now = Instant.now();
+        if (availableAt != null && now.isBefore(availableAt)) {
+            throw new BadRequestException("Подсказка будет доступна через "
+                    + formatDelay(java.time.Duration.between(now, availableAt).getSeconds()));
+        }
+
+        TeamHintState state = new TeamHintState();
+        state.setSession(session);
+        state.setTeamId(session.getTeam().getId());
+        state.setLevelId(level.getId());
+        state.setQuestionId(question.getId());
+        state.setHintId(hint.getId());
+        state.setRevealed(true);
+        state.setRevealedAt(now);
+        state.setRevealedByUserId(user.getId());
+        hintStateRepository.save(state);
+
+        double penalty = progress.getPenaltyTime()
+                + (hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime());
         progress.setPenaltyTime(penalty);
         progressRepository.save(progress);
-        persistState(session, level, parseSolved(progress), penalty);
+        persistState(session, level, solved, penalty);
 
-        addEvent(session, "Команда получила подсказку (+" + Math.round((hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime()) * 60) + " сек. штрафа)");
+        long penaltySeconds = Math.round((hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime()) * 60);
+        addEvent(session, "Игрок " + user.getUsername() + " открыл подсказку по вопросу"
+                + (penaltySeconds > 0 ? " (+" + penaltySeconds + " сек. штрафа)" : ""));
 
-        TeamGameStateResponse state = buildState(session, user);
-        Map<String, Object> payload = event("sync_hint_used", session, user, state);
-        payload.put("hintIndex", request.hintIndex());
+        TeamGameStateResponse stateResponse = buildState(session, user);
+        Map<String, Object> payload = event("hint_revealed", session, user, stateResponse);
+        payload.put("questionId", question.getId());
+        payload.put("hintId", hint.getId());
+        payload.put("hintIndex", hints.indexOf(hint));
         payload.put("text", hint.getText());
         payload.put("imageUrl", hint.getImageUrl());
+        payload.put("mediaUrls", hint.getMediaUrls() == null ? List.of() : hint.getMediaUrls());
         payload.put("hintType", hint.getType() == null ? HintType.GENERAL.name() : hint.getType().name());
-        payload.put("penaltySeconds", Math.round((hint.getPenaltyTime() == null ? 0.0 : hint.getPenaltyTime()) * 60));
+        payload.put("penaltySeconds", penaltySeconds);
         broadcast(session.getId(), payload);
-        return state;
+
+        // Совместимость со старым клиентом, который слушал sync_hint_used.
+        Map<String, Object> legacy = new HashMap<>(payload);
+        legacy.put("type", "sync_hint_used");
+        broadcast(session.getId(), legacy);
+        return stateResponse;
     }
 
     /**
@@ -357,11 +487,25 @@ public class TeamGameService {
     // Подключение и отключение
     // ------------------------------------------------------------------
 
-    /** Полный слепок состояния партии для подключающегося участника. */
+    /**
+     * Полный слепок состояния партии для подключающегося участника.
+     *
+     * Одновременно восстанавливает участие: если пользователь был в игре
+     * (перезагрузка страницы, переподключение), его отметка присутствия
+     * снова становится актуальной. Сам факт запроса состояния не означает
+     * выход из игры и не передаёт права хоста.
+     */
     @Transactional
     public TeamGameStateResponse getState(Long sessionId, User user) {
         TeamGameSession session = requireSession(sessionId, user);
         ensureTiming(session);
+        if (session.isActive()) {
+            try {
+                markOnline(session, user);
+            } catch (Exception e) {
+                // Не влияет на получение состояния — отметка присутствия обновится позже
+            }
+        }
         return buildState(session, user);
     }
 
@@ -387,15 +531,33 @@ public class TeamGameService {
     }
 
     /**
-     * Выход участника из партии. Игра не ломается: участник просто
-     * отключается от сессии. Если вышел хост — права хоста передаются
-     * следующему активному игроку, иначе партия продолжается без хоста.
+     * Явный выход участника из партии.
+     *
+     * Только этот сценарий считается выходом из игры:
+     * участие помечается завершённым, а если вышел хост — права хоста
+     * передаются следующему активному участнику.
+     * Кратковременная потеря связи (перезагрузка страницы, обрыв сети)
+     * выходом не считается — см. disconnect().
      */
     @Transactional
     public void leave(Long sessionId, User user) {
-        TeamGameSession session = requireSession(sessionId, user);
+        // Блокируем строку сессии: передача роли хоста должна быть атомарной,
+        // иначе два одновременных выхода могли бы выбрать разных новых хостов.
+        TeamGameSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new NotFoundException("Сессия не найдена"));
+        if (!teamService.isMember(session.getTeam().getId(), user)) {
+            throw new ForbiddenException("Доступ запрещён");
+        }
+        // Участие завершено явно: удаляем отметку присутствия.
         presenceRepository.deleteBySessionIdAndUserId(sessionId, user.getId());
-        if (session.isActive() && isHost(session, user)) {
+        // Сбрасываем изменения сразу: выбор нового хоста не должен увидеть
+        // уходящего участника в списке активных.
+        presenceRepository.flush();
+        boolean hostLeft = session.isActive() && isHost(session, user);
+        Long previousHostId = session.getHostId();
+        if (hostLeft) {
+            // Передача прав хоста: если других активных участников нет,
+            // роль остаётся за прежним хостом (партия продолжается без хоста).
             transferHost(session);
         }
         if (session.isActive()) {
@@ -403,6 +565,9 @@ public class TeamGameService {
         }
         TeamGameStateResponse state = buildState(session, user);
         broadcast(session.getId(), event("PRESENCE", session, user, state));
+        if (hostLeft) {
+            broadcastHostChanged(session, previousHostId, user);
+        }
     }
 
     /** Heartbeat: продлевает отметку «онлайн». */
@@ -413,8 +578,12 @@ public class TeamGameService {
     }
 
     /**
-     * Отключение участника (закрыта вкладка). Не хост просто пропадает
-     * из списка онлайн. Хост — права передаются следующему активному игроку.
+     * Временное отключение участника (закрыта вкладка, обрыв сети,
+     * перезагрузка страницы).
+     *
+     * Это НЕ выход из игры: участие сохраняется, права хоста не передаются.
+     * Отметка «онлайн» просто устаревает (PRESENCE_TTL_SECONDS), и после
+     * переподключения игрок снова получает актуальное состояние.
      */
     @Transactional
     public void disconnect(Long sessionId, User user) {
@@ -422,12 +591,10 @@ public class TeamGameService {
         if (session == null) {
             return;
         }
-        presenceRepository.deleteBySessionIdAndUserId(sessionId, user.getId());
-        if (session.isActive() && isHost(session, user)) {
-            transferHost(session);
-        }
+        // Не удаляем участие: игрок остаётся участником сессии.
+        // Отметка присутствия остаётся, но её last_seen_at устаревает.
         if (session.isActive()) {
-            addEvent(session, "Игрок " + user.getUsername() + " отключился");
+            addEvent(session, "Игрок " + user.getUsername() + " временно отключился");
         }
         TeamGameStateResponse state = buildState(session, user);
         broadcast(session.getId(), event("DISCONNECTED", session, user, state));
@@ -445,12 +612,18 @@ public class TeamGameService {
                     "Команда завершила игру! 🏆");
             return;
         }
+        Instant levelStartedAt = Instant.now();
         session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
         session.setCurrentLevel(session.getCurrentLevelIndex());
+        session.setLevelStartedAt(levelStartedAt);
         if (session.getCurrentLevelIndex() < levels.size()) {
-            setLevelEndTime(session, levels.get(session.getCurrentLevelIndex()), Instant.now());
+            setLevelEndTime(session, levels.get(session.getCurrentLevelIndex()), levelStartedAt);
         }
         sessionRepository.save(session);
+        if (session.getCurrentLevelIndex() < levels.size()) {
+            // Отсчёт подсказок нового уровня начинается заново.
+            ensureQuestionStates(session, levels.get(session.getCurrentLevelIndex()));
+        }
         ensureProgress(session);
         addEvent(session, "Переход на уровень " + (session.getCurrentLevelIndex() + 1));
         TeamGameStateResponse state = buildState(session, user);
@@ -510,8 +683,10 @@ public class TeamGameService {
         }
         session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
         session.setCurrentLevel(session.getCurrentLevelIndex());
+        session.setLevelStartedAt(now);
         setLevelEndTime(session, levels.get(session.getCurrentLevelIndex()), now);
         sessionRepository.save(session);
+        ensureQuestionStates(session, levels.get(session.getCurrentLevelIndex()));
 
         TeamGameStateResponse state = buildState(session, null);
         Map<String, Object> payload = event("sync_level_up", session, null, state);
@@ -573,6 +748,19 @@ public class TeamGameService {
             session.setEndsAt(startedAt.plusSeconds(durationSeconds(duration)));
             changed = true;
         }
+        if (session.getLevelStartedAt() == null) {
+            // Для сессий, созданных до появления поля, восстанавливаем старт уровня.
+            GameLevel level = currentLevel(session);
+            Instant levelStarted = null;
+            if (session.getLevelEndTime() != null && level != null && level.getTimeLimitMinutes() > 0) {
+                levelStarted = session.getLevelEndTime()
+                        .minusSeconds(Math.round(level.getTimeLimitMinutes() * 60));
+            } else if (session.getStartTime() != null) {
+                levelStarted = session.getStartTime();
+            }
+            session.setLevelStartedAt(levelStarted);
+            changed = true;
+        }
         if (changed) {
             sessionRepository.save(session);
         }
@@ -591,25 +779,52 @@ public class TeamGameService {
         return Math.max(1L, Math.round(minutes * 60));
     }
 
-    /** Передача прав хоста следующему активному участнику. */
+    /**
+     * Передача прав хоста следующему активному участнику.
+     *
+     * Правило выбора (детерминированное): новым хостом становится участник
+     * с самым ранним joined_at — то есть тот, кто присоединился раньше всех
+     * из оставшихся активных. Список отсортирован, поэтому при двух
+     * одновременных выходах результат одинаков для всех.
+     *
+     * Если активных участников не осталось — роль хоста остаётся за прежним
+     * пользователем: партия продолжается, завершить её сможет и он.
+     *
+     * Вызывается под блокировкой строки сессии — гонки исключены.
+     */
     private void transferHost(TeamGameSession session) {
         Instant threshold = Instant.now().minusSeconds(PRESENCE_TTL_SECONDS);
-        List<TeamSessionPresence> online = presenceRepository
-                .findBySessionIdOrderByLastSeenAtDesc(session.getId()).stream()
+        TeamSessionPresence next = presenceRepository
+                .findBySessionIdOrderByJoinedAtAsc(session.getId()).stream()
                 .filter(p -> p.getUserId() != null && !p.getUserId().equals(session.getHostId()))
                 .filter(p -> p.getLastSeenAt() != null && p.getLastSeenAt().isAfter(threshold))
-                .toList();
-        if (online.isEmpty()) {
-            // Активных участников нет — партия остаётся без хоста,
-            // но продолжается: любой участник команды может завершить её позже.
+                .min(Comparator.comparing(p -> p.getJoinedAt() != null ? p.getJoinedAt() : p.getLastSeenAt()))
+                .orElse(null);
+        if (next == null) {
+            // Активных участников нет — роль хоста остаётся за прежним хостом.
             sessionRepository.save(session);
             return;
         }
-        TeamSessionPresence next = online.get(0);
         session.setHostId(next.getUserId());
         session.setHostUsername(next.getUsername());
         sessionRepository.save(session);
         addEvent(session, "Права хоста переданы участнику " + (next.getUsername() == null ? "" : next.getUsername()));
+    }
+
+    /**
+     * Событие смены хоста — клиенты обновляют кнопку «Завершить игру».
+     * Флаг isHost рассчитывается сервером для каждого участника отдельно.
+     */
+    private void broadcastHostChanged(TeamGameSession session, Long previousHostId, User actor) {
+        if (session == null) {
+            return;
+        }
+        TeamGameStateResponse state = buildState(session, actor);
+        Map<String, Object> payload = event("host_changed", session, actor, state);
+        payload.put("previousHostId", previousHostId);
+        payload.put("newHostId", session.getHostId());
+        payload.put("newHostUsername", session.getHostUsername());
+        broadcast(session.getId(), payload);
     }
 
     private boolean isHost(TeamGameSession session, User user) {
@@ -668,7 +883,34 @@ public class TeamGameService {
         payload.put("userId", user == null ? null : user.getId());
         payload.put("username", user == null ? null : user.getUsername());
         payload.put("state", state);
+        // Флаги host по каждому участнику: считаются сервером от host_id.
+        // Клиент берёт свой флаг по своему user_id — роль не вычисляется
+        // на клиенте и не зависит от того, кто совершил действие.
+        payload.put("isHostByUser", hostFlags(session));
+        payload.put("hostId", session.getHostId());
+        payload.put("hostUsername", session.getHostUsername());
         return payload;
+    }
+
+    /**
+     * Авторитетные флаги «я — host» для всех участников сессии.
+     *
+     * Ключ — id пользователя, значение — является ли он текущим владельцем.
+     * Формируется сервером из host_id, поэтому один и тот же broadcast
+     * корректно интерпретируется каждым клиентом по-своему.
+     */
+    private Map<String, Boolean> hostFlags(TeamGameSession session) {
+        Map<String, Boolean> flags = new LinkedHashMap<>();
+        if (session == null) {
+            return flags;
+        }
+        Long hostId = session.getHostId();
+        for (TeamMemberResponse member : teamService.getMembers(session.getTeam())) {
+            if (member.userId() != null) {
+                flags.put(String.valueOf(member.userId()), hostId != null && hostId.equals(member.userId()));
+            }
+        }
+        return flags;
     }
 
     /** Рассылка события комнате партии. */
@@ -728,6 +970,47 @@ public class TeamGameService {
         return session;
     }
 
+    /**
+     * Как {@link #requireActiveSession}, но дополнительно блокирует строку сессии
+     * на время транзакции. Это защищает от гонок, когда несколько игроков
+     * одновременно открывают подсказки или отвечают на разные вопросы.
+     */
+    private TeamGameSession lockActiveSession(Long sessionId, User user) {
+        TeamGameSession session = requireActiveSession(sessionId, user);
+        return sessionRepository.findByIdForUpdate(session.getId())
+                .orElseThrow(() -> new NotFoundException("Сессия не найдена"));
+    }
+
+    /** Вопрос должен существовать и относиться к текущему уровню сессии. */
+    private StandardQuestion requireQuestion(TeamGameSession session, Long questionId) {
+        return requireQuestion(session, questionId, currentLevel(session));
+    }
+
+    private StandardQuestion requireQuestion(TeamGameSession session, Long questionId, GameLevel level) {
+        if (questionId == null) {
+            throw new BadRequestException("Укажите вопрос");
+        }
+        if (level == null) {
+            throw new BadRequestException("Нет активного уровня");
+        }
+        StandardQuestion question = standardQuestionRepository.findById(questionId)
+                .orElseThrow(() -> new NotFoundException("Вопрос не найден"));
+        if (question.getLevel() == null || !question.getLevel().getId().equals(level.getId())
+                || level.getGame() == null || session.getGame() == null
+                || !level.getGame().getId().equals(session.getGame().getId())) {
+            throw new BadRequestException("Вопрос не относится к текущему уровню");
+        }
+        return question;
+    }
+
+    /** Человекочитаемый остаток времени вида «02:15». */
+    private String formatDelay(long seconds) {
+        long safe = Math.max(0L, seconds);
+        long minutes = safe / 60;
+        long rest = safe % 60;
+        return String.format("%02d:%02d", minutes, rest);
+    }
+
     private List<GameLevel> sortedLevels(Game game) {
         return game.getLevels() == null ? List.of()
                 : game.getLevels().stream().filter(l -> l != null)
@@ -766,12 +1049,18 @@ public class TeamGameService {
                 session.getId(),
                 session.getStatus(),
                 session.getCurrentLevelIndex(),
-                GamePlayResponse.from(session.getGame()),
-                solved,
+                // Текст неоткрытых подсказок не отдаём клиенту даже в описании игры.
+                redactUnrevealedHints(session, GamePlayResponse.from(session.getGame())),
+                // В общей карте оставляем только ключи (по ним считаются угаданные
+                // ответы). Тексты ответов доступны строго по вопросу —
+                // в questionStates[questionId].answers.
+                redactSolvedTexts(solved),
                 penalty,
                 hintsSnapshot(),
+                questionStates(session, level, solved),
                 session.getStartTime(),
                 session.getStartedAt(),
+                levelAnchor(session),
                 session.getLevelEndTime(),
                 eventList,
                 onlineIds(session.getId()),
@@ -788,8 +1077,327 @@ public class TeamGameService {
 
     /** Содержимое подсказок текущего уровня — чтобы все участники видели одно и то же. */
     private Map<String, Object> hintsSnapshot() {
+        return new LinkedHashMap<>();
+    }
+
+    /**
+     * Состояние всех вопросов текущего уровня: решение, открытые подсказки,
+     * доступность следующей. Ключ — id вопроса.
+     */
+    private Map<String, Object> questionStates(TeamGameSession session, GameLevel level,
+                                               Map<String, String> solved) {
         Map<String, Object> result = new LinkedHashMap<>();
+        if (level == null) {
+            return result;
+        }
+        Map<Long, TeamHintState> revealed = revealedHints(session, level);
+        Map<Long, TeamQuestionState> stored = new HashMap<>();
+        for (TeamQuestionState state : questionStateRepository
+                .findBySessionIdAndLevelId(session.getId(), level.getId())) {
+            if (state.getQuestionId() != null) {
+                stored.put(state.getQuestionId(), state);
+            }
+        }
+        for (StandardQuestion question : sortedQuestions(level)) {
+            List<LevelHint> hints = hintsForQuestion(level, question);
+            boolean solvedQuestion = isQuestionSolved(question, solved);
+            List<Map<String, Object>> hintViews = new ArrayList<>();
+            List<Long> revealedIds = new ArrayList<>();
+            // Ближайшая по времени ещё недоступная подсказка (для обратного отсчёта)
+            // и список доступных, но ещё не открытых.
+            LevelHint nextHint = null;
+            Instant nextAvailableAt = null;
+            List<Long> availableHintIds = new ArrayList<>();
+            Instant serverNow = Instant.now();
+            for (LevelHint hint : hints) {
+                TeamHintState state = hint.getId() == null ? null : revealed.get(hint.getId());
+                boolean isRevealed = state != null && state.isRevealed();
+                Instant availableAt = hintAvailableAt(session, level, hint);
+                // Доступность зависит только от времени, а не от порядка получения.
+                boolean isAvailable = availableAt == null || !serverNow.isBefore(availableAt);
+                Map<String, Object> view = new LinkedHashMap<>();
+                view.put("id", hint.getId());
+                view.put("orderIndex", hint.getOrderIndex());
+                view.put("type", hint.getType() == null ? HintType.GENERAL.name() : hint.getType().name());
+                view.put("triggerTime", hint.getTriggerTime());
+                view.put("penaltyTime", hint.getPenaltyTime());
+                view.put("availableAt", availableAt);
+                view.put("isAvailable", isAvailable);
+                view.put("isRevealed", isRevealed);
+                view.put("revealedAt", state == null ? null : state.getRevealedAt());
+                view.put("revealedByUserId", state == null ? null : state.getRevealedByUserId());
+                if (isRevealed) {
+                    view.put("text", hint.getText());
+                    view.put("imageUrl", hint.getImageUrl());
+                    view.put("mediaUrls", hint.getMediaUrls() == null ? List.of() : List.copyOf(hint.getMediaUrls()));
+                    if (hint.getId() != null) {
+                        revealedIds.add(hint.getId());
+                    }
+                } else {
+                    // Текст неоткрытой подсказки не покидает сервер.
+                    view.put("text", null);
+                    view.put("imageUrl", null);
+                    view.put("mediaUrls", List.of());
+                    if (!solvedQuestion) {
+                        if (isAvailable) {
+                            // Подсказку уже можно получить — даже если предыдущие не открыты.
+                            if (hint.getId() != null) {
+                                availableHintIds.add(hint.getId());
+                            }
+                        } else if (nextHint == null
+                                || availableAt.isBefore(nextAvailableAt)) {
+                            // Ближайшая по времени недоступная подсказка — для отсчёта.
+                            nextHint = hint;
+                            nextAvailableAt = availableAt;
+                        }
+                    }
+                }
+                hintViews.add(view);
+            }
+            TeamQuestionState storedState = stored.get(question.getId());
+            boolean isSolved = solvedQuestion || (storedState != null && storedState.isSolved());
+            // Правильные ответы отдаём строго по вопросу: клиент показывает
+            // только те, что относятся к выбранному вопросу.
+            List<String> questionAnswers = answersOfQuestion(solved, question);
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("questionId", question.getId());
+            view.put("levelId", level.getId());
+            view.put("orderIndex", question.getOrderIndex());
+            view.put("isSolved", isSolved);
+            view.put("solvedAt", storedState == null ? null : storedState.getSolvedAt());
+            view.put("solvedByUserId", storedState == null ? null : storedState.getSolvedByUserId());
+            view.put("matchedCount", matchedCount(question, solved));
+            view.put("passThreshold", passThreshold(question));
+            // Угаданные ответы этого вопроса (пустой список, если ещё ничего не угадано).
+            view.put("answers", questionAnswers);
+            view.put("hintCount", hints.size());
+            view.put("revealedHintIds", revealedIds);
+            view.put("hints", hintViews);
+            view.put("nextHintId", isSolved || nextHint == null ? null : nextHint.getId());
+            view.put("nextHintAvailableAt", isSolved || nextHint == null ? null : nextAvailableAt);
+            // Подсказки, которые уже можно получить (по времени), — по ним рисуем кнопки.
+            view.put("availableHintIds", isSolved ? List.of() : availableHintIds);
+            view.put("allHintsRevealed", !hints.isEmpty() && revealedIds.size() >= hints.size());
+            result.put(String.valueOf(question.getId()), view);
+        }
         return result;
+    }
+
+    /** Подсказки вопроса: строго по порядку; legacy-подсказки уровня относим к первому вопросу. */
+    private List<LevelHint> hintsForQuestion(GameLevel level, StandardQuestion question) {
+        if (level == null || question == null || level.getHints() == null) {
+            return List.of();
+        }
+        List<LevelHint> all = level.getHints().stream()
+                .filter(h -> h != null)
+                .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
+                .toList();
+        List<LevelHint> bound = all.stream()
+                .filter(h -> h.getQuestion() != null && question.getId().equals(h.getQuestion().getId()))
+                .toList();
+        if (!bound.isEmpty()) {
+            return bound;
+        }
+        List<StandardQuestion> questions = sortedQuestions(level);
+        boolean first = !questions.isEmpty() && question.getId().equals(questions.get(0).getId());
+        return first ? all.stream().filter(h -> h.getQuestion() == null).toList() : List.of();
+    }
+
+    private List<StandardQuestion> sortedQuestions(GameLevel level) {
+        if (level == null || level.getStandardQuestions() == null) {
+            return List.of();
+        }
+        return level.getStandardQuestions().stream()
+                .filter(q -> q != null)
+                .sorted(Comparator.comparingInt(StandardQuestion::getOrderIndex))
+                .toList();
+    }
+
+    private int passThreshold(StandardQuestion question) {
+        Integer threshold = question.getPassThreshold();
+        if (threshold != null && threshold > 0) {
+            return threshold;
+        }
+        int answers = question.getAnswers() == null ? 0 : question.getAnswers().size();
+        return Math.max(1, answers);
+    }
+
+    private int matchedCount(StandardQuestion question, Map<String, String> solved) {
+        if (question == null || solved == null) {
+            return 0;
+        }
+        String prefix = questionKeyPrefix(question);
+        return (int) solved.keySet().stream()
+                .filter(key -> key != null && key.startsWith(prefix))
+                .count();
+    }
+
+    /**
+     * Угаданные ответы конкретного вопроса — без ответов других вопросов.
+     *
+     * Ключи карты solved имеют вид l{levelId}:q{questionId}:a{answerId},
+     * поэтому ответы фильтруются по префиксу вопроса.
+     */
+    private List<String> answersOfQuestion(Map<String, String> solved, StandardQuestion question) {
+        if (solved == null || solved.isEmpty() || question == null) {
+            return List.of();
+        }
+        String prefix = questionKeyPrefix(question);
+        List<String> answers = new ArrayList<>();
+        for (Map.Entry<String, String> entry : solved.entrySet()) {
+            if (entry.getKey() == null || !entry.getKey().startsWith(prefix)) {
+                continue;
+            }
+            String text = entry.getValue() == null ? "" : entry.getValue().trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            boolean duplicate = answers.stream()
+                    .anyMatch(a -> a.equalsIgnoreCase(text));
+            if (!duplicate) {
+                answers.add(text);
+            }
+        }
+        return answers;
+    }
+
+    private String questionKeyPrefix(StandardQuestion question) {
+        Long levelId = question.getLevel() == null ? null : question.getLevel().getId();
+        return "l" + levelId + ":q" + question.getId() + ":";
+    }
+
+    private boolean isQuestionSolved(StandardQuestion question, Map<String, String> solved) {
+        return matchedCount(question, solved) >= passThreshold(question);
+    }
+
+    /** Время, когда подсказка становится доступной: старт уровня + trigger_time. */
+    private Instant hintAvailableAt(TeamGameSession session, GameLevel level, LevelHint hint) {
+        Instant anchor = levelAnchor(session);
+        double trigger = hint.getTriggerTime() == null ? 0.0 : hint.getTriggerTime();
+        if (trigger <= 0) {
+            return anchor;
+        }
+        return anchor.plusSeconds(Math.max(1L, Math.round(trigger * 60)));
+    }
+
+    private Instant levelAnchor(TeamGameSession session) {
+        if (session.getLevelStartedAt() != null) {
+            return session.getLevelStartedAt();
+        }
+        if (session.getStartTime() != null) {
+            return session.getStartTime();
+        }
+        return Instant.now();
+    }
+
+    private Map<Long, TeamHintState> revealedHints(TeamGameSession session, GameLevel level) {
+        Map<Long, TeamHintState> result = new HashMap<>();
+        for (TeamHintState state : hintStateRepository.findBySessionIdAndLevelId(session.getId(), level.getId())) {
+            if (state.isRevealed() && state.getHintId() != null) {
+                result.put(state.getHintId(), state);
+            }
+        }
+        return result;
+    }
+
+    private boolean isHintRevealed(Map<Long, TeamHintState> revealed, Long hintId) {
+        TeamHintState state = revealed.get(hintId);
+        return state != null && state.isRevealed();
+    }
+
+    /**
+     * Убирает тексты правильных ответов из общей карты solved.
+     *
+     * Ключи сохраняются (l{level}:q{question}:a{answer}), чтобы клиент мог
+     * посчитать угаданные ответы, но сами ответы видны только в блоке
+     * выбранного вопроса — в questionStates[questionId].answers.
+     */
+    private Map<String, String> redactSolvedTexts(Map<String, String> solved) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (solved == null) {
+            return result;
+        }
+        for (String key : solved.keySet()) {
+            if (key != null) {
+                result.put(key, "");
+            }
+        }
+        return result;
+    }
+
+    /** Не отдаём текст неоткрытых подсказок в общем описании игры. */
+    private GamePlayResponse redactUnrevealedHints(TeamGameSession session, GamePlayResponse game) {
+        List<GamePlayResponse.GameLevelView> levels = game.levels();
+        if (levels == null || levels.isEmpty()) {
+            return game;
+        }
+        Set<Long> revealedIds = new HashSet<>();
+        for (TeamHintState state : hintStateRepository.findBySessionIdAndRevealedTrue(session.getId())) {
+            if (state.getHintId() != null) {
+                revealedIds.add(state.getHintId());
+            }
+        }
+        List<GamePlayResponse.GameLevelView> redacted = levels.stream()
+                .map(level -> {
+                    List<GamePlayResponse.GameHintView> hints = level.hints() == null ? List.of()
+                            : level.hints().stream()
+                                .map(hint -> revealedIds.contains(hint.id())
+                                        ? hint
+                                        : new GamePlayResponse.GameHintView(hint.id(), hint.type(), null, null,
+                                                hint.triggerTime(), hint.penaltyTime(), hint.orderIndex(),
+                                                hint.questionId(), List.of()))
+                                .toList();
+                    return new GamePlayResponse.GameLevelView(level.id(), level.title(), level.type(),
+                            level.timeLimitMinutes(), hints, level.questions(), level.startWords(), level.mediaUrls());
+                })
+                .toList();
+        return new GamePlayResponse(game.id(), game.title(), game.gameDate(), game.createdAt(), game.active(),
+                game.creatorId(), game.creatorUsername(), game.timeLimitMinutes(), game.difficulty(),
+                game.description(), game.mediaUrls(), game.startWords(), game.levelId(), game.levelType(),
+                game.questions(), game.hintTriggerMinutes(), redacted);
+    }
+
+    /** Создаёт строки состояния вопросов при входе на уровень (idempotent). */
+    private void ensureQuestionStates(TeamGameSession session, GameLevel level) {
+        if (level == null) {
+            return;
+        }
+        for (StandardQuestion question : sortedQuestions(level)) {
+            TeamQuestionState state = questionStateRepository
+                    .findBySessionIdAndQuestionId(session.getId(), question.getId()).orElse(null);
+            if (state == null) {
+                state = new TeamQuestionState();
+                state.setSession(session);
+                state.setTeamId(session.getTeam().getId());
+                state.setLevelId(level.getId());
+                state.setQuestionId(question.getId());
+                state.setSolved(false);
+                questionStateRepository.save(state);
+            }
+        }
+    }
+
+    /** Фиксирует решение вопроса; возвращает true, только если оно записано впервые. */
+    private boolean markQuestionSolved(TeamGameSession session, GameLevel level,
+                                       StandardQuestion question, User user) {
+        TeamQuestionState state = questionStateRepository
+                .findBySessionIdAndQuestionId(session.getId(), question.getId())
+                .orElseGet(() -> {
+                    TeamQuestionState created = new TeamQuestionState();
+                    created.setSession(session);
+                    created.setTeamId(session.getTeam().getId());
+                    created.setLevelId(level.getId());
+                    created.setQuestionId(question.getId());
+                    return created;
+                });
+        if (state.isSolved()) {
+            return false;
+        }
+        state.setSolved(true);
+        state.setSolvedAt(Instant.now());
+        state.setSolvedByUserId(user == null ? null : user.getId());
+        questionStateRepository.save(state);
+        return true;
     }
 
     private void ensureProgress(TeamGameSession session) {
@@ -823,6 +1431,11 @@ public class TeamGameService {
                     presence = new TeamSessionPresence();
                     presence.setSession(session);
                     presence.setUserId(user.getId());
+                    presence.setJoinedAt(Instant.now());
+                } else if (presence.getJoinedAt() == null) {
+                    // Для записей, созданных до появления поля: восстанавливаем
+                    // момент присоединения из последней активности.
+                    presence.setJoinedAt(presence.getLastSeenAt());
                 }
                 presence.setUsername(user.getUsername());
                 presence.setLastSeenAt(Instant.now());

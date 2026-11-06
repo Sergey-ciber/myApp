@@ -74,6 +74,10 @@ public class TeamGameSession {
     @Column(name = "level_end_time")
     private Instant levelEndTime;
 
+    /** Момент старта текущего уровня — от него отсчитываются задержки подсказок. */
+    @Column(name = "level_started_at")
+    private Instant levelStartedAt;
+
     @Column(name = "start_time")
     private Instant startTime;
 
@@ -222,6 +226,14 @@ public class TeamGameSession {
 
     public void setLevelEndTime(Instant levelEndTime) {
         this.levelEndTime = levelEndTime;
+    }
+
+    public Instant getLevelStartedAt() {
+        return levelStartedAt;
+    }
+
+    public void setLevelStartedAt(Instant levelStartedAt) {
+        this.levelStartedAt = levelStartedAt;
     }
 
     public Instant getStartTime() {
