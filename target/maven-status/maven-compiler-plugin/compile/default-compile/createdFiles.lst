@@ -88,6 +88,7 @@ com\demo\taskmanager\entity\TeamQuestionState.class
 com\demo\taskmanager\dto\TeamGameStatisticsResponse$LevelStat.class
 com\demo\taskmanager\repository\StandardAnswerRepository.class
 com\demo\taskmanager\dto\UserSummaryResponse.class
+com\demo\taskmanager\dto\TeamPyramidAnswerRequest.class
 com\demo\taskmanager\controller\TeamController.class
 com\demo\taskmanager\controller\BoardController.class
 com\demo\taskmanager\dto\CheckAnswerRequest.class

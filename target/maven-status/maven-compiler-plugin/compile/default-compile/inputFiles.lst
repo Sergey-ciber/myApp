@@ -45,6 +45,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameS
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameStateResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamGameStatisticsResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamMemberResponse.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamPyramidAnswerRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TeamResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TimeoutResponse.java
