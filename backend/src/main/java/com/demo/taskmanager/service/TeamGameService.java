@@ -9,10 +9,13 @@ import com.demo.taskmanager.dto.TeamGameStartRequest;
 import com.demo.taskmanager.dto.TeamGameStateResponse;
 import com.demo.taskmanager.dto.TeamGameStatisticsResponse;
 import com.demo.taskmanager.dto.TeamMemberResponse;
+import com.demo.taskmanager.dto.TeamPyramidAnswerRequest;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameLevel;
 import com.demo.taskmanager.entity.HintType;
 import com.demo.taskmanager.entity.LevelHint;
+import com.demo.taskmanager.entity.LevelType;
+import com.demo.taskmanager.entity.LevelWord;
 import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.Team;
@@ -29,6 +32,7 @@ import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
 import com.demo.taskmanager.repository.GameRepository;
+import com.demo.taskmanager.repository.LevelWordRepository;
 import com.demo.taskmanager.repository.StandardQuestionRepository;
 import com.demo.taskmanager.repository.TeamGameSessionRepository;
 import com.demo.taskmanager.repository.TeamHintStateRepository;
@@ -94,6 +98,7 @@ public class TeamGameService {
     private final GameRepository gameRepository;
     private final TeamService teamService;
     private final StandardQuestionRepository standardQuestionRepository;
+    private final LevelWordRepository levelWordRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -107,6 +112,7 @@ public class TeamGameService {
                            GameRepository gameRepository,
                            TeamService teamService,
                            StandardQuestionRepository standardQuestionRepository,
+                           LevelWordRepository levelWordRepository,
                            ObjectMapper objectMapper,
                            SimpMessagingTemplate messagingTemplate) {
         this.sessionRepository = sessionRepository;
@@ -119,6 +125,7 @@ public class TeamGameService {
         this.gameRepository = gameRepository;
         this.teamService = teamService;
         this.standardQuestionRepository = standardQuestionRepository;
+        this.levelWordRepository = levelWordRepository;
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
     }
@@ -1486,14 +1493,25 @@ public class TeamGameService {
      * Ключи сохраняются (l{level}:q{question}:a{answer}), чтобы клиент мог
      * посчитать угаданные ответы, но сами ответы видны только в блоке
      * выбранного вопроса — в questionStates[questionId].answers.
+     *
+     * Для уровня «Игра в ассоциации» ключи имеют вид {column}:{position}.
+     * Текст уже разгаданного слова не является секретом: он нужен всем
+     * участникам команды, чтобы восстановить заполненное поле после
+     * перезагрузки и синхронизации. Неразгаданные слова в solved не попадают.
      */
     private Map<String, String> redactSolvedTexts(Map<String, String> solved) {
         Map<String, String> result = new LinkedHashMap<>();
         if (solved == null) {
             return result;
         }
-        for (String key : solved.keySet()) {
-            if (key != null) {
+        for (Map.Entry<String, String> entry : solved.entrySet()) {
+            String key = entry.getKey();
+            if (key == null) {
+                continue;
+            }
+            if (key.matches("\\d+:\\d+")) {
+                result.put(key, entry.getValue() == null ? "" : entry.getValue());
+            } else {
                 result.put(key, "");
             }
         }
@@ -1659,6 +1677,102 @@ public class TeamGameService {
                 .filter(p -> p.getLastSeenAt() != null && p.getLastSeenAt().isAfter(threshold))
                 .map(p -> String.valueOf(p.getUserId()))
                 .toList();
+    }
+
+    /**
+     * Ответ для уровня типа «Игра в ассоциации» (пирамида).
+     * Проверяет ответ по колонке/позиции и рассылает результат всем участникам.
+     */
+    @Transactional
+    public TeamGameStateResponse submitPyramidAnswer(Long sessionId, User user, TeamPyramidAnswerRequest request) {
+        TeamGameSession session = lockActiveSession(sessionId, user);
+        if (request == null || request.column() == null || request.position() == null) {
+            throw new BadRequestException("Укажите колонку и позицию");
+        }
+        GameLevel level = currentLevel(session);
+        if (level == null) {
+            throw new BadRequestException("Нет активного уровня");
+        }
+        // Поддерживаем только ASSOCIATIONS уровни для pyramid answer
+        if (level.getType() != LevelType.ASSOCIATIONS) {
+            throw new BadRequestException("Пирамидный ответ доступен только для уровня «Игра в ассоциации»");
+        }
+        int column = request.column();
+        int position = request.position();
+        if (column < 2 || column > 5) {
+            throw new BadRequestException("Проверять можно только ответы колонок 2-5");
+        }
+        // Размеры колонок: 16, 8, 4, 2, 1
+        int[] columnSizes = {0, 16, 8, 4, 2, 1};
+        if (position < 1 || position > columnSizes[column]) {
+            throw new BadRequestException("В колонке " + column + " нет ответа " + position);
+        }
+
+        // Получаем правильный ответ из LevelWord (колонка 2-5 — ответы пирамиды)
+        List<LevelWord> words = levelWordRepository.findByLevelIdOrderByColumnNumAscPositionAsc(level.getId());
+        String expected = null;
+        if (words != null) {
+            // Ищем слово по колонке и позиции
+            for (LevelWord word : words) {
+                if (word.getColumnNum() == column
+                        && word.getPosition() == position) {
+                    expected = word.getWord();
+                    break;
+                }
+            }
+        }
+        if (expected == null) {
+            throw new BadRequestException("Ответ для указанной ячейки не найден");
+        }
+
+        String normalized = normalize(request.answer());
+        boolean correct = normalize(expected).equals(normalized);
+
+        if (!correct) {
+            addEvent(session, "Игрок " + user.getUsername() + " ввёл неверный ответ");
+            TeamGameStateResponse state = buildState(session, user);
+            Map<String, Object> payload = event("ANSWER_WRONG", session, user, state);
+            payload.put("answer", request.answer());
+            payload.put("column", column);
+            payload.put("position", position);
+            broadcast(session.getId(), payload);
+            return state;
+        }
+
+        // Правильный ответ: сохраняем в solved map. Текст слова нужен всем
+        // участникам команды, чтобы поле оставалось заполненным после
+        // перезагрузки и при синхронизации по WebSocket.
+        TeamSessionProgress progress = ensureProgressForLevel(session, level);
+        Map<String, String> solved = parseSolved(progress);
+        String key = column + ":" + position;
+        boolean alreadySolved = solved.containsKey(key);
+        solved.put(key, expected);
+        progress.setSolvedData(writeSolved(solved));
+        progressRepository.save(progress);
+        persistState(session, level, solved, progress.getPenaltyTime());
+
+        if (!alreadySolved) {
+            addEvent(session, "Игрок " + user.getUsername() + " разгадал слово в колонке " + column);
+        }
+
+        // Рассылаем событие о правильном ответе
+        TeamGameStateResponse state = buildState(session, user);
+        Map<String, Object> payload = event("sync_correct_answer", session, user, state);
+        payload.put("column", column);
+        payload.put("position", position);
+        payload.put("answer", expected);
+        broadcast(session.getId(), payload);
+
+        // Уровень «Игра в ассоциации» пройден, когда разгадана вершина
+        // пирамиды — ячейка 5:1. Повторный ответ по уже разгаданной ячейке
+        // не должен переводить уровень ещё раз.
+        if (!alreadySolved && solved.containsKey("5:1")) {
+            advance(session, user, state);
+        }
+
+        // Возвращаем актуальное состояние: после перехода на следующий
+        // уровень или завершения игры клиент должен получить новый слепок.
+        return buildState(session, user);
     }
 
     private Map<String, String> parseSolved(TeamSessionProgress progress) {

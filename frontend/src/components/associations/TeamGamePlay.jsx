@@ -312,10 +312,18 @@ export default function TeamGamePlay({
                 if (String(payload.userId) === String(currentUserId)) {
                   setAnswer('')
                 }
-                // Обновляем solvedPyramid для пирамиды (ASSOCIATIONS уровень)
+                // Обновляем solvedPyramid для пирамиды (ASSOCIATIONS уровень).
+                // Храним каноничный текст ответа с сервера, чтобы поле
+                // оставалось заполненным и после перезагрузки страницы.
                 if (payload.column != null && payload.position != null) {
                   const key = `${payload.column}:${payload.position}`
-                  setSolvedPyramid((prev) => ({ ...prev, [key]: payload.answer || true }))
+                  const wordText = typeof payload.answer === 'string' && payload.answer.trim() !== ''
+                    ? payload.answer
+                    : (payload.state?.solved?.[key] || '')
+                  setSolvedPyramid((prev) => ({
+                    ...prev,
+                    [key]: wordText || (typeof prev[key] === 'string' ? prev[key] : ''),
+                  }))
                 }
                 const shown = isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)
                   ? answerOfQuestion(payload.state || stateRef.current, payload.questionId)
@@ -493,24 +501,27 @@ export default function TeamGamePlay({
     }
   }, [questions, selectedQuestionId])
 
-  // Синхронизация solvedPyramid при смене уровня.
+  // Синхронизация solvedPyramid при смене уровня и после обновления состояния.
   // Формат ключей совпадает с GameBoard.jsx: "column:position" (1-based).
+  // Сервер отдаёт текст уже разгаданного слова, поэтому поле можно
+  // восстановить заполненным, подсвеченным и заблокированным после F5.
   useEffect(() => {
     if (level?.type !== 'ASSOCIATIONS') {
       setSolvedPyramid({})
       return
     }
-    // Восстанавливаем из solved карты состояния.
-    // Значения ретактированы сервером (пустые строки), поэтому проверяем
-    // только наличие ключа — сам факт наличия ключа означает разгаданную ячейку.
     const levelSolved = state?.solved || {}
-    const pyramidSolved = {}
-    for (const [key] of Object.entries(levelSolved)) {
-      if (/^\d+:\d+$/.test(key)) {
-        pyramidSolved[key] = true
+    setSolvedPyramid((prev) => {
+      const pyramidSolved = {}
+      for (const [key, wordText] of Object.entries(levelSolved)) {
+        if (!/^\d+:\d+$/.test(key)) continue
+        const text = typeof wordText === 'string' ? wordText : ''
+        // Если сервер ещё отдаёт только ключи без текста, не теряем
+        // уже показанное слово, полученное из WebSocket-события.
+        pyramidSolved[key] = text || (typeof prev[key] === 'string' ? prev[key] : '')
       }
-    }
-    setSolvedPyramid(pyramidSolved)
+      return pyramidSolved
+    })
   }, [levelIndex, level?.type, state?.solved])
 
   // Смена вопроса очищает введённый ответ и ошибку: блок вопроса
@@ -554,7 +565,9 @@ export default function TeamGamePlay({
     if (!text || checking) return
     const trimmed = text.trim()
     const key = `${column}:${position}`
-    if (solvedPyramid[key]) return
+    // Блокируем повторную отправку по самому факту разгаданности ячейки,
+    // даже если сервер вернул пустой текст (например, старый слепок).
+    if (Object.prototype.hasOwnProperty.call(solvedPyramid, key)) return
     setChecking(true)
     setWrong(false)
     try {

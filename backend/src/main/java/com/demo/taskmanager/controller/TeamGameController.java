@@ -3,6 +3,7 @@ package com.demo.taskmanager.controller;
 import com.demo.taskmanager.dto.ActiveTeamSessionResponse;
 import com.demo.taskmanager.dto.TeamGameAnswerRequest;
 import com.demo.taskmanager.dto.TeamGameHintRequest;
+import com.demo.taskmanager.dto.TeamPyramidAnswerRequest;
 import com.demo.taskmanager.dto.TeamGameLobbyResponse;
 import com.demo.taskmanager.dto.TeamGameStartRequest;
 import com.demo.taskmanager.dto.TeamGameStateResponse;
@@ -90,6 +91,15 @@ public class TeamGameController {
                                                         @AuthenticationPrincipal UserDetails userDetails) {
         User user = currentUser(userDetails);
         return ResponseEntity.ok(teamGameService.submitAnswer(sessionId, user, request));
+    }
+
+    /** Ответ для уровня типа «Игра в ассоциации» (пирамида, колонка/позиция). */
+    @PostMapping("/{sessionId}/pyramid/answer")
+    public ResponseEntity<TeamGameStateResponse> pyramidAnswer(@PathVariable Long sessionId,
+                                                               @RequestBody TeamPyramidAnswerRequest request,
+                                                               @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.submitPyramidAnswer(sessionId, user, request));
     }
 
     /** Подсказка: штраф начисляется, событие рассылается всем участникам. */

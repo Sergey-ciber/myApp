@@ -56,7 +56,9 @@ export default function GameBoard({
       if (columnIndex === 0) return
       for (let position = 0; position < size; position++) {
         const key = cellKey(columnIndex, position)
-        cells[columnIndex][position] = progress?.solved?.[key] || progress?.hintPrefixes?.[key] || ''
+        const solvedValue = progress?.solved?.[key]
+        cells[columnIndex][position] = (typeof solvedValue === 'string' ? solvedValue : '')
+          || progress?.hintPrefixes?.[key] || ''
       }
     })
     return cells
@@ -127,14 +129,14 @@ export default function GameBoard({
 
   // если пирамида уже разгадана (восстановление прогресса) — сразу завершаем уровень
   useEffect(() => {
-    if (solved[cellKey(LAST_COLUMN, 0)]) {
+    if (Object.prototype.hasOwnProperty.call(solved, cellKey(LAST_COLUMN, 0))) {
       completeLevel({ netTime: 0, timedOut: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const isSolved = (columnIndex, position) =>
-    columnIndex === 0 || Boolean(solved[cellKey(columnIndex, position)])
+    columnIndex === 0 || Object.prototype.hasOwnProperty.call(solved, cellKey(columnIndex, position))
 
   const prefixFor = (columnIndex, position) => {
     if (columnIndex === 0 || isSolved(columnIndex, position)) return ''
@@ -162,9 +164,11 @@ export default function GameBoard({
     return undefined
   }, [hintAvailable])
 
-  const wordAt = (columnIndex, position) => (columnIndex === 0
-    ? (game.startWords[position] || '')
-    : solved[cellKey(columnIndex, position)] || '')
+  const wordAt = (columnIndex, position) => {
+    if (columnIndex === 0) return game.startWords[position] || ''
+    const value = solved[cellKey(columnIndex, position)]
+    return typeof value === 'string' ? value : ''
+  }
 
   const isHintOpen = (columnIndex, position) =>
     columnIndex === 1 ||
