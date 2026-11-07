@@ -92,6 +92,9 @@ function mediaFileName(url) {
 const MEDIA_ICONS = { image: '🖼', audio: '🎵', video: '🎬', other: '📎' }
 const MEDIA_LABELS = { image: 'Изображение', audio: 'Аудио', video: 'Видео', other: 'Файл' }
 
+/** Максимальный размер одного медиафайла — 100 МБ (совпадает с лимитом сервера). */
+const MAX_MEDIA_FILE_SIZE = 100 * 1024 * 1024
+
 /** Область добавления медиафайлов (максимум 10). */
 function MediaUploader({ urls, onChange, max = 10, accept = 'image/*,audio/*,video/*' }) {
   const [uploading, setUploading] = useState(false)
@@ -109,13 +112,20 @@ function MediaUploader({ urls, onChange, max = 10, accept = 'image/*,audio/*,vid
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
+    const oversized = files.filter((file) => file.size > MAX_MEDIA_FILE_SIZE)
+    if (oversized.length) {
+      const names = oversized.map((file) => file.name).join(', ')
+      setToast(`Файл больше 100 МБ: ${names}`)
+      if (oversized.length === files.length) return
+    }
+    const allowedFiles = files.filter((file) => file.size <= MAX_MEDIA_FILE_SIZE)
     if (list.length >= max) {
       setToast(`Максимальное количество файлов — ${max}`)
       return
     }
     const remaining = max - list.length
-    const selected = files.slice(0, remaining)
-    if (files.length > remaining) {
+    const selected = allowedFiles.slice(0, remaining)
+    if (allowedFiles.length > remaining) {
       setToast(`Максимальное количество файлов — ${max}`)
     }
     setUploading(true)
