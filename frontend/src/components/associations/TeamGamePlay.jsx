@@ -9,6 +9,7 @@ import { apiMessage } from '../../api/client'
 import { formatTime } from './constants'
 import GameBoard from './GameBoard'
 import GameStatisticsTable from './GameStatisticsTable'
+import useAnswerFeedback from './useAnswerFeedback'
 
 const WS_URL = import.meta.env.VITE_WS_URL || '/ws'
 
@@ -119,7 +120,6 @@ export default function TeamGamePlay({
   const [answer, setAnswer] = useState('')
   const [checking, setChecking] = useState(false)
   const [hintLoading, setHintLoading] = useState(false)
-  const [wrong, setWrong] = useState(false)
   const [flash, setFlash] = useState('')
   const [hintNotice, setHintNotice] = useState(null)
   const [ending, setEnding] = useState(false)
@@ -138,7 +138,6 @@ export default function TeamGamePlay({
     }
   })
   const expiryFetchRef = useRef(null)
-  const wrongTimer = useRef(null)
   const flashTimer = useRef(null)
   const hintTimer = useRef(null)
   // Текущий выбранный вопрос и состояние — нужны обработчику WebSocket,
@@ -149,6 +148,13 @@ export default function TeamGamePlay({
   // Приходят и в REST-ответах (currentUserHost), и в broadcast-событиях.
   const [hostFlags, setHostFlags] = useState({})
   const [now, setNow] = useState(Date.now())
+  // Кратковременная подсветка поля обычного уровня: 'correct' | 'wrong'.
+  const { feedback: answerFeedback, show: showAnswerFeedback, clear: clearAnswerFeedback } = useAnswerFeedback()
+  const answerInputRef = useRef(null)
+  const pendingAnswerFocus = useRef(false)
+  // Событие подсветки конкретной ячейки пирамиды (приходит по WebSocket).
+  const [pyramidFeedback, setPyramidFeedback] = useState(null)
+  const feedbackNonce = useRef(0)
 
   useEffect(() => {
     selectedQuestionIdRef.current = selectedQuestionId
@@ -308,14 +314,29 @@ export default function TeamGamePlay({
               case 'sync_correct_answer': {
                 // Слово угадано. Текст ответа берём из своего состояния и
                 // показываем только если открыт именно этот вопрос.
-                setWrong(false)
-                if (String(payload.userId) === String(currentUserId)) {
+                const isSelf = String(payload.userId) === String(currentUserId)
+                const isPyramid = payload.column != null && payload.position != null
+                if (isPyramid) {
+                  // Зелёная подсветка ячейки пирамиды — у всех участников.
+                  setPyramidFeedback({
+                    type: 'correct',
+                    column: payload.column,
+                    position: payload.position,
+                    nonce: feedbackNonce.current += 1,
+                  })
+                } else if (isSelf) {
                   setAnswer('')
+                  if (isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)) {
+                    showAnswerFeedback('answer', 'correct')
+                    // Если вопрос ещё не решён (порог > 1), поле остаётся
+                    // активным — возвращаем в него курсор.
+                    if (payload.questionSolved !== true) pendingAnswerFocus.current = true
+                  }
                 }
                 // Обновляем solvedPyramid для пирамиды (ASSOCIATIONS уровень).
                 // Храним каноничный текст ответа с сервера, чтобы поле
                 // оставалось заполненным и после перезагрузки страницы.
-                if (payload.column != null && payload.position != null) {
+                if (isPyramid) {
                   const key = `${payload.column}:${payload.position}`
                   const wordText = typeof payload.answer === 'string' && payload.answer.trim() !== ''
                     ? payload.answer
@@ -336,6 +357,11 @@ export default function TeamGamePlay({
               case 'question_solved': {
                 if (String(payload.userId) === String(currentUserId)) {
                   setAnswer('')
+                  // Вопрос решён — поле блокируется, поэтому только зелёная
+                  // подсветка без возврата фокуса.
+                  if (isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)) {
+                    showAnswerFeedback('answer', 'correct')
+                  }
                 }
                 const shown = isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)
                   ? answerOfQuestion(payload.state || stateRef.current, payload.questionId)
@@ -353,6 +379,8 @@ export default function TeamGamePlay({
                 break
               case 'sync_level_up':
                 setAnswer('')
+                clearAnswerFeedback('answer')
+                setPyramidFeedback(null)
                 setSolvedPyramid({})
                 showFlash('🎉 Уровень пройден! Открыт следующий уровень')
                 break
@@ -361,10 +389,20 @@ export default function TeamGamePlay({
                 break
               case 'ANSWER_WRONG':
                 if (String(payload.userId) === String(currentUserId)) {
-                  setWrong(true)
-                  setAnswer('')
-                  if (wrongTimer.current) clearTimeout(wrongTimer.current)
-                  wrongTimer.current = setTimeout(() => setWrong(false), 2000)
+                  if (payload.column != null && payload.position != null) {
+                    // Ошибка в пирамиде: подсветить и очистить конкретную ячейку.
+                    setPyramidFeedback({
+                      type: 'wrong',
+                      column: payload.column,
+                      position: payload.position,
+                      nonce: feedbackNonce.current += 1,
+                    })
+                  } else if (isSelectedQuestion(selectedQuestionIdRef.current, payload.questionId)) {
+                    // Обычный уровень: красная рамка, очистка и возврат фокуса.
+                    setAnswer('')
+                    showAnswerFeedback('answer', 'wrong')
+                    pendingAnswerFocus.current = true
+                  }
                 }
                 break
               case 'end_team_game':
@@ -394,12 +432,11 @@ export default function TeamGamePlay({
     })
     stompClient.activate()
     return () => {
-      if (wrongTimer.current) clearTimeout(wrongTimer.current)
       if (flashTimer.current) clearTimeout(flashTimer.current)
       if (hintTimer.current) clearTimeout(hintTimer.current)
       stompClient.deactivate()
     }
-  }, [sessionId, currentUserId, applyState, showFlash, showHint, onEnded])
+  }, [sessionId, currentUserId, applyState, showFlash, showHint, showAnswerFeedback, clearAnswerFeedback, onEnded])
 
   const game = state?.game
   const levels = game?.levels || []
@@ -441,6 +478,16 @@ export default function TeamGamePlay({
   const currentHints = currentQuestionState?.hints || []
   const currentSolved = currentQuestionState?.isSolved === true
   const allHintsRevealed = currentQuestionState?.allHintsRevealed === true
+
+  // Возврат фокуса в поле ответа — только после ответа сервера и если
+  // поле осталось активным (при решённом вопросе оно заблокировано).
+  useEffect(() => {
+    if (!pendingAnswerFocus.current || checking) return
+    const input = answerInputRef.current
+    pendingAnswerFocus.current = false
+    // preventScroll не даёт странице прыгать и не закрывает мобильную клавиатуру.
+    if (input && !input.disabled) input.focus({ preventScroll: true })
+  }, [checking, answerFeedback, answer, currentSolved])
 
   /**
    * Подсказки вопроса с вычисленным состоянием.
@@ -524,13 +571,14 @@ export default function TeamGamePlay({
     })
   }, [levelIndex, level?.type, state?.solved])
 
-  // Смена вопроса очищает введённый ответ и ошибку: блок вопроса
-  // отображается целиком для выбранного вопроса.
+  // Смена вопроса очищает введённый ответ, ошибку и подсветку поля:
+  // блок вопроса отображается целиком для выбранного вопроса.
   useEffect(() => {
     setAnswer('')
     setError('')
-    setWrong(false)
-  }, [selectedQuestionId, levelIndex])
+    clearAnswerFeedback('answer')
+    pendingAnswerFocus.current = false
+  }, [selectedQuestionId, levelIndex, clearAnswerFeedback])
 
   useEffect(() => {
     if (selectedQuestionId == null) return
@@ -546,15 +594,15 @@ export default function TeamGamePlay({
     const trimmed = (answer || '').trim()
     if (!trimmed) return
     setChecking(true)
-    setWrong(false)
+    clearAnswerFeedback('answer')
     try {
       const res = await submitTeamAnswer(sessionId, currentQuestion.id, trimmed)
       if (res) applyState(res, true)
       setAnswer('')
     } catch (err) {
-      setWrong(true)
+      // Ошибка сети/сервера: не очищаем введённый текст, чтобы не потерять его.
+      // Красную рамку не показываем — это не неверный ответ, а сбой запроса.
       setError(apiMessage(err))
-      setTimeout(() => setWrong(false), 2000)
     } finally {
       setChecking(false)
     }
@@ -569,14 +617,12 @@ export default function TeamGamePlay({
     // даже если сервер вернул пустой текст (например, старый слепок).
     if (Object.prototype.hasOwnProperty.call(solvedPyramid, key)) return
     setChecking(true)
-    setWrong(false)
     try {
       const res = await submitPyramidTeamAnswer(sessionId, column, position, trimmed)
       if (res) applyState(res, true)
     } catch (err) {
-      setWrong(true)
+      // Ячейку не очищаем: пользователь не должен потерять введённое слово.
       setError(apiMessage(err))
-      setTimeout(() => setWrong(false), 2000)
     } finally {
       setChecking(false)
     }
@@ -822,7 +868,7 @@ export default function TeamGamePlay({
         Уровень {levelIndex + 1} из {levels.length} · Штраф: +{formatTime(Math.round(penalty * 60))}
       </div>
 
-      {flash && <div className="alert alert-success assoc-team-flash">{flash}</div>}
+      {flash && <div className="alert alert-success assoc-team-flash" role="status" aria-live="polite">{flash}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {/* Для ASSOCIATIONS уровней рендерим пирамиду как в одиночной игре */}
@@ -845,6 +891,7 @@ export default function TeamGamePlay({
             }
           }}
           onCheckAnswer={(column, position, text) => handleSubmitPyramid(column, position, text)}
+          feedbackEvent={pyramidFeedback}
         />
       ) : (
         <div className="assoc-normal-card">
@@ -993,14 +1040,24 @@ export default function TeamGamePlay({
           </div>
         )}
 
-        <div className="assoc-normal-answer" style={{ border: wrong ? '1px solid #ff4d4f' : undefined }}>
+        <div className="assoc-normal-answer">
           <input
-            className="assoc-input"
+            ref={answerInputRef}
+            className={[
+              'assoc-input',
+              answerFeedback.answer === 'wrong' ? 'is-invalid' : '',
+              answerFeedback.answer === 'correct' ? 'is-valid' : '',
+            ].join(' ').trim()}
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={(e) => {
+              // Ввод нового ответа снимает старую подсветку.
+              clearAnswerFeedback('answer')
+              setAnswer(e.target.value)
+            }}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
             placeholder={currentSolved ? 'Вопрос уже решён' : 'Командный ответ'}
             disabled={checking || !currentQuestion || currentSolved}
+            aria-invalid={answerFeedback.answer === 'wrong' ? 'true' : undefined}
           />
           <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={checking || !currentQuestion || currentSolved}>
             Отправить

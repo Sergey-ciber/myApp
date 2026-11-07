@@ -888,7 +888,7 @@ padding-bottom: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-.assoc-timer-icon { font-size: 14px; }
+.assoc-timer-icon { font-size: 14px; color: #0c0101;}
 .assoc-timer-value { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: #1d2b45; }
 .assoc-timer-label {
   font-size: 11px;
@@ -2377,5 +2377,45 @@ padding-bottom: 10px;
   .team-detail-member { flex-wrap: wrap; }
   .team-detail-joined { display: none; }
   .team-members-head { align-items: flex-start; }
+}
+
+/* Единая кратковременная подсветка поля ответа (одиночный и командный режимы).
+   !important нужен, чтобы рамка была видна поверх тёмного фона обычного уровня
+   и не перекрывалась стилями :focus / :disabled. */
+.assoc-input.is-invalid,
+.assoc-normal-answer .assoc-input.is-invalid,
+.assoc-card.is-wrong .assoc-input {
+  border-color: #e5484d !important;
+  box-shadow: 0 0 0 2px rgba(229, 72, 77, 0.35) !important;
+}
+
+.assoc-input.is-valid,
+.assoc-normal-answer .assoc-input.is-valid,
+.assoc-card.is-correct .assoc-input,
+.assoc-card.is-solved .assoc-input.is-valid {
+  border-color: #2f9e5f !important;
+  box-shadow: 0 0 0 2px rgba(47, 158, 95, 0.35) !important;
+}
+
+.assoc-input.is-invalid:focus { outline-color: #e5484d; }
+.assoc-input.is-valid:focus { outline-color: #2f9e5f; }
+
+.assoc-card.is-correct {
+  border-color: #2f9e5f;
+  box-shadow: 0 0 0 1px #2f9e5f;
+  background: #f2fbf5;
+}
+
+/* Скрытый текст для скринридеров (aria-live сообщения). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 

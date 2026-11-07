@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
 import { checkAnswer, requestHint } from '../../api/games'
 import { COLUMN_SIZES, COLUMN_SPANS, formatTime, toPairs } from './constants'
+import useAnswerFeedback from './useAnswerFeedback'
 
 const LAST_COLUMN = COLUMN_SIZES.length - 1
 
@@ -48,7 +49,7 @@ const withPrefix = (value, prefix, oldPrefix = '') => {
  * подсказки открывают первые буквы доступных неразгаданных ячеек.
  */
 export default function GameBoard({
-  game, level, progress, onLevelComplete, onSave, onCheckAnswer,
+  game, level, progress, onLevelComplete, onSave, onCheckAnswer, feedbackEvent,
 }) {
   const [values, setValues] = useState(() => {
     const cells = emptyValues()
@@ -74,11 +75,15 @@ export default function GameBoard({
     loadedAt: Date.now(),
   }))
   const [elapsed, setElapsed] = useState(() => Number(progress?.elapsedSeconds) || 0)
-  const [wrong, setWrong] = useState({})
   const [checking, setChecking] = useState({})
   const [timeUp, setTimeUp] = useState(false)
   const [actionError, setActionError] = useState('')
   const completedRef = useRef(false)
+  // Кратковременная подсветка полей: 'correct' — зелёная, 'wrong' — красная.
+  const { feedback, show: showFeedback, clear: clearFeedback, clearAll: clearAllFeedback } = useAnswerFeedback()
+  const inputRefs = useRef({})
+  const pendingFocusRef = useRef(null)
+  const lastFeedbackNonce = useRef(null)
 
   /** Синхронизируем solved из props — важно для командного режима, где solved
    * обновляется через WebSocket, а не через локальные действия. */
@@ -174,20 +179,55 @@ export default function GameBoard({
     columnIndex === 1 ||
     (isSolved(columnIndex - 1, position * 2) && isSolved(columnIndex - 1, position * 2 + 1))
 
-  const clearWrong = (key) =>
-    setWrong((prev) => {
-      if (!prev[key]) return prev
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
+  /** Вернуть в поле пустое значение, сохранив буквы уже открытой подсказки. */
+  const resetCellValue = (columnIndex, position) => {
+    const prefix = prefixFor(columnIndex, position)
+    setValues((prev) => prev.map((words, c) => (c === columnIndex
+      ? words.map((word, p) => (p === position ? prefix : word))
+      : words)))
+  }
+
+  /** Фокус ставим после того, как сервер ответил и поле снова активно. */
+  useEffect(() => {
+    const key = pendingFocusRef.current
+    if (!key || checking[key]) return
+    const input = inputRefs.current[key]
+    if (!input) return
+    pendingFocusRef.current = null
+    // preventScroll не даёт странице прыгать и не закрывает мобильную клавиатуру.
+    if (!input.disabled) input.focus({ preventScroll: true })
+  }, [checking, feedback, values])
+
+  /**
+   * Результат командного ответа приходит по WebSocket. Для пирамиды
+   * подсвечиваем конкретную ячейку: красным с очисткой и фокусом при
+   * ошибке, зелёным при верном ответе (ячейка при этом блокируется).
+   */
+  useEffect(() => {
+    if (!feedbackEvent || feedbackEvent.nonce === lastFeedbackNonce.current) return
+    lastFeedbackNonce.current = feedbackEvent.nonce
+    const columnIndex = Number(feedbackEvent.column) - 1
+    const position = Number(feedbackEvent.position) - 1
+    if (!Number.isInteger(columnIndex) || !Number.isInteger(position)) return
+    const key = cellKey(columnIndex, position)
+    if (feedbackEvent.type === 'wrong') {
+      resetCellValue(columnIndex, position)
+      showFeedback(key, 'wrong')
+      pendingFocusRef.current = key
+    } else if (feedbackEvent.type === 'correct') {
+      showFeedback(key, 'correct')
+    }
+    // resetCellValue/showFeedback стабильны по смыслу: эффект запускается
+    // только при новом событии (nonce), поэтому в зависимостях только оно.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedbackEvent])
 
   const check = async (columnIndex, position) => {
     const key = cellKey(columnIndex, position)
     if (timeUp || isSolved(columnIndex, position) || checking[key]) return
     const text = (values[columnIndex][position] || '').trim()
     if (!text) {
-      clearWrong(key)
+      clearFeedback(key)
       return
     }
     const prefix = prefixFor(columnIndex, position)
@@ -211,17 +251,23 @@ export default function GameBoard({
       if (result.progress?.elapsedSeconds != null) syncElapsedFromProgress(result.progress.elapsedSeconds)
       if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes })
       if (result.correct) {
-        clearWrong(key)
+        // Ячейка блокируется и остаётся с каноничным словом — только
+        // кратковременно подсвечиваем её зелёным.
+        clearFeedback(key)
         setValues((prev) => prev.map((words, c) => (c === columnIndex
           ? words.map((word, p) => (p === position ? (nextSolved[key] || text) : word))
           : words)))
+        showFeedback(key, 'correct')
         if (columnIndex === LAST_COLUMN) {
           completeLevel({ netTime: elapsedSeconds() })
         }
       } else if (!onlyPrefix) {
-        setWrong((prev) => ({ ...prev, [key]: true }))
+        // Неверный ответ: красная рамка, очистка поля и возврат фокуса.
+        resetCellValue(columnIndex, position)
+        showFeedback(key, 'wrong')
+        pendingFocusRef.current = key
       } else {
-        clearWrong(key)
+        clearFeedback(key)
       }
     } catch (err) {
       setActionError(apiMessage(err))
@@ -240,7 +286,7 @@ export default function GameBoard({
     setValues((prev) => prev.map((words, c) => (c === columnIndex
       ? words.map((word, p) => (p === position ? next : word))
       : words)))
-    clearWrong(cellKey(columnIndex, position))
+    clearFeedback(cellKey(columnIndex, position))
   }
 
   const handleInputKeyDown = (event, columnIndex, position) => {
@@ -292,7 +338,7 @@ export default function GameBoard({
         return withPrefix(word, nextPrefixes[cellKey(c, p)] || '',
           hintPrefixes[cellKey(c, p)] || '')
       })))
-      setWrong({})
+      clearAllFeedback()
       setHintNotice(false)
     } catch (err) {
       setActionError(apiMessage(err))
@@ -304,7 +350,8 @@ export default function GameBoard({
   const renderCard = (columnIndex, position) => {
     const key = cellKey(columnIndex, position)
     const cardSolved = isSolved(columnIndex, position)
-    const cardWrong = !cardSolved && Boolean(wrong[key])
+    const cardWrong = !cardSolved && feedback[key] === 'wrong'
+    const cardCorrect = feedback[key] === 'correct'
     const hintOpen = isHintOpen(columnIndex, position)
     const prefix = prefixFor(columnIndex, position)
     const value = cardSolved ? wordAt(columnIndex, position) : values[columnIndex][position]
@@ -317,6 +364,7 @@ export default function GameBoard({
           'assoc-card',
           cardSolved ? 'is-solved' : '',
           cardWrong ? 'is-wrong' : '',
+          cardCorrect ? 'is-correct' : '',
           checking[key] ? 'is-checking' : '',
           hintOpen ? 'hint-open' : 'hint-locked',
         ].join(' ').trim()}
@@ -336,7 +384,15 @@ export default function GameBoard({
         <div className="assoc-answer">
           <div className={`assoc-input-wrap ${showPrefix ? 'has-hint-prefix' : ''}`}>
             <input
-              className="assoc-input"
+              ref={(element) => {
+                if (element) inputRefs.current[key] = element
+                else delete inputRefs.current[key]
+              }}
+              className={[
+                'assoc-input',
+                feedback[key] === 'wrong' ? 'is-invalid' : '',
+                feedback[key] === 'correct' ? 'is-valid' : '',
+              ].join(' ').trim()}
               value={value}
               onChange={(event) => handleChange(columnIndex, position, event.target.value)}
               onBlur={() => check(columnIndex, position)}
@@ -348,6 +404,7 @@ export default function GameBoard({
               disabled={cardDisabled}
               placeholder={checking[key] ? 'Проверяем…' : 'Ваш ответ'}
               aria-label={`Ответ ${position + 1} в колонке ${columnIndex + 1}`}
+              aria-invalid={feedback[key] === 'wrong' ? 'true' : undefined}
             />
             {showPrefix && (
               <span className="assoc-input-live" aria-hidden="true">
@@ -366,6 +423,10 @@ export default function GameBoard({
 
   return (
     <div className="assoc-board">
+      {/* Сообщение для скринридеров о верном ответе. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {Object.values(feedback).includes('correct') ? 'Ответ верный' : ''}
+      </div>
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
           Уровень «{level.title}». Время: <strong>{formatTime(remainingSeconds)}</strong>{' '}

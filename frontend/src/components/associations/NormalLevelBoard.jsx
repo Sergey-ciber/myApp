@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
 import { checkAnswer, revealQuestionHint } from '../../api/games'
 import { formatTime } from './constants'
+import useAnswerFeedback from './useAnswerFeedback'
 
 const HINT_NAMES = ['Первая подсказка', 'Вторая подсказка', 'Третья подсказка', 'Четвёртая подсказка', 'Пятая подсказка']
 
@@ -44,6 +45,10 @@ export default function NormalLevelBoard({
   const [answers, setAnswers] = useState({})
   const [checking, setChecking] = useState(false)
   const [actionError, setActionError] = useState('')
+  // Кратковременная подсветка поля ответа: красная/зелёная рамка.
+  const { feedback: answerFeedback, show: showAnswerFeedback, clear: clearAnswerFeedback } = useAnswerFeedback()
+  const answerInputRef = useRef(null)
+  const pendingAnswerFocus = useRef(false)
   // Сообщение «Ответ не верный» над полем ввода: показывается на 3 секунды
   const [wrongAnswerNotice, setWrongAnswerNotice] = useState(false)
   const wrongNoticeTimer = useRef(null)
@@ -64,6 +69,19 @@ export default function NormalLevelBoard({
   const [fullscreenImage, setFullscreenImage] = useState(null)
 
   const currentQuestion = questions[currentQuestionIndex]
+  // Поле ответа на уровне одно, поэтому ключ подсветки постоянный: зелёная
+  // рамка остаётся видимой и после автоперехода к следующему вопросу.
+  const feedbackKey = 'answer'
+
+  // Фокус возвращаем только после ответа сервера, когда поле снова активно.
+  useEffect(() => {
+    if (!pendingAnswerFocus.current || checking) return
+    const input = answerInputRef.current
+    pendingAnswerFocus.current = false
+    // preventScroll не даёт странице прыгать и не закрывает мобильную клавиатуру.
+    if (input && !input.disabled) input.focus({ preventScroll: true })
+  }, [checking, answerFeedback, answers, feedbackKey])
+
   const solvedCount = questions.filter((q) => isQuestionSolved(solved, q)).length
   /**
    * Сводка по текущему вопросу:
@@ -183,6 +201,9 @@ export default function NormalLevelBoard({
         setActionError('')
         // очищаем ввод для следующего варианта ответа
         setAnswers((prev) => ({ ...prev, [question.id]: '' }))
+        // кратковременно подсвечиваем поле зелёным и возвращаем в него курсор
+        showAnswerFeedback(feedbackKey, 'correct')
+        pendingAnswerFocus.current = true
         // показываем пользователю принятый правильный ответ (зелёным)
         setAcceptedAnswer(result.answer || null)
         if (isQuestionSolved(nextSolved, question)) {
@@ -196,8 +217,10 @@ export default function NormalLevelBoard({
         }
         // иначе остаёмся на том же вопросе: нужно дать ещё варианты ответа
       } else {
-        // неверный ответ: очищаем поле ввода и показываем сообщение на 3 секунды
+        // неверный ответ: красная рамка, очистка поля и возврат фокуса
         setAnswers((prev) => ({ ...prev, [question.id]: '' }))
+        showAnswerFeedback(feedbackKey, 'wrong')
+        pendingAnswerFocus.current = true
         showWrongAnswerNotice()
       }
       if (onSave) onSave({ currentQuestionIndex, elapsedSeconds: netElapsed, usedHints, penaltySeconds })
@@ -304,7 +327,11 @@ export default function NormalLevelBoard({
       )}
 
       {(actionError || alreadyGuessed || acceptedAnswer) && (
-        <div className={actionError ? 'alert alert-error' : alreadyGuessed ? 'alert alert-warning' : 'alert alert-success'}>
+        <div
+          className={actionError ? 'alert alert-error' : alreadyGuessed ? 'alert alert-warning' : 'alert alert-success'}
+          role={actionError ? 'alert' : 'status'}
+          aria-live="polite"
+        >
           {actionError
             ? actionError
             : alreadyGuessed
@@ -327,7 +354,13 @@ export default function NormalLevelBoard({
                 <span>Вопрос</span>
                 <select
                   value={currentQuestionIndex}
-                  onChange={(event) => { setAcceptedAnswer(null); setCurrentQuestionIndex(Number(event.target.value)); if (onSave) onSave({ currentQuestionIndex: Number(event.target.value), elapsedSeconds: netElapsed, usedHints, penaltySeconds }) }}
+                  onChange={(event) => {
+                    // Ручной переход к другому вопросу сбрасывает подсветку поля.
+                    clearAnswerFeedback(feedbackKey)
+                    setAcceptedAnswer(null)
+                    setCurrentQuestionIndex(Number(event.target.value))
+                    if (onSave) onSave({ currentQuestionIndex: Number(event.target.value), elapsedSeconds: netElapsed, usedHints, penaltySeconds })
+                  }}
                 >
                   {questions.map((q, index) => (
                     <option key={q.id} value={index}>
@@ -467,14 +500,24 @@ export default function NormalLevelBoard({
               </div>
             )}
             <input
-              className="assoc-input"
+              ref={answerInputRef}
+              className={[
+                'assoc-input',
+                answerFeedback[feedbackKey] === 'wrong' ? 'is-invalid' : '',
+                answerFeedback[feedbackKey] === 'correct' ? 'is-valid' : '',
+              ].join(' ').trim()}
               value={answers[currentQuestion?.id] || ''}
-              onChange={(event) => setAnswers((prev) => ({ ...prev, [currentQuestion?.id]: event.target.value }))}
+              onChange={(event) => {
+                // Ввод нового ответа снимает старую подсветку.
+                clearAnswerFeedback(feedbackKey)
+                setAnswers((prev) => ({ ...prev, [currentQuestion?.id]: event.target.value }))
+              }}
               disabled={checking || timeUp}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') submitAnswer()
               }}
               placeholder="Ваш ответ"
+              aria-invalid={answerFeedback[feedbackKey] === 'wrong' ? 'true' : undefined}
             />
             <button
               type="button"
