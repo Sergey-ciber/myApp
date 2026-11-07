@@ -389,6 +389,7 @@ padding-bottom: 10px;
   max-width: 520px;
   box-shadow: 0 8px 30px rgba(9, 30, 66, 0.3);
   color: #121111;
+  padding: 10px;
 }
 .modal-title { margin: 0 0 10px; font-size: 18px; font-weight: 700; }
 .modal-text { margin: 0 0 20px; font-size: 15px; line-height: 1.55; color: #3c3a37; }
@@ -1649,11 +1650,19 @@ padding-bottom: 10px;
 }
 .assoc-statistics-table-wrap {
   width: 100%;
-  overflow-x: auto;
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 16px;
 }
 .assoc-statistics-table-wrap .assoc-statistics-table { margin-bottom: 0; min-width: 460px; }
+.assoc-statistics-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #24242e;
+}
 .assoc-statistics-level { font-weight: 600; }
 .assoc-statistics-tag {
   display: inline-block;
