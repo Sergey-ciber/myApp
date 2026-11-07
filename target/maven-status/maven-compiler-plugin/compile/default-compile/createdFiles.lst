@@ -22,6 +22,7 @@ com\demo\taskmanager\service\GameService.class
 com\demo\taskmanager\repository\GameResultRepository.class
 com\demo\taskmanager\dto\GameSummary.class
 com\demo\taskmanager\service\AuthService.class
+com\demo\taskmanager\repository\MediaReferenceRepository.class
 com\demo\taskmanager\repository\TeamHintStateRepository.class
 com\demo\taskmanager\entity\Game.class
 com\demo\taskmanager\dto\BoardRequest.class
@@ -52,6 +53,7 @@ com\demo\taskmanager\repository\UserRepository.class
 com\demo\taskmanager\config\WebSocketConfig.class
 com\demo\taskmanager\dto\TeamGameHintRequest.class
 com\demo\taskmanager\repository\StandardQuestionRepository.class
+com\demo\taskmanager\service\MediaCleanupService.class
 com\demo\taskmanager\security\JwtService.class
 com\demo\taskmanager\dto\GameSessionResponse.class
 com\demo\taskmanager\repository\TeamGameSessionRepository.class

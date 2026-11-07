@@ -90,6 +90,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\Ga
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\LevelHintRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\LevelQuestionRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\LevelWordRepository.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\MediaReferenceRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\StandardAnswerRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\StandardQuestionRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\TaskRepository.java
@@ -114,6 +115,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\AuthS
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\BoardService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\GameService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\ImageStorageService.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\MediaCleanupService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TaskService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TeamGameService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TeamGameTimerService.java
