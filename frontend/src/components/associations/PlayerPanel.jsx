@@ -617,21 +617,21 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         <div className="page-loader">Восстанавливаем участие в командной игре…</div>
       )}
 
-      {!teamMode && (
-        <div className="assoc-player-top">
-          <div className="assoc-player-heading">
-            <h2 className="assoc-player-title">{game.title}</h2>
-            <span className="assoc-player-author">
-              автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.
-            </span>
-          </div>
-          {gameStarted && !finished && (
-            <button type="button" className="btn btn-danger" onClick={() => setShowQuitModal(true)}>
-              Завершить игру
-            </button>
-          )}
-        </div>
-      )}
+      {/*{!teamMode && (*/}
+      {/*  <div className="assoc-player-top">*/}
+      {/*    <div className="assoc-player-heading">*/}
+      {/*      <h2 className="assoc-player-title">{game.title}</h2>*/}
+      {/*      <span className="assoc-player-author">*/}
+      {/*        автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.*/}
+      {/*      </span>*/}
+      {/*    </div>*/}
+      {/*    {gameStarted && !finished && (*/}
+      {/*      <button type="button" className="btn btn-danger" onClick={() => setShowQuitModal(true)}>*/}
+      {/*        Завершить игру*/}
+      {/*      </button>*/}
+      {/*    )}*/}
+      {/*  </div>*/}
+      {/*)}*/}
 
       {showQuitModal && (
         <div className="modal-overlay" onClick={() => setShowQuitModal(false)}>

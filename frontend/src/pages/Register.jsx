@@ -30,7 +30,7 @@ export default function Register() {
     setError('')
     try {
       await register(username.trim(), password)
-      navigate('/boards')
+      navigate('/associations')
     } catch (err) {
       setError(apiMessage(err))
     } finally {

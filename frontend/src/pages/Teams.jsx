@@ -89,9 +89,9 @@ export default function Teams() {
       <div className="page-header teams-header">
         <div>
           <h1>Команды</h1>
-          <p className="teams-subtitle">
-            Объединяйтесь, приглашайте участников и поднимайте команду в рейтинге побед.
-          </p>
+          {/*<p className="teams-subtitle">*/}
+          {/*  Объединяйтесь, приглашайте участников и поднимайте команду в рейтинге побед.*/}
+          {/*</p>*/}
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
           + Создать команду
@@ -103,10 +103,10 @@ export default function Teams() {
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="teams-rating-note">
-        <span>🏆</span>
-        <span>Рейтинг команды — количество побед её участников в игре «Ассоциации».</span>
-      </div>
+      {/*<div className="teams-rating-note">*/}
+      {/*  <span>🏆</span>*/}
+      {/*  <span>Рейтинг команды — количество побед её участников в игре «Ассоциации».</span>*/}
+      {/*</div>*/}
 
       {loading ? (
         <div className="page-loader">Загрузка команд…</div>

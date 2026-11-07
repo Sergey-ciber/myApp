@@ -19,12 +19,12 @@ export default function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <NavLink
-          to="/boards"
-          className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
-        >
-          Мои доски
-        </NavLink>
+        {/*<NavLink*/}
+        {/*  to="/boards"*/}
+        {/*  className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}*/}
+        {/*>*/}
+        {/*  Мои доски*/}
+        {/*</NavLink>*/}
         {user && (
           <>
             <NavLink

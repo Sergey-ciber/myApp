@@ -17,7 +17,7 @@ export default function Login() {
     setError('')
     try {
       await login(username, password)
-      navigate('/boards')
+      navigate('/associations')
     } catch (err) {
       setError(apiMessage(err))
     } finally {
