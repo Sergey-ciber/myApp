@@ -69,4 +69,28 @@ public class ImageStorageService {
         }
         return path;
     }
+
+    /** Каталог загрузок — используется обслуживающими задачами (очистка мусора). */
+    public Path getUploadDir() {
+        return uploadDir;
+    }
+
+    /**
+     * Удалить загруженный файл по имени.
+     * Возвращает false, если файла уже нет; имя проверяется так же, как при чтении,
+     * поэтому выйти за пределы каталога загрузок нельзя.
+     */
+    public boolean delete(String filename) {
+        Path path;
+        try {
+            path = resolve(filename);
+        } catch (BadRequestException e) {
+            return false;
+        }
+        try {
+            return Files.deleteIfExists(path);
+        } catch (IOException e) {
+            throw new BadRequestException("Не удалось удалить файл: " + e.getMessage());
+        }
+    }
 }
