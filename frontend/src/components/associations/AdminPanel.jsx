@@ -736,6 +736,14 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     onPlay(game.id)
   }
 
+  const playGameFromKeyboard = (event, game) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      playGame(game)
+    }
+  }
+
   const renderLevelPyramid = (levelIndex) => {
     const level = levels[levelIndex]
     if (!level || level.type !== 'ASSOCIATIONS') return null
@@ -891,7 +899,15 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
           ) : (
             <ul className="assoc-games">
               {visibleGames.map((game) => (
-                <li key={game.id} className={`assoc-game ${game.active ? 'active' : ''}`}>
+                <li
+                  key={game.id}
+                  className={`assoc-game ${game.active ? 'active' : ''}`}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Перейти к игре «${game.title}»`}
+                  onClick={() => playGame(game)}
+                  onKeyDown={(event) => playGameFromKeyboard(event, game)}
+                >
                   <div className="assoc-game-info">
                     <span className="assoc-game-title">
                       {game.title}
@@ -904,15 +920,25 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       {game.active && <span className="assoc-badge">по умолчанию</span>}
                     </span>
                   </div>
-                  <div className="assoc-game-actions">
-                    <button type="button" className="btn btn-small btn-primary" onClick={() => playGame(game)}>Играть</button>
-                    {isOwn(game) && (
-                      <>
-                        <button type="button" className="btn btn-small btn-secondary" onClick={() => startEdit(game)} disabled={loadingGame}>Редактировать</button>
-                        <button type="button" className="btn btn-small btn-danger" onClick={() => setDeleting(game)}>Удалить</button>
-                      </>
-                    )}
-                  </div>
+                  {isOwn(game) && (
+                    <div className="assoc-game-actions">
+                      <button
+                        type="button"
+                        className="btn btn-small btn-secondary"
+                        onClick={(event) => { event.stopPropagation(); startEdit(game) }}
+                        disabled={loadingGame}
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-small btn-danger"
+                        onClick={(event) => { event.stopPropagation(); setDeleting(game) }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
