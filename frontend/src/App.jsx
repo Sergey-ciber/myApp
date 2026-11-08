@@ -3,6 +3,8 @@ import { useAuth } from './context/AuthContext'
 import Navbar from './components/Navbar'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Boards from './pages/Boards'
 import BoardDetail from './pages/BoardDetail'
 import Profile from './pages/Profile'
@@ -20,7 +22,8 @@ function Protected({ children }) {
 
 export default function App() {
   const location = useLocation()
-  const isAuthRoute = location.pathname === '/login' || location.pathname === '/register'
+  const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password']
+    .includes(location.pathname)
 
   return (
     <div className="app">
@@ -28,6 +31,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<Navigate to="/associations" replace />} />
         {/*<Route path="/boards/:id" element={<Protected><BoardDetail /></Protected>} />*/}
         <Route path="/associations" element={<Protected><Associations /></Protected>} />

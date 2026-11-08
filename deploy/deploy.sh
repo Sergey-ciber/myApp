@@ -16,6 +16,14 @@
 #   POSTGRES_PASSWORD  пароль БД (обязателен)
 #   JWT_SECRET         секрет подписи JWT (обязателен)
 #   CORS_ORIGINS       публичный адрес приложения (обязателен)
+#   MAIL_HOST          SMTP-сервер для писем восстановления пароля (необязателен)
+#   MAIL_PORT          порт SMTP (по умолчанию 587)
+#   MAIL_USERNAME      логин SMTP (необязателен)
+#   MAIL_PASSWORD      пароль SMTP (необязателен)
+#   MAIL_FROM          адрес отправителя (по умолчанию no-reply@localhost)
+#   MAIL_SMTP_AUTH     авторизация SMTP (по умолчанию true)
+#   MAIL_SMTP_STARTTLS STARTTLS (по умолчанию true)
+#   MAIL_SMTP_SSL      SSL (по умолчанию false; для порта 465 — true)
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/taskmanager}"
@@ -42,6 +50,14 @@ if [ -f "$APP_DIR/.env" ]; then
   load_env POSTGRES_PASSWORD
   load_env JWT_SECRET
   load_env CORS_ORIGINS
+  load_env MAIL_HOST
+  load_env MAIL_PORT
+  load_env MAIL_USERNAME
+  load_env MAIL_PASSWORD
+  load_env MAIL_FROM
+  load_env MAIL_SMTP_AUTH
+  load_env MAIL_SMTP_STARTTLS
+  load_env MAIL_SMTP_SSL
 fi
 
 # ---------- значения по умолчанию ----------
@@ -96,6 +112,14 @@ POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
 CORS_ORIGINS=$CORS_ORIGINS
 HTTP_PORT=$HTTP_PORT
+MAIL_HOST=${MAIL_HOST:-}
+MAIL_PORT=${MAIL_PORT:-587}
+MAIL_USERNAME=${MAIL_USERNAME:-}
+MAIL_PASSWORD=${MAIL_PASSWORD:-}
+MAIL_FROM=${MAIL_FROM:-no-reply@localhost}
+MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH:-true}
+MAIL_SMTP_STARTTLS=${MAIL_SMTP_STARTTLS:-true}
+MAIL_SMTP_SSL=${MAIL_SMTP_SSL:-false}
 ENV
 
 # ---------- выкат ----------

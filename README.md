@@ -8,7 +8,8 @@ Full-stack приложение для управления досками и з
 
 ## Функциональность
 
-- Регистрация и авторизация по логину/паролю (JWT)
+- Регистрация и авторизация по логину/паролю (JWT); при регистрации обязателен email
+- Восстановление пароля по email: одноразовая ссылка, письмо через SMTP
 - Настройки профиля (полное имя, email) и загрузка аватара
 - Создание, редактирование и удаление досок (цвет, название, описание)
 - Работа с заданиями на доске в виде канбан-колонок: «К выполнению», «В работе», «Готово»
@@ -108,8 +109,10 @@ npm run dev
 
 | Метод | Путь | Описание |
 |---|---|---|
-| POST | `/api/auth/register` | Регистрация `{username, password}` → JWT + пользователь |
+| POST | `/api/auth/register` | Регистрация `{username, password, email}` → JWT + пользователь |
 | POST | `/api/auth/login` | Авторизация `{username, password}` → JWT + пользователь |
+| POST | `/api/auth/forgot-password` | Запрос сброса пароля `{email}`; всегда 200 |
+| POST | `/api/auth/reset-password` | Сброс пароля `{token, newPassword}` по ссылке из письма |
 | GET | `/api/users/me` | Текущий пользователь |
 | PUT | `/api/users/me` | Обновление профиля `{fullName, email}` |
 | POST | `/api/users/me/avatar` | Загрузка аватара (multipart, поле `file`) |
@@ -339,10 +342,38 @@ nano .env
 | `JWT_SECRET` | случайные ≥32 символа: `openssl rand -base64 48` |
 | `CORS_ORIGINS` | **публичный адрес приложения**, например `http://203.0.113.10` или `https://tasks.example.com` |
 | `HTTP_PORT` | порт nginx на хосте (по умолчанию 80) |
+| `MAIL_HOST` | SMTP-сервер для писем восстановления пароля; пусто — отправка отключена |
+| `MAIL_PORT` | порт SMTP (587 или 465) |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | учётные данные SMTP |
+| `MAIL_FROM` | адрес отправителя, разрешённый провайдером |
+| `MAIL_SMTP_STARTTLS`, `MAIL_SMTP_SSL` | `true`/`false` в зависимости от порта (465 — обычно SSL) |
 
 `CORS_ORIGINS` — самое важное: браузер присылает этот адрес в заголовке
 `Origin` для POST/PUT/PATCH, и если он не совпадёт, запросы вернут **403**
 (проверено). Указывайте схему и домен ровно так, как их видит пользователь.
+Этот же адрес используется как база для ссылки сброса пароля, если не задан
+`APP_BASE_URL`.
+
+Письма восстановления пароля отправляются через SMTP. Примеры настроек:
+
+```
+# Яндекс
+MAIL_HOST=smtp.yandex.ru
+MAIL_PORT=465
+MAIL_SMTP_SSL=true
+MAIL_SMTP_STARTTLS=false
+
+# Gmail (нужен пароль приложения)
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_SMTP_SSL=false
+MAIL_SMTP_STARTTLS=true
+```
+
+Ссылка сброса действует `PASSWORD_RESET_TOKEN_TTL_MINUTES` минут (по умолчанию
+60), одноразовая; в БД хранится только её хэш. Запросы ограничены
+`PASSWORD_RESET_RATE_LIMIT_MAX` за `PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES`
+(по умолчанию 5 за 15 минут отдельно по IP и email).
 
 ### 4. Запустить
 
@@ -412,6 +443,10 @@ tasks.example.com {
   `team_session_presence`, `team_session_progress` и `team_session_events`
   остались FK на неиспользуемую таблицу `team_game_sessions`. Лечится разовой
   миграцией `deploy/fix-legacy-team-game-session-fks.sql` (идемпотентна).
+- **Уникальный email.** На существующей базе перед первым запуском версии с
+  восстановлением пароля выполните `deploy/fix-user-emails.sql` (идемпотентен):
+  он превращает пустые email в `NULL` и создаёт регистронезависимый уникальный
+  индекс. Если в базе уже есть дубликаты email, устраните их вручную.
 
 ## Деплой из git (CI/CD)
 
@@ -476,10 +511,12 @@ Secrets:
 | `POSTGRES_PASSWORD` | пароль БД |
 | `JWT_SECRET` | длинная случайная строка (менять на работающем приложении нельзя — разлогинит всех) |
 | `CORS_ORIGINS` | `http://2.27.33.116` |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | учётные данные SMTP для писем восстановления пароля |
 
 Необязательные: секрет `SSH_PORT` (по умолчанию 22) и переменные (`Variables`)
 `HTTP_PORT` (по умолчанию 80), `APP_DIR` (по умолчанию `/opt/taskmanager`),
-`REPO_URL` (если репозиторий не на github.com).
+`REPO_URL` (если репозиторий не на github.com), `MAIL_HOST`, `MAIL_PORT`,
+`MAIL_FROM`, `MAIL_SMTP_STARTTLS`, `MAIL_SMTP_SSL`.
 
 ### Шаг 5. Выкат
 

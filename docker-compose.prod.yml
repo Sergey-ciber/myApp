@@ -33,6 +33,18 @@ services:
       # Без него POST/PUT/PATCH будут отклоняться с 403.
       CORS_ORIGINS: ${CORS_ORIGINS:?Задайте CORS_ORIGINS в .env}
       UPLOAD_DIR: /app/uploads
+      # SMTP для писем восстановления пароля. Пустой MAIL_HOST отключает отправку.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@localhost}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-true}
+      MAIL_SMTP_SSL: ${MAIL_SMTP_SSL:-false}
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-60}
+      PASSWORD_RESET_RATE_LIMIT_MAX: ${PASSWORD_RESET_RATE_LIMIT_MAX:-5}
+      PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES:-15}
     volumes:
       - uploads:/app/uploads
     expose:

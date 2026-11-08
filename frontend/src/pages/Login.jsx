@@ -45,6 +45,9 @@ export default function Login() {
           {loading ? 'Вход…' : 'Войти'}
         </button>
         <p className="auth-switch">
+          <Link to="/forgot-password">Забыли пароль?</Link>
+        </p>
+        <p className="auth-switch">
           Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
         </p>
       </form>

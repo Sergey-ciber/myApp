@@ -1,8 +1,10 @@
 package com.demo.taskmanager.repository;
 
 import com.demo.taskmanager.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Проверка занятости логина без учёта регистра. */
     boolean existsByUsernameIgnoreCase(String username);
+
+    /** Email нечувствителен к регистру. */
+    Optional<User> findFirstByEmailIgnoreCase(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
+
+    /**
+     * Поиск по хэшу токена сброса с блокировкой строки: два одновременных
+     * запроса не смогут использовать один и тот же токен дважды.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.resetToken = :token")
+    Optional<User> findByResetTokenForUpdate(@Param("token") String token);
 
     /** Поиск по логину и полному имени для приглашения в команду. */
     @Query("select u from User u where :query = '' " +

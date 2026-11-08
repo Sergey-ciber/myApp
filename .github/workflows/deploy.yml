@@ -58,6 +58,14 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          MAIL_HOST: ${{ vars.MAIL_HOST }}
+          MAIL_PORT: ${{ vars.MAIL_PORT }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          MAIL_SMTP_AUTH: ${{ vars.MAIL_SMTP_AUTH }}
+          MAIL_SMTP_STARTTLS: ${{ vars.MAIL_SMTP_STARTTLS }}
+          MAIL_SMTP_SSL: ${{ vars.MAIL_SMTP_SSL }}
         run: |
           set -euo pipefail
           # Собираем скрипт на лету: переменные подставляем с безопасным
@@ -71,5 +79,13 @@ jobs:
             printf 'export POSTGRES_PASSWORD=%q\n' "$POSTGRES_PASSWORD"
             printf 'export JWT_SECRET=%q\n'        "$JWT_SECRET"
             printf 'export CORS_ORIGINS=%q\n'      "$CORS_ORIGINS"
+            printf 'export MAIL_HOST=%q\n'         "${MAIL_HOST:-}"
+            printf 'export MAIL_PORT=%q\n'         "${MAIL_PORT:-}"
+            printf 'export MAIL_USERNAME=%q\n'     "${MAIL_USERNAME:-}"
+            printf 'export MAIL_PASSWORD=%q\n'     "${MAIL_PASSWORD:-}"
+            printf 'export MAIL_FROM=%q\n'         "${MAIL_FROM:-}"
+            printf 'export MAIL_SMTP_AUTH=%q\n'    "${MAIL_SMTP_AUTH:-}"
+            printf 'export MAIL_SMTP_STARTTLS=%q\n' "${MAIL_SMTP_STARTTLS:-}"
+            printf 'export MAIL_SMTP_SSL=%q\n'     "${MAIL_SMTP_SSL:-}"
             cat deploy/deploy.sh
           } | ssh -F ~/.ssh/config deploy-target 'bash -s'

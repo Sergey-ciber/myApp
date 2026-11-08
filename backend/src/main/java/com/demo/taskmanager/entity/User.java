@@ -20,8 +20,19 @@ public class User {
     @Column(length = 100)
     private String fullName;
 
-    @Column(length = 100)
+    /**
+     * Email необязателен для старых аккаунтов, но уникален для новых.
+     * PostgreSQL допускает несколько NULL в уникальной колонке.
+     */
+    @Column(unique = true, length = 100)
     private String email;
+
+    /** SHA-256 хэш одноразового токена сброса пароля (сам токен в БД не хранится). */
+    @Column(name = "reset_token", length = 64)
+    private String resetToken;
+
+    @Column(name = "reset_token_expiry")
+    private Instant resetTokenExpiry;
 
     @Column(length = 255)
     private String avatarUrl;
@@ -43,6 +54,12 @@ public class User {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
+    public String getResetToken() { return resetToken; }
+    public void setResetToken(String resetToken) { this.resetToken = resetToken; }
+
+    public Instant getResetTokenExpiry() { return resetTokenExpiry; }
+    public void setResetTokenExpiry(Instant resetTokenExpiry) { this.resetTokenExpiry = resetTokenExpiry; }
 
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
