@@ -27,9 +27,11 @@ com\demo\taskmanager\repository\TeamHintStateRepository.class
 com\demo\taskmanager\entity\Game.class
 com\demo\taskmanager\dto\BoardRequest.class
 com\demo\taskmanager\service\TeamService.class
+com\demo\taskmanager\service\PasswordResetRateLimiter.class
 com\demo\taskmanager\dto\TeamGameLobbyResponse.class
 com\demo\taskmanager\dto\ResultResponse.class
 com\demo\taskmanager\repository\LevelWordRepository.class
+com\demo\taskmanager\dto\ForgotPasswordRequest.class
 com\demo\taskmanager\dto\TeamGameStatisticsResponse.class
 com\demo\taskmanager\dto\FileUploadResponse.class
 com\demo\taskmanager\entity\StandardAnswer.class
@@ -57,6 +59,7 @@ com\demo\taskmanager\service\MediaCleanupService.class
 com\demo\taskmanager\security\JwtService.class
 com\demo\taskmanager\dto\GameSessionResponse.class
 com\demo\taskmanager\repository\TeamGameSessionRepository.class
+com\demo\taskmanager\service\PasswordResetMailService.class
 com\demo\taskmanager\service\ImageStorageService.class
 com\demo\taskmanager\entity\UserProgress.class
 com\demo\taskmanager\entity\TeamHintState.class
@@ -71,6 +74,7 @@ com\demo\taskmanager\dto\AuthResponse.class
 com\demo\taskmanager\dto\AvatarResponse.class
 com\demo\taskmanager\dto\QuestionHintResponse.class
 com\demo\taskmanager\dto\LeaderboardEntry.class
+com\demo\taskmanager\config\AsyncConfig.class
 com\demo\taskmanager\dto\TeamRequest.class
 com\demo\taskmanager\entity\LevelHint.class
 com\demo\taskmanager\entity\TeamSessionProgress.class
@@ -101,6 +105,7 @@ com\demo\taskmanager\dto\UserResponse.class
 com\demo\taskmanager\entity\StandardQuestion.class
 com\demo\taskmanager\service\GameService$1.class
 com\demo\taskmanager\dto\InvitationResponse.class
+com\demo\taskmanager\dto\ResetPasswordRequest.class
 com\demo\taskmanager\dto\GameResponse$HintResponse.class
 com\demo\taskmanager\dto\GamePlayResponse$GameHintView.class
 com\demo\taskmanager\security\CustomUserDetailsService.class
@@ -130,6 +135,7 @@ com\demo\taskmanager\dto\GameRequest.class
 com\demo\taskmanager\dto\TeamGameEndRequest.class
 com\demo\taskmanager\service\TeamGameService.class
 com\demo\taskmanager\repository\TaskRepository.class
+com\demo\taskmanager\exception\TooManyRequestsException.class
 com\demo\taskmanager\dto\TeamDetailsResponse.class
 com\demo\taskmanager\service\BoardService.class
 com\demo\taskmanager\entity\TeamLevelStat.class

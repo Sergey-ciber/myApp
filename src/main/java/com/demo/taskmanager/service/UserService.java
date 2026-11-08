@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class UserService {
@@ -41,7 +42,19 @@ public class UserService {
             user.setFullName(request.fullName().trim());
         }
         if (request.email() != null) {
-            user.setEmail(request.email().trim());
+            String email = request.email().trim();
+            if (email.isEmpty()) {
+                // Пустая строка не должна занимать уникальное значение email.
+                user.setEmail(null);
+            } else {
+                String normalized = email.toLowerCase(Locale.ROOT);
+                boolean changed = user.getEmail() == null
+                        || !user.getEmail().equalsIgnoreCase(normalized);
+                if (changed && userRepository.existsByEmailIgnoreCase(normalized)) {
+                    throw new BadRequestException("Пользователь с таким email уже зарегистрирован");
+                }
+                user.setEmail(normalized);
+            }
         }
         userRepository.save(user);
         return UserResponse.from(user);

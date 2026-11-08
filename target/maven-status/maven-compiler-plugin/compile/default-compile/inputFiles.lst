@@ -1,3 +1,4 @@
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\AsyncConfig.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\SecurityConfig.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\WebSocketConfig.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\controller\AuthController.java
@@ -18,6 +19,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\BoardResp
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\CheckAnswerRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\CheckAnswerResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\FileUploadResponse.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ForgotPasswordRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\GamePlayResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\GameProgressDto.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\GameRequest.java
@@ -32,6 +34,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ProfileUp
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\QuestionHintRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\QuestionHintResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\RegisterRequest.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ResetPasswordRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ResultRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ResultResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TaskRequest.java
@@ -83,6 +86,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\Api
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\BadRequestException.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\ForbiddenException.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\NotFoundException.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\TooManyRequestsException.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\BoardRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\GameLevelRepository.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\repository\GameRepository.java
@@ -116,6 +120,8 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\Board
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\GameService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\ImageStorageService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\MediaCleanupService.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\PasswordResetMailService.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\PasswordResetRateLimiter.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TaskService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TeamGameService.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\service\TeamGameTimerService.java

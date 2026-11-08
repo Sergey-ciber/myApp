@@ -14,6 +14,29 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 110MB
+  mail:
+    # SMTP для писем восстановления пароля. Если MAIL_HOST пуст, письма не отправляются.
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        # Без mail.from JavaMail делает обратный DNS локального IP для Message-ID
+        # и может зависать на десятки секунд.
+        from: ${MAIL_FROM:no-reply@localhost}
+        smtp:
+          # Не раскрывать внутреннее имя хоста в EHLO и не ждать обратный DNS.
+          localhost: ${MAIL_SMTP_LOCALHOST:localhost}
+          auth: ${MAIL_SMTP_AUTH:true}
+          # Ограничения, чтобы недоступный SMTP не держал поток бесконечно.
+          connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:10000}
+          timeout: ${MAIL_SMTP_TIMEOUT_MS:10000}
+          writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:10000}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+          ssl:
+            enable: ${MAIL_SMTP_SSL:false}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -36,4 +59,17 @@ app:
     cron: "${MEDIA_CLEANUP_CRON:0 0 3 * * *}"
     # Файлы, загруженные менее N минут назад, не удаляются: форма могла ещё не сохраниться.
     min-age-minutes: ${MEDIA_CLEANUP_MIN_AGE_MINUTES:1440}
+  # Восстановление пароля по email.
+  password-reset:
+    # Время жизни одноразовой ссылки.
+    token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:60}
+    # Публичный адрес приложения — из него строится ссылка в письме.
+    # Если APP_BASE_URL не задан, берём CORS_ORIGINS (обычно это тот же адрес).
+    base-url: ${APP_BASE_URL:${CORS_ORIGINS:http://localhost:5173}}
+    # Адрес отправителя (должен быть разрешён SMTP-провайдером).
+    from: ${MAIL_FROM:no-reply@localhost}
+    rate-limit:
+      # Не более N запросов за окно (отдельно по IP и по email).
+      max-requests: ${PASSWORD_RESET_RATE_LIMIT_MAX:5}
+      window-minutes: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES:15}
 
