@@ -22,8 +22,17 @@ spring:
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
+        # Без mail.from JavaMail делает обратный DNS локального IP для Message-ID
+        # и может зависать на десятки секунд.
+        from: ${MAIL_FROM:no-reply@localhost}
         smtp:
+          # Не раскрывать внутреннее имя хоста в EHLO и не ждать обратный DNS.
+          localhost: ${MAIL_SMTP_LOCALHOST:localhost}
           auth: ${MAIL_SMTP_AUTH:true}
+          # Ограничения, чтобы недоступный SMTP не держал поток бесконечно.
+          connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:10000}
+          timeout: ${MAIL_SMTP_TIMEOUT_MS:10000}
+          writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:10000}
           starttls:
             enable: ${MAIL_SMTP_STARTTLS:true}
           ssl:

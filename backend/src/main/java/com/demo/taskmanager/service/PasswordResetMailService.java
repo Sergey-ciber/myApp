@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
@@ -43,6 +44,7 @@ public class PasswordResetMailService {
         this.baseUrl = baseUrl;
     }
 
+    @Async("mailTaskExecutor")
     public void sendPasswordReset(String email, String token, Instant expiresAt) {
         if (mailHost == null || mailHost.isBlank()) {
             log.warn("Сброс пароля: SMTP не настроен (spring.mail.host), письмо не отправлено");
