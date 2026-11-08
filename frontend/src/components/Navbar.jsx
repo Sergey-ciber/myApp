@@ -8,7 +8,7 @@ function initials(user) {
 }
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -53,6 +53,7 @@ export default function Navbar() {
               ? <img src={user.avatarUrl} alt="avatar" className="avatar avatar-sm" />
               : <span className="avatar avatar-sm avatar-fallback">{initials(user)}</span>}
             <span className="navbar-username">{user.fullName || user.username}</span>
+            {isSuperAdmin && <span className="role-badge role-badge-superadmin">Super Admin</span>}
           </NavLink>
           <button className="btn btn-ghost" onClick={handleLogout}>Выйти</button>
         </div>

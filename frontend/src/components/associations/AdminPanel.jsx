@@ -197,7 +197,7 @@ function MediaUploader({ urls, onChange, max = 10, accept = 'image/*,audio/*,vid
   )
 }
 
-export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
+export default function AdminPanel({ games, onReload, onPlay, currentUserId, isSuperAdmin = false }) {
   const [view, setView] = useState('all')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -225,6 +225,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   const [searchQuery, setSearchQuery] = useState('')
 
   const isOwn = (game) => game.creatorId != null && game.creatorId === currentUserId
+  // Супер-администратор может управлять любой игрой, остальные — только своей.
+  const canManage = (game) => isOwn(game) || isSuperAdmin
   const myGames = useMemo(() => games.filter(isOwn), [games, currentUserId])
 
   const visibleGames = useMemo(() => {
@@ -340,7 +342,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
   }
 
   const startEdit = async (game) => {
-    if (!isOwn(game)) return
+    if (!canManage(game)) return
     setLoadingGame(true)
     setError('')
     setMessage('')
@@ -726,7 +728,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
     setError('')
     setToast(null)
     try {
-      if (isOwn(game)) {
+      if (canManage(game)) {
         await activateGame(game.id)
         await onReload()
       }
@@ -920,7 +922,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId }) {
                       {game.active && <span className="assoc-badge">по умолчанию</span>}
                     </span>
                   </div>
-                  {isOwn(game) && (
+                  {canManage(game) && (
                     <div className="assoc-game-actions">
                       <button
                         type="button"

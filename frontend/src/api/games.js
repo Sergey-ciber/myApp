@@ -6,7 +6,7 @@ export const fetchGames = () => api.get('/games').then((res) => res.data)
 /** Игра для прохождения: только стартовые слова + прогресс текущего пользователя. */
 export const fetchGame = (id) => api.get(`/games/${id}`).then((res) => res.data)
 
-/** Полная игра со всеми словами — только автору, для формы редактирования. */
+/** Полная игра со всеми словами — автору или супер-администратору, для формы редактирования. */
 export const fetchGameForEdit = (id) => api.get(`/games/${id}/edit`).then((res) => res.data)
 
 /** Старт/продолжение попытки: возвращает { game, progress } текущего пользователя. */
@@ -32,13 +32,13 @@ export const requestTimeout = (id) => api.post(`/games/${id}/timeout`).then((res
 /** Создать игру. Принимает { title, timeLimitMinutes, columns }, автор — текущий пользователь. */
 export const createGame = (game) => api.post('/games', game).then((res) => res.data)
 
-/** Обновить игру (только свою). */
+/** Обновить игру (свою или любую — для супер-администратора). */
 export const updateGame = (id, game) => api.put(`/games/${id}`, game).then((res) => res.data)
 
-/** Открыть игру игроку по умолчанию (только свою). */
+/** Открыть игру игроку по умолчанию (свою или любую — для супер-администратора). */
 export const activateGame = (id) => api.post(`/games/${id}/activate`).then((res) => res.data)
 
-/** Удалить игру (только свою). */
+/** Удалить игру (свою или любую — для супер-администратора). */
 export const deleteGame = (id) => api.delete(`/games/${id}`)
 
 /** Сохранить время прохождения после победы. */

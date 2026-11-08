@@ -23,10 +23,15 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    public String generateToken(String username) {
+    /**
+     * Создать токен с флагом роли. Роль также перепроверяется по БД в
+     * {@link JwtAuthFilter}, поэтому смена прав применяется сразу.
+     */
+    public String generateToken(String username, String role) {
         Date now = new Date();
         return Jwts.builder()
                 .setSubject(username)
+                .claim("role", role == null ? "USER" : role)
                 .setIssuedAt(now)
                 .setExpiration(new Date(now.getTime() + expirationMs))
                 .signWith(key, SignatureAlgorithm.HS256)

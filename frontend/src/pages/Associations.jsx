@@ -123,6 +123,7 @@ export default function Associations() {
           onReload={loadGames}
           onPlay={openForPlayer}
           currentUserId={user?.id}
+          isSuperAdmin={user?.role === 'SUPERADMIN'}
         />
       ) : (
         <PlayerPanel

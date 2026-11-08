@@ -11,6 +11,7 @@ import com.demo.taskmanager.entity.TeamInvitation;
 import com.demo.taskmanager.entity.TeamMember;
 import com.demo.taskmanager.entity.TeamRole;
 import com.demo.taskmanager.entity.User;
+import com.demo.taskmanager.entity.UserRole;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -96,11 +97,11 @@ public class TeamService {
         return toDetails(findTeam(teamId), currentUser);
     }
 
-    /** Изменить название и/или аватар может только создатель команды. */
+    /** Изменить название и/или аватар может создатель команды или супер-администратор. */
     @Transactional
     public TeamDetailsResponse updateTeam(Long teamId, TeamRequest request, User currentUser) {
         Team team = findTeam(teamId);
-        requireCreator(team, currentUser);
+        requireCreatorOrSuperAdmin(team, currentUser);
         if (request == null) {
             throw new BadRequestException("Некорректные данные команды");
         }
@@ -115,11 +116,11 @@ public class TeamService {
         return toDetails(team, currentUser);
     }
 
-    /** Удалить команду вместе с составом и приглашениями может только создатель. */
+    /** Удалить команду вместе с составом и приглашениями может создатель или супер-администратор. */
     @Transactional
     public void deleteTeam(Long teamId, User currentUser) {
         Team team = findTeam(teamId);
-        requireCreator(team, currentUser);
+        requireCreatorOrSuperAdmin(team, currentUser);
         // Сессии командных игр и их служебные записи удаляем явно:
         // иначе внешние ключи не дают удалить команду.
         for (com.demo.taskmanager.entity.TeamGameSession session : team.getGameSessions()) {
@@ -357,6 +358,17 @@ public class TeamService {
                 || !team.getCreator().getId().equals(user.getId())) {
             throw new ForbiddenException("Действие доступно только создателю команды");
         }
+    }
+
+    /** Управление командой (название/аватар, удаление) доступно создателю и SUPERADMIN. */
+    private void requireCreatorOrSuperAdmin(Team team, User user) {
+        if (user == null) {
+            throw new ForbiddenException("Действие доступно только создателю команды или супер-администратору");
+        }
+        if (user.getRole() == UserRole.SUPERADMIN) {
+            return;
+        }
+        requireCreator(team, user);
     }
 
     /** Разрешаем только http(s)-ссылки и файлы, загруженные через /api/files. */

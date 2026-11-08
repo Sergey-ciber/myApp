@@ -47,8 +47,11 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  // Флаг из сессии (JWT/UserResponse) используется для отрисовки кнопок управления.
+  const isSuperAdmin = user?.role === 'SUPERADMIN'
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, isSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   )

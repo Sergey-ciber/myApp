@@ -9,11 +9,11 @@ export const fetchTeam = (teamId) => api.get(`/teams/${teamId}`).then((res) => r
 /** Создать команду: { name, avatarUrl }. Создатель становится администратором. */
 export const createTeam = (team) => api.post('/teams', team).then((res) => res.data)
 
-/** Изменить название и/или аватар команды (только создатель/администратор). */
+/** Изменить название и/или аватар команды (создатель или супер-администратор). */
 export const updateTeam = (teamId, team) =>
   api.put(`/teams/${teamId}`, team).then((res) => res.data)
 
-/** Удалить команду вместе с составом и приглашениями (только создатель). */
+/** Удалить команду вместе с составом и приглашениями (создатель или супер-администратор). */
 export const deleteTeam = (teamId) => api.delete(`/teams/${teamId}`)
 
 /** Загрузить аватар команды и получить публичный URL. */

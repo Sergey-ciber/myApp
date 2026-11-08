@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ConfirmDialog from '../ConfirmDialog'
 import { membersLabel, winsLabel } from '../../utils/plural'
+import { useAuth } from '../../context/AuthContext'
 import TeamAvatar from './TeamAvatar'
 
 const placeLabel = (place) => {
@@ -17,8 +18,14 @@ export default function TeamCard({ team, place, onEdit, onInvite, onLeave, onDel
   const [leaving, setLeaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
+  const { isSuperAdmin } = useAuth()
 
   const isAdmin = team.currentUserCreator
+  // Создатель и супер-администратор могут редактировать/удалять команду.
+  // Приглашать участников по-прежнему может только создатель.
+  const canEdit = isAdmin || isSuperAdmin
+  const canDelete = isAdmin || isSuperAdmin
+  const canInvite = isAdmin
   const isMember = team.currentUserMember && !isAdmin
   const openTeam = () => navigate(`/teams/${team.id}`)
 
@@ -70,6 +77,9 @@ export default function TeamCard({ team, place, onEdit, onInvite, onLeave, onDel
             <div className="team-card-name-row">
               <h2>{team.name}</h2>
               {isAdmin && <span className="team-admin-badge">Админ</span>}
+              {isSuperAdmin && !isAdmin && (
+                <span className="team-admin-badge team-superadmin-badge">Super Admin</span>
+              )}
             </div>
             <div className="team-card-meta">
               <span className="team-rating">🏆 {winsLabel(team.wins)}</span>
@@ -80,21 +90,23 @@ export default function TeamCard({ team, place, onEdit, onInvite, onLeave, onDel
         </div>
 
         <div className="team-card-actions" onClick={(event) => event.stopPropagation()}>
-          {isAdmin && (
-            <>
-              <button type="button" className="btn btn-secondary btn-small"
-                      onClick={() => onEdit(team)}>
-                Редактировать
-              </button>
-              <button type="button" className="btn btn-primary btn-small"
-                      onClick={() => onInvite(team)}>
-                Пригласить пользователя
-              </button>
-              <button type="button" className="btn btn-outline-danger btn-small"
-                      onClick={() => setConfirm({ type: 'delete' })}>
-                Удалить
-              </button>
-            </>
+          {canEdit && (
+            <button type="button" className="btn btn-secondary btn-small"
+                    onClick={() => onEdit(team)}>
+              Редактировать
+            </button>
+          )}
+          {canInvite && (
+            <button type="button" className="btn btn-primary btn-small"
+                    onClick={() => onInvite(team)}>
+              Пригласить пользователя
+            </button>
+          )}
+          {canDelete && (
+            <button type="button" className="btn btn-outline-danger btn-small"
+                    onClick={() => setConfirm({ type: 'delete' })}>
+              Удалить
+            </button>
           )}
           {isMember && (
             <button type="button" className="btn btn-outline-danger btn-small"
@@ -126,8 +138,8 @@ export default function TeamCard({ team, place, onEdit, onInvite, onLeave, onDel
       {confirm?.type === 'delete' && (
         <ConfirmDialog
           title="Удалить команду"
-          message={<>Удалить команду «<strong>{team.name}</strong>»?</>}
-          hint="Команда, её состав и приглашения будут удалены без возможности восстановления."
+          message="Вы уверены, что хотите удалить команду? Это действие необратимо"
+          hint={<>Команда «<strong>{team.name}</strong>», её состав и приглашения будут удалены.</>}
           confirmLabel="Удалить"
           busyLabel="Удаление…"
           errorMessage="Не удалось удалить команду"

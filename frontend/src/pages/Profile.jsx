@@ -3,7 +3,7 @@ import api, { apiMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
 export default function Profile() {
-  const { user, setUser } = useAuth()
+  const { user, setUser, isSuperAdmin } = useAuth()
   const [fullName, setFullName] = useState(user?.fullName || '')
   const [email, setEmail] = useState(user?.email || '')
   const [message, setMessage] = useState(null)
@@ -55,7 +55,10 @@ export default function Profile() {
   return (
     <div className="page page-narrow">
       <div className="page-header">
-        <h1>Настройки профиля</h1>
+        <h1>
+          Настройки профиля
+          {isSuperAdmin && <span className="role-badge role-badge-superadmin">Super Admin</span>}
+        </h1>
       </div>
 
       <div className="profile-card">

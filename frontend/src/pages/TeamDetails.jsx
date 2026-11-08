@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiMessage } from '../api/client'
-import { fetchTeam, leaveTeam, removeTeamMember } from '../api/teams'
+import { deleteTeam, fetchTeam, leaveTeam, removeTeamMember } from '../api/teams'
 import ConfirmDialog from '../components/ConfirmDialog'
 import InviteModal from '../components/teams/InviteModal'
 import TeamAvatar from '../components/teams/TeamAvatar'
 import TeamFormModal from '../components/teams/TeamFormModal'
+import { useAuth } from '../context/AuthContext'
 import { gamesWord, membersLabel, membersWord, winsWord } from '../utils/plural'
 
 const formatDate = (value) => {
@@ -27,6 +28,7 @@ const roleLabel = (member, creatorId) => {
 export default function TeamDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isSuperAdmin } = useAuth()
   const [team, setTeam] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -73,6 +75,11 @@ export default function TeamDetails() {
     navigate('/teams')
   }
 
+  const confirmDelete = async () => {
+    await deleteTeam(team.id)
+    navigate('/teams')
+  }
+
   const backLink = <Link to="/teams" className="back-link">← Назад к командам</Link>
 
   if (loading) {
@@ -97,7 +104,9 @@ export default function TeamDetails() {
     )
   }
 
-  const canManage = team.currentUserCreator
+  const canManage = team.currentUserCreator || isSuperAdmin
+  // Приглашать и исключать участников по-прежнему может только создатель.
+  const canManageMembers = team.currentUserCreator
   const canLeave = team.currentUserMember && !team.currentUserCreator
   const leaveHint = team.membersCount > 1
     ? 'Вы сможете вернуться, если получите новое приглашение.'
@@ -126,7 +135,7 @@ export default function TeamDetails() {
               Редактировать команду
             </button>
           )}
-          {canManage && (
+          {canManageMembers && (
             <button type="button" className="btn btn-secondary" onClick={() => setInviting(true)}>
               Пригласить пользователя
             </button>
@@ -135,6 +144,12 @@ export default function TeamDetails() {
             <button type="button" className="btn btn-outline-danger"
                     onClick={() => setConfirm({ type: 'leave' })}>
               Покинуть команду
+            </button>
+          )}
+          {canManage && (
+            <button type="button" className="btn btn-outline-danger"
+                    onClick={() => setConfirm({ type: 'delete' })}>
+              Удалить команду
             </button>
           )}
         </div>
@@ -170,7 +185,7 @@ export default function TeamDetails() {
             <h2>Участники команды</h2>
             <p>{membersLabel(team.membersCount)}</p>
           </div>
-          {canManage && (
+          {canManageMembers && (
             <button type="button" className="btn btn-secondary btn-small"
                     onClick={() => setInviting(true)}>
               + Пригласить
@@ -195,7 +210,7 @@ export default function TeamDetails() {
                 {member.joinedAt && (
                   <span className="team-detail-joined">с {formatDate(member.joinedAt)}</span>
                 )}
-                {canManage && !isCreator && (
+                {canManageMembers && !isCreator && (
                   <button type="button" className="btn btn-ghost btn-small team-remove"
                           onClick={() => setConfirm({ type: 'remove', member })}>
                     Исключить
@@ -237,6 +252,19 @@ export default function TeamDetails() {
           busyLabel="Выход…"
           errorMessage="Не удалось покинуть команду"
           onConfirm={confirmLeave}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {confirm?.type === 'delete' && (
+        <ConfirmDialog
+          title="Удалить команду"
+          message="Вы уверены, что хотите удалить команду? Это действие необратимо"
+          hint={<>Команда «<strong>{team.name}</strong>», её состав и приглашения будут удалены.</>}
+          confirmLabel="Удалить"
+          busyLabel="Удаление…"
+          errorMessage="Не удалось удалить команду"
+          onConfirm={confirmDelete}
           onClose={() => setConfirm(null)}
         />
       )}

@@ -118,6 +118,24 @@ body {
 .navbar-username { font-size: 14px; }
 .navbar-profile:hover .navbar-username { text-decoration: underline; }
 
+/* ---------- Role badges ---------- */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.role-badge-superadmin {
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
 /* ---------- Avatars ---------- */
 .avatar { border-radius: 50%; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; }
 .avatar-sm { width: 32px; height: 32px; }
@@ -2008,6 +2026,10 @@ padding-bottom: 10px;
   color: #7a5a00;
   font-size: 11px;
   font-weight: 700;
+}
+.team-superadmin-badge {
+  background: #ede9fe;
+  color: #5b21b6;
 }
 .team-rating { font-size: 14px; font-weight: 700; color: #e6d7cd; }
 .team-card-meta {

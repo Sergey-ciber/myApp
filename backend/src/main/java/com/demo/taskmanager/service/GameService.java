@@ -25,6 +25,7 @@ import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.entity.UserProgress;
+import com.demo.taskmanager.entity.UserRole;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -998,11 +999,16 @@ public class GameService {
                 .orElse(null);
     }
 
-    /** Редактировать и удалять игру может только её создатель. */
+    /** Редактировать и удалять игру может её создатель или супер-администратор. */
     private void requireCreator(Game game, User user) {
-        if (user == null || game.getCreator() == null
-                || !game.getCreator().getId().equals(user.getId())) {
-            throw new ForbiddenException("Изменять игру может только её создатель");
+        if (user == null) {
+            throw new ForbiddenException("Изменять игру может только её создатель или супер-администратор");
+        }
+        if (user.getRole() == UserRole.SUPERADMIN) {
+            return;
+        }
+        if (game.getCreator() == null || !game.getCreator().getId().equals(user.getId())) {
+            throw new ForbiddenException("Изменять игру может только её создатель или супер-администратор");
         }
     }
 
