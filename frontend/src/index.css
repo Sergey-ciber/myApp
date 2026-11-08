@@ -1087,7 +1087,7 @@ padding-bottom: 10px;
   height: auto;
   display: block;
 }
-.assoc-normal-question { margin-bottom: 10px; font-size: 20px; color: #efdcc3; text-align: left; white-space: pre-wrap; word-break: break-word; }
+.assoc-normal-question { margin-bottom: 10px; font-size: 20px; color: #efdcc3; text-align: left; white-space: pre-wrap; word-break: break-word; user-select: none}
 .assoc-normal-progress { margin: 0; font-size: 13px; color: #a0a0b0; }
 .assoc-normal-progress strong { color: #ff8c00; }
 .assoc-normal-answer { display: flex; gap: 10px; width: 100%; align-items: center; flex-wrap: wrap; }
