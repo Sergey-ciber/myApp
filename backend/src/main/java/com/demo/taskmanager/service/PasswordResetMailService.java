@@ -37,11 +37,40 @@ public class PasswordResetMailService {
     public PasswordResetMailService(ObjectProvider<JavaMailSender> mailSenderProvider,
                                     @Value("${spring.mail.host:}") String mailHost,
                                     @Value("${app.password-reset.from:no-reply@localhost}") String from,
-                                    @Value("${app.password-reset.base-url:http://localhost:5173}") String baseUrl) {
+                                    @Value("${app.password-reset.base-url:}") String baseUrl,
+                                    @Value("${app.cors.allowed-origins:}") String corsOrigins) {
         this.mailSenderProvider = mailSenderProvider;
         this.mailHost = mailHost;
         this.from = from;
-        this.baseUrl = baseUrl;
+        this.baseUrl = resolveBaseUrl(baseUrl, corsOrigins);
+    }
+
+    /**
+     * Публичный адрес приложения для ссылки в письме.
+     *
+     * APP_BASE_URL может быть не задан или пуст (например, пустая переменная
+     * из docker compose) — тогда берём первый адрес из CORS_ORIGINS. Список
+     * origins через запятую в ссылку попасть не должен, поэтому используем
+     * только первый элемент.
+     */
+    private static String resolveBaseUrl(String baseUrl, String corsOrigins) {
+        String resolved = firstNonBlank(baseUrl, corsOrigins, "http://localhost:5173");
+        return resolved.replaceAll("/+$", "");
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value == null) {
+                continue;
+            }
+            for (String part : value.split(",")) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    return trimmed;
+                }
+            }
+        }
+        return "http://localhost:5173";
     }
 
     @Async("mailTaskExecutor")
@@ -56,8 +85,7 @@ public class PasswordResetMailService {
             return;
         }
 
-        String link = baseUrl.replaceAll("/+$", "")
-                + "/reset-password?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+        String link = baseUrl + "/reset-password?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);

@@ -32,6 +32,8 @@ services:
       # Публичный адрес приложения (Origin запросов из браузера).
       # Без него POST/PUT/PATCH будут отклоняться с 403.
       CORS_ORIGINS: ${CORS_ORIGINS:?Задайте CORS_ORIGINS в .env}
+      # Публичный адрес для ссылки в письме. Пусто — берётся первый адрес из CORS_ORIGINS.
+      APP_BASE_URL: ${APP_BASE_URL:-}
       UPLOAD_DIR: /app/uploads
       # SMTP для писем восстановления пароля. Пустой MAIL_HOST отключает отправку.
       MAIL_HOST: ${MAIL_HOST:-}

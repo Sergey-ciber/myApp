@@ -341,6 +341,7 @@ nano .env
 | `POSTGRES_PASSWORD` | надёжный пароль БД |
 | `JWT_SECRET` | случайные ≥32 символа: `openssl rand -base64 48` |
 | `CORS_ORIGINS` | **публичный адрес приложения**, например `http://203.0.113.10` или `https://tasks.example.com` |
+| `APP_BASE_URL` | публичный адрес для ссылки в письме; пусто — берётся первый адрес из `CORS_ORIGINS` |
 | `HTTP_PORT` | порт nginx на хосте (по умолчанию 80) |
 | `MAIL_HOST` | SMTP-сервер для писем восстановления пароля; пусто — отправка отключена |
 | `MAIL_PORT` | порт SMTP (587 или 465) |
@@ -352,7 +353,8 @@ nano .env
 `Origin` для POST/PUT/PATCH, и если он не совпадёт, запросы вернут **403**
 (проверено). Указывайте схему и домен ровно так, как их видит пользователь.
 Этот же адрес используется как база для ссылки сброса пароля, если не задан
-`APP_BASE_URL`.
+`APP_BASE_URL`. Задавайте `APP_BASE_URL`, если письма должны вести на другой
+адрес, например на HTTPS-домен за внешним прокси.
 
 Письма восстановления пароля отправляются через SMTP. Примеры настроек:
 
@@ -382,6 +384,9 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml ps          # статусы
 docker compose -f docker-compose.prod.yml logs -f backend
 ```
+
+При первом запуске на существующей базе примените миграцию email (см.
+«Заметки по эксплуатации»); `deploy/deploy.sh` делает это автоматически.
 
 Приложение доступно на `http://SERVER_IP:${HTTP_PORT}`. Порт 8080 наружу не
 публикуется — backend доступен только из внутренней сети Docker, `/api`
@@ -443,10 +448,16 @@ tasks.example.com {
   `team_session_presence`, `team_session_progress` и `team_session_events`
   остались FK на неиспользуемую таблицу `team_game_sessions`. Лечится разовой
   миграцией `deploy/fix-legacy-team-game-session-fks.sql` (идемпотентна).
-- **Уникальный email.** На существующей базе перед первым запуском версии с
-  восстановлением пароля выполните `deploy/fix-user-emails.sql` (идемпотентен):
-  он превращает пустые email в `NULL` и создаёт регистронезависимый уникальный
-  индекс. Если в базе уже есть дубликаты email, устраните их вручную.
+- **Уникальный email.** `deploy/deploy.sh` автоматически применяет
+  `deploy/fix-user-emails.sql` после health-check (скрипт идемпотентен):
+  пустые email превращаются в `NULL`, создаётся регистронезависимый уникальный
+  индекс. При ручном выкате без скрипта выполните команду из шапки файла.
+  Если в базе уже есть дубликаты email, деплой остановится с понятной ошибкой —
+  устраните их и повторите.
+- **Письма восстановления не приходят.** Проверьте, что в `.env` задан
+  `MAIL_HOST` (иначе отправка отключена, в логе будет только предупреждение),
+  а `APP_BASE_URL` или `CORS_ORIGINS` указывают на публичный адрес — из него
+  строится ссылка. Логи: `docker compose -f docker-compose.prod.yml logs backend`.
 
 ## Деплой из git (CI/CD)
 
@@ -515,8 +526,9 @@ Secrets:
 
 Необязательные: секрет `SSH_PORT` (по умолчанию 22) и переменные (`Variables`)
 `HTTP_PORT` (по умолчанию 80), `APP_DIR` (по умолчанию `/opt/taskmanager`),
-`REPO_URL` (если репозиторий не на github.com), `MAIL_HOST`, `MAIL_PORT`,
-`MAIL_FROM`, `MAIL_SMTP_STARTTLS`, `MAIL_SMTP_SSL`.
+`REPO_URL` (если репозиторий не на github.com), `APP_BASE_URL` (публичный адрес
+для ссылки в письме), `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`,
+`MAIL_SMTP_STARTTLS`, `MAIL_SMTP_SSL`.
 
 ### Шаг 5. Выкат
 

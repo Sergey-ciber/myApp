@@ -16,6 +16,7 @@
 #   POSTGRES_PASSWORD  пароль БД (обязателен)
 #   JWT_SECRET         секрет подписи JWT (обязателен)
 #   CORS_ORIGINS       публичный адрес приложения (обязателен)
+#   APP_BASE_URL       публичный адрес для ссылки в письме (по умолчанию — CORS_ORIGINS)
 #   MAIL_HOST          SMTP-сервер для писем восстановления пароля (необязателен)
 #   MAIL_PORT          порт SMTP (по умолчанию 587)
 #   MAIL_USERNAME      логин SMTP (необязателен)
@@ -50,6 +51,7 @@ if [ -f "$APP_DIR/.env" ]; then
   load_env POSTGRES_PASSWORD
   load_env JWT_SECRET
   load_env CORS_ORIGINS
+  load_env APP_BASE_URL
   load_env MAIL_HOST
   load_env MAIL_PORT
   load_env MAIL_USERNAME
@@ -73,6 +75,10 @@ command -v git >/dev/null 2>&1 || fail "git не установлен"
 [ -n "${POSTGRES_PASSWORD:-}" ] || fail "Не задан POSTGRES_PASSWORD"
 [ -n "${JWT_SECRET:-}" ]        || fail "Не задан JWT_SECRET"
 [ -n "${CORS_ORIGINS:-}" ]      || fail "Не задан CORS_ORIGINS"
+
+if [ -z "${MAIL_HOST:-}" ]; then
+  log "ВНИМАНИЕ: MAIL_HOST не задан — письма восстановления пароля отправляться не будут"
+fi
 
 # ---------- код ----------
 if [ ! -d "$APP_DIR/.git" ]; then
@@ -111,6 +117,7 @@ POSTGRES_USER=$POSTGRES_USER
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
 CORS_ORIGINS=$CORS_ORIGINS
+APP_BASE_URL=${APP_BASE_URL:-}
 HTTP_PORT=$HTTP_PORT
 MAIL_HOST=${MAIL_HOST:-}
 MAIL_PORT=${MAIL_PORT:-587}
@@ -148,6 +155,17 @@ if [ -z "$ok" ]; then
   log "Проверка не прошла (страница: ${page:-нет ответа}, /api: ${api:-нет ответа})"
   docker compose -f "$COMPOSE_FILE" logs --tail=80
   fail "Деплой завершился с ошибкой, приложение не отвечает"
+fi
+
+# ---------- миграция БД ----------
+# Идемпотентно: пустые email -> NULL и регистронезависимый уникальный индекс.
+# Запускаем после health-check, потому что backend уже создал колонки email,
+# reset_token и reset_token_expiry через ddl-auto=update.
+log "Проверяю уникальность email (deploy/fix-user-emails.sql)"
+if ! docker compose -f "$COMPOSE_FILE" exec -T db \
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      < deploy/fix-user-emails.sql; then
+  fail "Не удалось применить deploy/fix-user-emails.sql: скорее всего, в users есть дубликаты email (без учёта регистра). Устраните их и повторите деплой"
 fi
 
 log "Готово. Приложение доступно на порту $HTTP_PORT"

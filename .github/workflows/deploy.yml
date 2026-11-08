@@ -58,6 +58,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
           MAIL_HOST: ${{ vars.MAIL_HOST }}
           MAIL_PORT: ${{ vars.MAIL_PORT }}
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
@@ -79,6 +80,7 @@ jobs:
             printf 'export POSTGRES_PASSWORD=%q\n' "$POSTGRES_PASSWORD"
             printf 'export JWT_SECRET=%q\n'        "$JWT_SECRET"
             printf 'export CORS_ORIGINS=%q\n'      "$CORS_ORIGINS"
+            printf 'export APP_BASE_URL=%q\n'      "${APP_BASE_URL:-}"
             printf 'export MAIL_HOST=%q\n'         "${MAIL_HOST:-}"
             printf 'export MAIL_PORT=%q\n'         "${MAIL_PORT:-}"
             printf 'export MAIL_USERNAME=%q\n'     "${MAIL_USERNAME:-}"
