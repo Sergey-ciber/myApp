@@ -16,6 +16,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     @Query("select distinct t from Team t order by t.wins desc, t.createdAt asc, t.id asc")
     List<Team> findAllWithDetails();
 
+    /** Команды, созданные пользователем: при удалении им нужно передать нового создателя. */
+    List<Team> findByCreatorId(Long creatorId);
+
     /** Начислить +1 каждой команде, в которой состоит победитель. */
     @Modifying
     @Query("update Team t set t.wins = t.wins + 1 " +

@@ -2468,3 +2468,65 @@ padding-bottom: 10px;
   border: 0;
 }
 
+/* ---------- ╨Я╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╨╕ (╨┐╨░╨╜╨╡╨╗╤М ╤Б╤Г╨┐╨╡╤А-╨░╨┤╨╝╨╕╨╜╨╕╤Б╤В╤А╨░╤В╨╛╤А╨░) ---------- */
+.users-subtitle { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
+.users-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.users-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.users-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+.users-table th {
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.users-table td { padding: 12px 14px; border-bottom: 1px solid #eef1f6; vertical-align: middle; }
+.users-table tbody tr:last-child td { border-bottom: none; }
+.users-table tbody tr.is-me { background: #f2f8ff; }
+.users-cell-user { display: flex; align-items: center; gap: 10px; }
+.users-name { font-weight: 600; }
+.users-me-badge {
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4f8f;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.users-role {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.users-role.is-superadmin { background: #ffe9d6; color: #b45309; }
+.users-col-actions { width: 170px; text-align: right; }
+.users-actions { text-align: right; }
+.users-delete { white-space: nowrap; }
+.users-delete:disabled { opacity: 0.45; }
+

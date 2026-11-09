@@ -39,6 +39,14 @@ export default function Navbar() {
             >
               Команды
             </NavLink>
+            {isSuperAdmin && (
+              <NavLink
+                to="/users"
+                className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
+              >
+                Пользователи
+              </NavLink>
+            )}
           </>
         )}
       </div>

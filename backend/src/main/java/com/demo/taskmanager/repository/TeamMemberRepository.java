@@ -3,11 +3,19 @@ package com.demo.taskmanager.repository;
 import com.demo.taskmanager.entity.TeamMember;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
+
+    /** Убрать пользователя из всех команд. */
+    @Modifying
+    @Query("delete from TeamMember m where m.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 
     @EntityGraph(attributePaths = {"user", "team"})
     Optional<TeamMember> findByTeamIdAndUserId(Long teamId, Long userId);

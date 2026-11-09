@@ -11,6 +11,7 @@ import Profile from './pages/Profile'
 import Associations from './pages/Associations'
 import Teams from './pages/Teams'
 import TeamDetails from './pages/TeamDetails'
+import Users from './pages/Users'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/associations" element={<Protected><Associations /></Protected>} />
         <Route path="/teams" element={<Protected><Teams /></Protected>} />
         <Route path="/teams/:id" element={<Protected><TeamDetails /></Protected>} />
+        <Route path="/users" element={<Protected><Users /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Routes>

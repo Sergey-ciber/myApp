@@ -13,6 +13,11 @@ public interface UserProgressRepository extends JpaRepository<UserProgress, Long
     /** Прогресс ищется строго по паре «пользователь + игра» — чужие данные недоступны. */
     Optional<UserProgress> findByGameIdAndUserId(Long gameId, Long userId);
 
+    /** Удалить весь прогресс пользователя во всех играх. */
+    @Modifying
+    @Query("delete from UserProgress p where p.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
+
     /**
      * Создаёт пустой прогресс, если его ещё нет.
      * ON CONFLICT защищает от гонки двух одновременных открытий игры.

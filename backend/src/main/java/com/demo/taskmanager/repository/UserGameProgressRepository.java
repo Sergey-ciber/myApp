@@ -14,4 +14,9 @@ public interface UserGameProgressRepository extends JpaRepository<UserGameProgre
     @Modifying
     @Query("delete from UserGameProgress p where p.user.id = :userId and p.game.id = :gameId")
     void deleteByUserIdAndGameId(@Param("userId") Long userId, @Param("gameId") Long gameId);
+
+    /** Удалить автосохранения пользователя во всех играх. */
+    @Modifying
+    @Query("delete from UserGameProgress p where p.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

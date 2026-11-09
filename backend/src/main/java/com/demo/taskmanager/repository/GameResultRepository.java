@@ -3,6 +3,7 @@ package com.demo.taskmanager.repository;
 import com.demo.taskmanager.entity.GameResult;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,6 +11,11 @@ import java.util.Collection;
 import java.util.List;
 
 public interface GameResultRepository extends JpaRepository<GameResult, Long> {
+
+    /** Удалить все результаты прохождений пользователя. */
+    @Modifying
+    @Query("delete from GameResult r where r.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 
     /** Все попытки игры: лучшие сверху, при равенстве — кто показал время раньше. */
     @EntityGraph(attributePaths = "user")
