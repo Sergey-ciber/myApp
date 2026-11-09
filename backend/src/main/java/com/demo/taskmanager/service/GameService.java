@@ -25,7 +25,6 @@ import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.entity.UserProgress;
-import com.demo.taskmanager.entity.UserRole;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -78,6 +77,10 @@ public class GameService {
     private final com.demo.taskmanager.repository.TeamHintStateRepository teamHintStateRepository;
     private final com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository;
     private final com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository;
+    private final com.demo.taskmanager.repository.TeamGameSessionRepository teamGameSessionRepository;
+    private final com.demo.taskmanager.repository.TeamSessionPresenceRepository teamSessionPresenceRepository;
+    private final com.demo.taskmanager.repository.TeamSessionEventRepository teamSessionEventRepository;
+    private final com.demo.taskmanager.repository.TeamLevelStatRepository teamLevelStatRepository;
 
     public GameService(GameRepository gameRepository,
                        GameResultRepository resultRepository,
@@ -89,7 +92,11 @@ public class GameService {
                        com.demo.taskmanager.repository.TeamQuestionStateRepository teamQuestionStateRepository,
                        com.demo.taskmanager.repository.TeamHintStateRepository teamHintStateRepository,
                        com.demo.taskmanager.repository.TeamMemberRepository teamMemberRepository,
-                       com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository) {
+                       com.demo.taskmanager.repository.UserGameProgressRepository userGameProgressRepository,
+                       com.demo.taskmanager.repository.TeamGameSessionRepository teamGameSessionRepository,
+                       com.demo.taskmanager.repository.TeamSessionPresenceRepository teamSessionPresenceRepository,
+                       com.demo.taskmanager.repository.TeamSessionEventRepository teamSessionEventRepository,
+                       com.demo.taskmanager.repository.TeamLevelStatRepository teamLevelStatRepository) {
         this.gameRepository = gameRepository;
         this.resultRepository = resultRepository;
         this.progressRepository = progressRepository;
@@ -101,11 +108,23 @@ public class GameService {
         this.teamHintStateRepository = teamHintStateRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userGameProgressRepository = userGameProgressRepository;
+        this.teamGameSessionRepository = teamGameSessionRepository;
+        this.teamSessionPresenceRepository = teamSessionPresenceRepository;
+        this.teamSessionEventRepository = teamSessionEventRepository;
+        this.teamLevelStatRepository = teamLevelStatRepository;
     }
 
     @Transactional(readOnly = true)
     public List<GameSummary> listGames(User user) {
         List<Game> games = gameRepository.findAllByOrderByCreatedAtDesc();
+        // Супер-администратор управляет всеми играми, включая командные (visibility=TEAM),
+        // поэтому фильтровать список для него нельзя.
+        if (user != null && user.isSuperAdmin()) {
+            return games.stream()
+                    .filter(game -> game != null)
+                    .map(GameSummary::from)
+                    .toList();
+        }
         if (user == null) {
             return games.stream()
                     .filter(game -> game == null || !"TEAM".equalsIgnoreCase(game.getVisibility()))
@@ -827,6 +846,21 @@ public class GameService {
     public void deleteGame(Long id, User currentUser) {
         Game game = findGame(id);
         requireCreator(game, currentUser);
+        // Сначала удаляем сессии командных игр и их служебные записи:
+        // team_session_progress ссылается на game_levels и не даст удалить игру.
+        List<com.demo.taskmanager.entity.TeamGameSession> sessions =
+                teamGameSessionRepository.findByGameId(id);
+        for (com.demo.taskmanager.entity.TeamGameSession session : sessions) {
+            teamSessionPresenceRepository.deleteBySessionId(session.getId());
+            teamSessionProgressRepository.deleteBySessionId(session.getId());
+            teamSessionEventRepository.deleteBySessionId(session.getId());
+            teamQuestionStateRepository.deleteBySessionId(session.getId());
+            teamHintStateRepository.deleteBySessionId(session.getId());
+            teamLevelStatRepository.deleteBySessionId(session.getId());
+        }
+        if (!sessions.isEmpty()) {
+            teamGameSessionRepository.deleteAll(sessions);
+        }
         boolean wasActive = game.isActive();
         gameRepository.delete(game);
         // если удалили активную игру — активной становится самая свежая из оставшихся
@@ -1004,7 +1038,7 @@ public class GameService {
         if (user == null) {
             throw new ForbiddenException("Изменять игру может только её создатель или супер-администратор");
         }
-        if (user.getRole() == UserRole.SUPERADMIN) {
+        if (user.isSuperAdmin()) {
             return;
         }
         if (game.getCreator() == null || !game.getCreator().getId().equals(user.getId())) {

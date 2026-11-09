@@ -22,7 +22,7 @@ public class TeamSessionProgress {
     private String solvedData = "{}";
 
     @Column(name = "penalty_time")
-    private double penaltyTime = 0.0;
+    private Double penaltyTime = 0.0;
 
     public Long getId() {
         return id;
@@ -57,7 +57,7 @@ public class TeamSessionProgress {
     }
 
     public double getPenaltyTime() {
-        return penaltyTime;
+        return penaltyTime == null ? 0.0 : penaltyTime;
     }
 
     public void setPenaltyTime(double penaltyTime) {

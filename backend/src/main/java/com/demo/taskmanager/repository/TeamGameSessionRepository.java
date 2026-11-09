@@ -12,6 +12,7 @@ import java.util.Optional;
 
 public interface TeamGameSessionRepository extends JpaRepository<TeamGameSession, Long> {
     List<TeamGameSession> findByTeamIdOrderByCreatedAtDesc(Long teamId);
+    List<TeamGameSession> findByGameId(Long gameId);
     Optional<TeamGameSession> findTopByTeamIdAndGameIdOrderByCreatedAtDesc(Long teamId, Long gameId);
 
     /** Активные сессии команды — их показываем в списке игр как «Активные игры команды». */

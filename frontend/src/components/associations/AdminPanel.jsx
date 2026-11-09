@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { apiMessage } from '../../api/client'
 import { activateGame, createGame, deleteGame, fetchGameForEdit, updateGame, uploadGameMedia } from '../../api/games'
 import ConfirmDialog from '../ConfirmDialog'
+import { useAuth } from '../../context/AuthContext'
 import PyramidHead from './PyramidHead'
 import {
   COLUMN_SIZES,
@@ -197,7 +198,10 @@ function MediaUploader({ urls, onChange, max = 10, accept = 'image/*,audio/*,vid
   )
 }
 
-export default function AdminPanel({ games, onReload, onPlay, currentUserId, isSuperAdmin = false }) {
+export default function AdminPanel({ games, onReload, onPlay, currentUserId, isSuperAdmin: isSuperAdminProp = false }) {
+  const { isSuperAdmin: isSuperAdminContext } = useAuth()
+  // Роль берём из AuthContext, чтобы флаг не терялся при передаче через props.
+  const isSuperAdmin = isSuperAdminContext || isSuperAdminProp
   const [view, setView] = useState('all')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -224,7 +228,9 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
   const [sortBy, setSortBy] = useState('date')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const isOwn = (game) => game.creatorId != null && game.creatorId === currentUserId
+  const isOwn = (game) =>
+    game.creatorId != null && currentUserId != null
+    && String(game.creatorId) === String(currentUserId)
   // Супер-администратор может управлять любой игрой, остальные — только своей.
   const canManage = (game) => isOwn(game) || isSuperAdmin
   const myGames = useMemo(() => games.filter(isOwn), [games, currentUserId])
@@ -950,8 +956,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
         {deleting && (
           <ConfirmDialog
             title="Удаление игры"
-            message={<>Удалить игру «<strong>{deleting.title}</strong>»?</>}
-            hint="Вместе с игрой будут удалены все уровни, подсказки и результаты."
+            message="Вы уверены, что хотите удалить эту игру? Это действие необратимо"
+            hint={`Игра «${deleting.title}». Вместе с ней будут удалены все уровни, подсказки и результаты.`}
             confirmLabel="Удалить игру"
             busyLabel="Удаление…"
             errorMessage="Не удалось удалить игру"
@@ -1337,8 +1343,8 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
       {deleting && (
         <ConfirmDialog
           title="Удаление игры"
-          message={<>Удалить игру «<strong>{deleting.title}</strong>»?</>}
-          hint="Вместе с игрой будут удалены все уровни, подсказки и результаты."
+          message="Вы уверены, что хотите удалить эту игру? Это действие необратимо"
+          hint={`Игра «${deleting.title}». Вместе с ней будут удалены все уровни, подсказки и результаты.`}
           confirmLabel="Удалить игру"
           busyLabel="Удаление…"
           errorMessage="Не удалось удалить игру"

@@ -11,7 +11,6 @@ import com.demo.taskmanager.entity.TeamInvitation;
 import com.demo.taskmanager.entity.TeamMember;
 import com.demo.taskmanager.entity.TeamRole;
 import com.demo.taskmanager.entity.User;
-import com.demo.taskmanager.entity.UserRole;
 import com.demo.taskmanager.exception.BadRequestException;
 import com.demo.taskmanager.exception.ForbiddenException;
 import com.demo.taskmanager.exception.NotFoundException;
@@ -365,7 +364,7 @@ public class TeamService {
         if (user == null) {
             throw new ForbiddenException("Действие доступно только создателю команды или супер-администратору");
         }
-        if (user.getRole() == UserRole.SUPERADMIN) {
+        if (user.isSuperAdmin()) {
             return;
         }
         requireCreator(team, user);
