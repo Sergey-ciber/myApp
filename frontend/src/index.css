@@ -2530,3 +2530,25 @@ padding-bottom: 10px;
 .users-delete { white-space: nowrap; }
 .users-delete:disabled { opacity: 0.45; }
 
+/* Уведомление о переходе на следующий уровень: крупное зелёное, по центру. */
+.assoc-level-toast {
+  top: 50%;
+  right: auto;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1200;
+  padding: 18px 30px;
+  border: 2px solid #7ee2b8;
+  border-radius: 14px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  pointer-events: none;
+  animation: assoc-level-toast-pop 0.2s ease-out;
+}
+@keyframes assoc-level-toast-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+

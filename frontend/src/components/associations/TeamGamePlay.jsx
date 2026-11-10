@@ -399,7 +399,7 @@ export default function TeamGamePlay({
                                 clearAnswerFeedback('answer')
                                 setPyramidFeedback(null)
                                 setSolvedPyramid({})
-                                showFlash('🎉 Уровень пройден! Открыт следующий уровень')
+                                showFlash('Уровень пройден!', 2000)
                                 break
                             case 'sync_state':
                                 if (payload.state) applyState(payload.state)
@@ -909,7 +909,7 @@ export default function TeamGamePlay({
                         elapsedSeconds: gameElapsedSec,
                     }}
                     onLevelComplete={(payload) => {
-                        showFlash('🎉 Уровень пройден! Открыт следующий уровень')
+                        showFlash('Уровень пройден!', 2000)
                     }}
                     onSave={(progressData) => {
                         // Сохраняем solvedPyramid локально

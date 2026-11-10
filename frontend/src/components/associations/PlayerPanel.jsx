@@ -86,10 +86,28 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [teamError, setTeamError] = useState('')
   const [showQuitModal, setShowQuitModal] = useState(false)
   const [quitting, setQuitting] = useState(false)
+  // Зелёное уведомление о пройденном уровне: показываем 2 секунды,
+  // затем переходим к следующему уровню или к итогам.
+  const [levelCompleteNotice, setLevelCompleteNotice] = useState(false)
+  const levelNoticeTimer = useRef(null)
   // Проверен ли id командной сессии (защита от обращения к несуществующей сессии)
   const [teamSessionChecked, setTeamSessionChecked] = useState(false)
   // id уже проверенной сессии — чтобы не проверять одну и ту же сессию снова
   const checkedSessionRef = useRef(null)
+
+  /** Скрыть уведомление о пройденном уровне и отменить отложенный переход. */
+  const clearLevelCompleteNotice = useCallback(() => {
+    if (levelNoticeTimer.current) {
+      clearTimeout(levelNoticeTimer.current)
+      levelNoticeTimer.current = null
+    }
+    setLevelCompleteNotice(false)
+  }, [])
+
+  // При размонтировании не оставляем висящий таймер перехода.
+  useEffect(() => () => {
+    if (levelNoticeTimer.current) clearTimeout(levelNoticeTimer.current)
+  }, [])
 
   /**
    * Пользователь известен не сразу: при первом рендере currentUserId может быть
@@ -330,6 +348,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   /** Начать игру с нуля: сбрасываем серверный прогресс и начинаем первый уровень. */
   const startPlaying = async () => {
     if (!game || starting) return
+    clearLevelCompleteNotice()
     setStarting(true)
     setError('')
     try {
@@ -369,6 +388,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
    */
   const resumePlaying = async () => {
     if (!game || starting) return
+    clearLevelCompleteNotice()
     setStarting(true)
     setError('')
     try {
@@ -497,7 +517,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   }, [gameId, gameStarted, finished, scheduleSave])
 
   /** Завершение уровня: фиксируем статистику и переходим дальше или к итогам. */
-  const handleLevelComplete = (level, { netTime, penaltyTime = 0 }) => {
+  const handleLevelComplete = (level, { netTime, penaltyTime = 0, timedOut = false }) => {
     const net = Number(netTime) || 0
     const penalty = Number(penaltyTime) || 0
     const stat = { levelId: level.id, name: level.title, netTime: net, penaltyTime: penalty, totalTime: net + penalty }
@@ -506,28 +526,49 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     writePJson(pk('stats'), nextStats)
     const levels = game?.levels || []
     const isLast = currentLevelIndex >= levels.length - 1
-    if (isLast) {
-      const grandTotal = nextStats.reduce((sum, s) => sum + s.totalTime, 0)
-      setTotalTime(grandTotal)
-      setFinished(true)
-      setResultError('')
-      writeP(pk('total'), grandTotal); writeP(pk('finished'),'1')
-      submitResult(game.id, Math.max(1, Math.round(grandTotal)))
-        .then(() => loadLeaderboard(game.id))
-        .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
-      try { clearGameProgress(game.id).catch(() => {}) } catch {}
-    } else {
-      const nextIdx = currentLevelIndex + 1
-      setCurrentLevelIndex(nextIdx)
-      writeP(pk('level'), nextIdx)
-      writeP(pk('question'), null)
-      setSavedQuestionIndex(0)
-      gameStateRef.current = { ...gameStateRef.current, levelIndex: nextIdx, questionIndex: 0 }
+
+    /** Переход к следующему уровню или к экрану итогов. */
+    const goNext = () => {
+      if (isLast) {
+        const grandTotal = nextStats.reduce((sum, s) => sum + s.totalTime, 0)
+        setTotalTime(grandTotal)
+        setFinished(true)
+        setResultError('')
+        writeP(pk('total'), grandTotal); writeP(pk('finished'),'1')
+        submitResult(game.id, Math.max(1, Math.round(grandTotal)))
+          .then(() => loadLeaderboard(game.id))
+          .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
+        try { clearGameProgress(game.id).catch(() => {}) } catch {}
+      } else {
+        const nextIdx = currentLevelIndex + 1
+        setCurrentLevelIndex(nextIdx)
+        writeP(pk('level'), nextIdx)
+        writeP(pk('question'), null)
+        setSavedQuestionIndex(0)
+        gameStateRef.current = { ...gameStateRef.current, levelIndex: nextIdx, questionIndex: 0 }
+      }
     }
+
+    // При истечении времени уровень не «пройден» — переключаемся без уведомления.
+    if (timedOut) {
+      clearLevelCompleteNotice()
+      goNext()
+      return
+    }
+
+    // Даём игроку 2 секунды увидеть зелёное «Уровень пройден!» перед переходом.
+    setLevelCompleteNotice(true)
+    if (levelNoticeTimer.current) clearTimeout(levelNoticeTimer.current)
+    levelNoticeTimer.current = setTimeout(() => {
+      levelNoticeTimer.current = null
+      setLevelCompleteNotice(false)
+      goNext()
+    }, 2000)
   }
 
   /** Начать заново: сбрасываем прогресс и статистику. */
   const playAgain = async () => {
+    clearLevelCompleteNotice()
     try {
       await restartGame(game.id)
       try { await clearGameProgress(game.id) } catch {}
@@ -547,6 +588,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
 
   const confirmQuit = async () => {
     if (quitting) return
+    clearLevelCompleteNotice()
     setQuitting(true)
     try {
       if (teamMode && teamSessionId) {
@@ -714,6 +756,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
             />
           )}
         </>
+      )}
+
+      {levelCompleteNotice && (
+        <div className="assoc-toast assoc-level-toast" role="status" aria-live="polite">
+          Уровень пройден!
+        </div>
       )}
     </div>
   )
