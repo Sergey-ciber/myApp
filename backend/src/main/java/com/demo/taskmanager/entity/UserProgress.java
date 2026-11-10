@@ -39,6 +39,14 @@ public class UserProgress {
     @Column(name = "hint_prefixes", nullable = false, columnDefinition = "text default '{}'")
     private String hintPrefixes = "{}";
 
+    /**
+     * Сколько букв открыто подсказками в каждой ячейке: {"2:1":1,"2:2":2}.
+     * Нужно, чтобы каждая ячейка получала следующую букву при новом нажатии,
+     * даже если другие ячейки стали доступны позже.
+     */
+    @Column(name = "hints_applied", columnDefinition = "text")
+    private String hintsApplied = "{}";
+
     /** Момент старта текущей попытки — от него считается таймер. */
     @Column(name = "started_at", nullable = false)
     private Instant startedAt = Instant.now();
@@ -78,6 +86,9 @@ public class UserProgress {
 
     public String getHintPrefixes() { return hintPrefixes; }
     public void setHintPrefixes(String hintPrefixes) { this.hintPrefixes = hintPrefixes; }
+
+    public String getHintsApplied() { return hintsApplied; }
+    public void setHintsApplied(String hintsApplied) { this.hintsApplied = hintsApplied; }
 
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }

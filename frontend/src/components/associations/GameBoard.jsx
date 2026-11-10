@@ -67,6 +67,7 @@ export default function GameBoard({
   const [solved, setSolved] = useState(() => progress?.solved || {})
   const [hintLevel, setHintLevel] = useState(progress?.hintLevel || 0)
   const [hintPrefixes, setHintPrefixes] = useState(() => progress?.hintPrefixes || {})
+  const [hintsApplied, setHintsApplied] = useState(() => progress?.hintsApplied || {})
   const [takingHint, setTakingHint] = useState(false)
   const [hintNotice, setHintNotice] = useState(false)
   const hintWasAvailable = useRef(false)
@@ -92,6 +93,13 @@ export default function GameBoard({
       setSolved(progress.solved)
     }
   }, [progress?.solved])
+
+  /** Подтягиваем сохранённые подсказки (перезагрузка страницы, возврат в игру). */
+  useEffect(() => {
+    if (progress?.hintPrefixes) setHintPrefixes(progress.hintPrefixes)
+    if (progress?.hintsApplied) setHintsApplied(progress.hintsApplied)
+    if (progress?.hintLevel != null) setHintLevel(progress.hintLevel)
+  }, [progress?.hintPrefixes, progress?.hintsApplied, progress?.hintLevel])
 
   const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
   const remainingSeconds = Math.max(0, limitSeconds - elapsed)
@@ -148,15 +156,16 @@ export default function GameBoard({
     return hintPrefixes[cellKey(columnIndex, position)] || ''
   }
 
-  // время до каждой подсказки — из настроек уровня
-  const hintTriggerMinutes = (level.hints || []).map((hint) => hint.triggerTime)
-  const maxHintLevel = hintTriggerMinutes.length
-  const nextHintAt = hintLevel >= maxHintLevel
-    ? null
-    : Math.round(Number(hintTriggerMinutes[hintLevel]) * 60)
-  const hintAvailable = !timeUp && nextHintAt != null && nextHintAt < limitSeconds && elapsed >= nextHintAt
-  const hintSecondsLeft = nextHintAt == null ? 0 : Math.max(0, nextHintAt - elapsed)
-  const hintScheduled = !timeUp && nextHintAt != null && nextHintAt < limitSeconds
+  // Одна кнопка подсказки на уровень: количество нажатий равно числу
+  // подсказок, настроенных администратором. Кнопка появляется по самому
+  // раннему времени из настроек уровня.
+  const hintTriggerMinutes = (level.hints || []).map((hint) => Number(hint.triggerTime) || 0)
+  const totalHints = (level.hints || []).length
+  const hintsRemaining = Math.max(0, totalHints - hintLevel)
+  const hintUnlockAt = totalHints > 0 ? Math.round(Math.min(...hintTriggerMinutes) * 60) : null
+  const hintScheduled = !timeUp && hintUnlockAt != null && hintUnlockAt < limitSeconds
+  const hintAvailable = hintScheduled && hintsRemaining > 0 && elapsed >= hintUnlockAt
+  const hintSecondsLeft = hintUnlockAt == null ? 0 : Math.max(0, hintUnlockAt - elapsed)
 
   useEffect(() => {
     if (hintAvailable && !hintWasAvailable.current) {
@@ -248,8 +257,9 @@ export default function GameBoard({
       setSolved(nextSolved)
       if (result.progress?.hintLevel != null) setHintLevel(result.progress.hintLevel)
       if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
+      if (result.progress?.hintsApplied) setHintsApplied(result.progress.hintsApplied)
       if (result.progress?.elapsedSeconds != null) syncElapsedFromProgress(result.progress.elapsedSeconds)
-      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes })
+      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes, hintsApplied })
       if (result.correct) {
         // Ячейка блокируется и остаётся с каноничным словом — только
         // кратковременно подсвечиваем её зелёным.
@@ -328,18 +338,35 @@ export default function GameBoard({
       const fresh = await requestHint(game.id)
       const nextPrefixes = fresh?.hintPrefixes || {}
       const nextSolved = fresh?.solved || {}
+      const nextApplied = fresh?.hintsApplied || {}
+      const wasLastSolved = Object.prototype.hasOwnProperty.call(solved, cellKey(LAST_COLUMN, 0))
+      const nextHintLevel = fresh?.hintLevel ?? Math.min(totalHints, hintLevel + 1)
       setSolved(nextSolved)
-      setHintLevel(fresh?.hintLevel ?? Math.min(maxHintLevel, hintLevel + 1))
+      setHintLevel(nextHintLevel)
       setHintPrefixes(nextPrefixes)
+      setHintsApplied(nextApplied)
       if (fresh?.elapsedSeconds != null) syncElapsedFromProgress(fresh.elapsedSeconds)
-      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel: fresh?.hintLevel ?? hintLevel + 1, hintPrefixes: nextPrefixes })
+      if (onSave) {
+        onSave({
+          elapsedSeconds: elapsedSeconds(),
+          hintLevel: nextHintLevel,
+          hintPrefixes: nextPrefixes,
+          hintsApplied: nextApplied,
+        })
+      }
       setValues((prev) => prev.map((words, c) => words.map((word, p) => {
-        if (c === 0 || nextSolved[cellKey(c, p)]) return word
-        return withPrefix(word, nextPrefixes[cellKey(c, p)] || '',
-          hintPrefixes[cellKey(c, p)] || '')
+        if (c === 0) return word
+        const key = cellKey(c, p)
+        // Автоматически разгаданное короткое слово показываем целиком.
+        if (nextSolved[key]) return nextSolved[key]
+        return withPrefix(word, nextPrefixes[key] || '', hintPrefixes[key] || '')
       })))
       clearAllFeedback()
       setHintNotice(false)
+      // Подсказка могла автоматически разгадать последнюю колонку.
+      if (!wasLastSolved && nextSolved[cellKey(LAST_COLUMN, 0)]) {
+        completeLevel({ netTime: elapsedSeconds() })
+      }
     } catch (err) {
       setActionError(apiMessage(err))
     } finally {
@@ -449,7 +476,12 @@ export default function GameBoard({
             <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>
           </div>
           {hintScheduled && (
-            hintAvailable ? (
+            hintsRemaining === 0 ? (
+              <button type="button" className="assoc-hint-btn" disabled>
+                <span aria-hidden="true">💡</span>{' '}
+                Получить подсказку (0)
+              </button>
+            ) : hintAvailable ? (
               <button
                 type="button"
                 className="assoc-hint-btn"
@@ -457,7 +489,7 @@ export default function GameBoard({
                 disabled={takingHint || timeUp}
               >
                 <span aria-hidden="true">💡</span>{' '}
-                {takingHint ? 'Открываем…' : 'Получить подсказку'}
+                {takingHint ? 'Открываем…' : `Получить подсказку (${hintsRemaining})`}
               </button>
             ) : (
               <span className="assoc-hint-countdown">

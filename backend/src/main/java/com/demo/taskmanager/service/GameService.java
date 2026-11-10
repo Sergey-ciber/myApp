@@ -248,6 +248,10 @@ public class GameService {
             if (prefixes.remove(column + ":" + position) != null) {
                 writePrefixes(progress, prefixes);
             }
+            Map<String, Integer> applied = parseHintsApplied(progress);
+            if (applied.remove(column + ":" + position) != null) {
+                writeHintsApplied(progress, applied);
+            }
             progress.setUpdatedAt(Instant.now());
             progressRepository.save(progress);
         }
@@ -388,9 +392,12 @@ public class GameService {
     }
 
     /**
-     * Выдать следующую подсказку. Доступность считается по серверному времени:
-     * 180, 360, 540 и 720 секунд после старта. Подсказка открывает первые буквы
-     * только доступных (родители разгаданы) неразгаданных ячеек.
+     * Выдать следующую подсказку. Кнопка одна на уровень: она появляется после
+     * самого раннего времени из настроек подсказок, а каждое нажатие открывает
+     * ещё одну букву во всех доступных неразгаданных ячейках.
+     *
+     * Доступность ячейки: оба родительских слова из предыдущей колонки разгаданы.
+     * Если открыты все буквы короткого слова — ячейка разгадывается автоматически.
      */
     @Transactional
     public GameProgressDto takeHint(Long gameId, User user) {
@@ -398,31 +405,91 @@ public class GameService {
         UserProgress progress = findOrCreateProgress(game, user);
 
         GameLevel level = currentLevel(game);
+        if (level == null) {
+            throw new BadRequestException("Нет активного уровня");
+        }
         List<LevelHint> levelHints = level.getHints() == null
                 ? List.of()
                 : level.getHints().stream()
                     .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
                     .toList();
 
-        int hintLevel = progress.getHintLevel();
-        if (hintLevel >= levelHints.size()) {
+        int totalHints = levelHints.size();
+        if (totalHints == 0) {
+            throw new BadRequestException("Для этого уровня не настроены подсказки");
+        }
+        int usedHints = progress.getHintLevel();
+        if (usedHints >= totalHints) {
             throw new BadRequestException("Все подсказки уже получены");
         }
 
-        LevelHint nextHint = levelHints.get(hintLevel);
-        long requiredSeconds = Math.round(
-                (nextHint.getTriggerTime() == null ? 0 : nextHint.getTriggerTime()) * 60);
-
+        // Одна кнопка появляется по первому (самому раннему) времени из настроек уровня.
+        long requiredSeconds = levelHints.stream()
+                .map(hint -> hint.getTriggerTime() == null ? 0L : Math.round(hint.getTriggerTime() * 60))
+                .min(Long::compareTo)
+                .orElse(0L);
         long elapsed = elapsedSeconds(progress);
         if (elapsed < requiredSeconds) {
             throw new BadRequestException("Подсказка будет доступна через "
                     + (requiredSeconds - elapsed) + " с");
         }
 
-        int newLevel = hintLevel + 1;
         Map<String, String> solved = parseSolved(progress);
-        // Найдём доступные поля: колонка >=2, не разгадано, оба родителя из предыдущей колонки разгаданы
-        java.util.List<GameWord> availableWords = new java.util.ArrayList<>();
+        Map<String, Integer> applied = parseHintsApplied(progress);
+        Map<String, String> prefixes = parsePrefixes(progress);
+
+        // Снимок доступных ячеек: ячейки, которые откроются после этой подсказки,
+        // получат первую букву только при следующем нажатии.
+        List<GameWord> availableWords = availablePyramidWords(game, solved);
+        if (availableWords.isEmpty()) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
+        }
+
+        boolean revealedAny = false;
+        for (GameWord word : availableWords) {
+            String value = word.getWord();
+            if (value == null || value.isEmpty()) {
+                continue;
+            }
+            String key = word.getColumnNum() + ":" + word.getPosition();
+            // Совместимость со старым прогрессом: число открытых букв можно
+            // восстановить по длине уже сохранённого префикса.
+            int opened = Math.max(
+                    applied.getOrDefault(key, 0),
+                    prefixes.getOrDefault(key, "").length());
+            int nextOpened = Math.min(value.length(), opened + 1);
+            applied.put(key, nextOpened);
+            revealedAny = true;
+            if (nextOpened >= value.length()) {
+                // Все буквы открыты — короткое слово разгадано автоматически.
+                solved.put(key, value);
+                prefixes.remove(key);
+            } else {
+                prefixes.put(key, value.substring(0, nextOpened));
+            }
+        }
+        if (!revealedAny) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
+        }
+
+        progress.setHintLevel(usedHints + 1);
+        writeSolved(progress, solved);
+        writePrefixes(progress, prefixes);
+        writeHintsApplied(progress, applied);
+        progress.setUpdatedAt(Instant.now());
+        progressRepository.save(progress);
+        return toDto(progress);
+    }
+
+    /**
+     * Неразгаданные ячейки колонок 2-5, у которых оба родительских слова
+     * из предыдущей колонки уже разгаданы.
+     */
+    private List<GameWord> availablePyramidWords(Game game, Map<String, String> solved) {
+        List<GameWord> available = new ArrayList<>();
+        if (game.getWords() == null) {
+            return available;
+        }
         for (GameWord word : game.getWords()) {
             int columnNum = word.getColumnNum();
             if (columnNum < 2) {
@@ -434,44 +501,19 @@ public class GameService {
                 continue;
             }
             if (columnNum == 2) {
-                // для второй колонки родители - пара из колонки 1, всегда доступны если не разгаданы
-                availableWords.add(word);
+                // Родители второй колонки — пары стартовых слов, они всегда известны.
+                available.add(word);
                 continue;
             }
             int parentColumn = columnNum - 1;
             int parentPos1 = (position - 1) * 2 + 1;
             int parentPos2 = parentPos1 + 1;
-            String p1 = parentColumn + ":" + parentPos1;
-            String p2 = parentColumn + ":" + parentPos2;
-            if (solved.containsKey(p1) && solved.containsKey(p2)) {
-                availableWords.add(word);
+            if (solved.containsKey(parentColumn + ":" + parentPos1)
+                    && solved.containsKey(parentColumn + ":" + parentPos2)) {
+                available.add(word);
             }
         }
-        if (availableWords.isEmpty()) {
-            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
-        }
-
-        Map<String, String> prefixes = new LinkedHashMap<>();
-        for (GameWord word : availableWords) {
-            String value = word.getWord();
-            if (value == null || value.isEmpty()) {
-                continue;
-            }
-            String key = word.getColumnNum() + ":" + word.getPosition();
-            int prefixLen = Math.min(newLevel, value.length());
-            if (prefixLen <= 0) {
-                continue;
-            }
-            prefixes.put(key, value.substring(0, prefixLen));
-        }
-        if (prefixes.isEmpty()) {
-            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
-        }
-        progress.setHintLevel(newLevel);
-        writePrefixes(progress, prefixes);
-        progress.setUpdatedAt(Instant.now());
-        progressRepository.save(progress);
-        return toDto(progress);
+        return available;
     }
 
     /** «Начать заново»: очищаем только прогресс этого пользователя. */
@@ -482,6 +524,7 @@ public class GameService {
         progress.setSolvedWords("{}");
         progress.setHintLevel(0);
         progress.setHintPrefixes("{}");
+        progress.setHintsApplied("{}");
         progress.setStartedAt(Instant.now());
         progress.setFinishedSeconds(null);
         progress.setWinCounted(false);
@@ -1072,7 +1115,7 @@ public class GameService {
                 : elapsedSeconds(progress);
         return new GameProgressDto(parseSolved(progress), progress.getStartedAt(),
                 elapsed, progress.getFinishedSeconds(),
-                progress.getHintLevel(), parsePrefixes(progress));
+                progress.getHintLevel(), parsePrefixes(progress), parseHintsApplied(progress));
     }
 
     private long elapsedSeconds(UserProgress progress) {
@@ -1114,6 +1157,25 @@ public class GameService {
             progress.setHintPrefixes(objectMapper.writeValueAsString(prefixes));
         } catch (JsonProcessingException e) {
             progress.setHintPrefixes("{}");
+        }
+    }
+
+    private Map<String, Integer> parseHintsApplied(UserProgress progress) {
+        try {
+            Map<String, Integer> applied = objectMapper.readValue(
+                    progress.getHintsApplied() == null ? "{}" : progress.getHintsApplied(),
+                    new TypeReference<LinkedHashMap<String, Integer>>() { });
+            return applied == null ? new LinkedHashMap<>() : applied;
+        } catch (JsonProcessingException e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private void writeHintsApplied(UserProgress progress, Map<String, Integer> applied) {
+        try {
+            progress.setHintsApplied(objectMapper.writeValueAsString(applied));
+        } catch (JsonProcessingException e) {
+            progress.setHintsApplied("{}");
         }
     }
 
