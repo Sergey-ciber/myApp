@@ -49,7 +49,7 @@ const withPrefix = (value, prefix, oldPrefix = '') => {
  * подсказки открывают первые буквы доступных неразгаданных ячеек.
  */
 export default function GameBoard({
-  game, level, progress, onLevelComplete, onSave, onCheckAnswer, feedbackEvent,
+  game, level, progress, onLevelComplete, onSave, onCheckAnswer, onRequestHint, feedbackEvent,
 }) {
   const [values, setValues] = useState(() => {
     const cells = emptyValues()
@@ -85,6 +85,9 @@ export default function GameBoard({
   const inputRefs = useRef({})
   const pendingFocusRef = useRef(null)
   const lastFeedbackNonce = useRef(null)
+  // Предыдущие префиксы подсказок: нужны, чтобы при обновлении из общего
+  // состояния заменять уже показанные буквы, а не добавлять их повторно.
+  const hintPrefixesRef = useRef(progress?.hintPrefixes || {})
 
   /** Синхронизируем solved из props — важно для командного режима, где solved
    * обновляется через WebSocket, а не через локальные действия. */
@@ -100,6 +103,24 @@ export default function GameBoard({
     if (progress?.hintsApplied) setHintsApplied(progress.hintsApplied)
     if (progress?.hintLevel != null) setHintLevel(progress.hintLevel)
   }, [progress?.hintPrefixes, progress?.hintsApplied, progress?.hintLevel])
+
+  /** В командном режиме подсказки и авто-разгаданные слова приходят из общего
+   * состояния (WebSocket). Показываем новые буквы всем участникам, сохраняя
+   * уже введённый игроком текст. */
+  useEffect(() => {
+    if (!progress?.hintPrefixes && !progress?.solved) return
+    const prevPrefixes = hintPrefixesRef.current || {}
+    const nextPrefixes = progress?.hintPrefixes || {}
+    hintPrefixesRef.current = nextPrefixes
+    setValues((prev) => prev.map((words, columnIndex) => words.map((word, position) => {
+      if (columnIndex === 0) return word
+      const key = cellKey(columnIndex, position)
+      const solvedValue = progress?.solved?.[key]
+      if (typeof solvedValue === 'string' && solvedValue) return solvedValue
+      const nextPrefix = nextPrefixes[key] || ''
+      return nextPrefix ? withPrefix(word, nextPrefix, prevPrefixes[key] || '') : word
+    })))
+  }, [progress?.hintPrefixes, progress?.solved])
 
   const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
   const remainingSeconds = Math.max(0, limitSeconds - elapsed)
@@ -335,7 +356,10 @@ export default function GameBoard({
     setTakingHint(true)
     setActionError('')
     try {
-      const fresh = await requestHint(game.id)
+      // Командный режим передаёт свой обработчик: подсказка считается по
+      // общему прогрессу сессии, а не по одиночному прогрессу пользователя.
+      const fresh = onRequestHint ? await onRequestHint() : await requestHint(game.id)
+      if (!fresh) return
       const nextPrefixes = fresh?.hintPrefixes || {}
       const nextSolved = fresh?.solved || {}
       const nextApplied = fresh?.hintsApplied || {}

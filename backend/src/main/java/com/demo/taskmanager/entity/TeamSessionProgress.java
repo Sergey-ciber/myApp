@@ -24,6 +24,18 @@ public class TeamSessionProgress {
     @Column(name = "penalty_time")
     private Double penaltyTime = 0.0;
 
+    /** Сколько раз команда использовала подсказку-пирамиду на этом уровне. */
+    @Column(name = "hint_level")
+    private Integer hintLevel = 0;
+
+    /** Открытые буквы подсказки по ячейкам пирамиды: {"column:position": "префикс"}. */
+    @Column(name = "hint_prefixes", columnDefinition = "text")
+    private String hintPrefixes = "{}";
+
+    /** Сколько букв открыто в каждой ячейке: {"column:position": число}. */
+    @Column(name = "hints_applied", columnDefinition = "text")
+    private String hintsApplied = "{}";
+
     public Long getId() {
         return id;
     }
@@ -62,5 +74,29 @@ public class TeamSessionProgress {
 
     public void setPenaltyTime(double penaltyTime) {
         this.penaltyTime = penaltyTime;
+    }
+
+    public int getHintLevel() {
+        return hintLevel == null ? 0 : hintLevel;
+    }
+
+    public void setHintLevel(int hintLevel) {
+        this.hintLevel = hintLevel;
+    }
+
+    public String getHintPrefixes() {
+        return hintPrefixes;
+    }
+
+    public void setHintPrefixes(String hintPrefixes) {
+        this.hintPrefixes = hintPrefixes;
+    }
+
+    public String getHintsApplied() {
+        return hintsApplied;
+    }
+
+    public void setHintsApplied(String hintsApplied) {
+        this.hintsApplied = hintsApplied;
     }
 }

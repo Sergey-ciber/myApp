@@ -1212,6 +1212,11 @@ public class TeamGameService {
                 : progressRepository.findBySessionIdAndLevelId(session.getId(), level.getId()).orElse(null);
         Map<String, String> solved = progress == null ? new LinkedHashMap<>() : parseSolved(progress);
         double penalty = progress == null ? 0.0 : progress.getPenaltyTime();
+        int hintLevel = progress == null ? 0 : progress.getHintLevel();
+        Map<String, String> hintPrefixes = progress == null
+                ? new LinkedHashMap<>() : parsePrefixes(progress);
+        Map<String, Integer> hintsApplied = progress == null
+                ? new LinkedHashMap<>() : parseHintsApplied(progress);
         List<TeamMemberResponse> members = teamService.getMembers(session.getTeam());
         Map<String, String> memberNames = new LinkedHashMap<>();
         for (TeamMemberResponse m : members) {
@@ -1238,6 +1243,9 @@ public class TeamGameService {
                 // в questionStates[questionId].answers.
                 redactSolvedTexts(solved),
                 penalty,
+                hintLevel,
+                hintPrefixes,
+                hintsApplied,
                 hintsSnapshot(),
                 questionStates(session, level, solved),
                 session.getStartTime(),
@@ -1773,6 +1781,191 @@ public class TeamGameService {
         // Возвращаем актуальное состояние: после перехода на следующий
         // уровень или завершения игры клиент должен получить новый слепок.
         return buildState(session, user);
+    }
+
+    /**
+     * Подсказка-пирамида для командной сессии.
+     *
+     * Полностью повторяет одиночную логику, но работает на прогрессе команды:
+     *  - число нажатий хранится в TeamSessionProgress.hintLevel;
+     *  - открытые буквы и счётчики — в hintPrefixes/hintsApplied;
+     *  - время доступности отсчитывается от старта текущего уровня сессии.
+     *
+     * Каждое нажатие открывает ещё одну букву во всех доступных неразгаданных
+     * ячейках. Если открыты все буквы короткого слова, оно разгадывается
+     * автоматически. Результат рассылается всем участникам комнаты.
+     */
+    @Transactional
+    public TeamGameStateResponse takePyramidHint(Long sessionId, User user) {
+        TeamGameSession session = lockActiveSession(sessionId, user);
+        GameLevel level = currentLevel(session);
+        if (level == null) {
+            throw new BadRequestException("Нет активного уровня");
+        }
+        if (level.getType() != LevelType.ASSOCIATIONS) {
+            throw new BadRequestException("Подсказка пирамиды доступна только для уровня «Игра в ассоциации»");
+        }
+        List<LevelHint> levelHints = level.getHints() == null ? List.of()
+                : level.getHints().stream()
+                    .filter(h -> h != null)
+                    .sorted(Comparator.comparingInt(LevelHint::getOrderIndex))
+                    .toList();
+        int totalHints = levelHints.size();
+        if (totalHints == 0) {
+            throw new BadRequestException("Для этого уровня не настроены подсказки");
+        }
+
+        TeamSessionProgress progress = ensureProgressForLevel(session, level);
+        int usedHints = progress.getHintLevel();
+        if (usedHints >= totalHints) {
+            throw new BadRequestException("Все подсказки уже получены");
+        }
+
+        // Одна кнопка появляется по самому раннему времени из настроек уровня.
+        long requiredSeconds = levelHints.stream()
+                .map(hint -> hint.getTriggerTime() == null ? 0L : Math.round(hint.getTriggerTime() * 60))
+                .min(Long::compareTo)
+                .orElse(0L);
+        long elapsed = Math.max(0, Duration.between(levelAnchor(session), Instant.now()).getSeconds());
+        if (elapsed < requiredSeconds) {
+            throw new BadRequestException("Подсказка будет доступна через "
+                    + (requiredSeconds - elapsed) + " с");
+        }
+
+        Map<String, String> solved = parseSolved(progress);
+        Map<String, Integer> applied = parseHintsApplied(progress);
+        Map<String, String> prefixes = parsePrefixes(progress);
+        boolean topSolvedBefore = solved.containsKey("5:1");
+
+        // Снимок доступных ячеек: ячейки, которые откроются после этой подсказки,
+        // получат первую букву только при следующем нажатии.
+        List<LevelWord> availableWords = availablePyramidWords(level, solved);
+        if (availableWords.isEmpty()) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
+        }
+
+        boolean revealedAny = false;
+        for (LevelWord word : availableWords) {
+            String value = word.getWord();
+            if (value == null || value.isEmpty()) {
+                continue;
+            }
+            String key = word.getColumnNum() + ":" + word.getPosition();
+            // Совместимость со старым прогрессом: число открытых букв можно
+            // восстановить по длине уже сохранённого префикса.
+            int opened = Math.max(applied.getOrDefault(key, 0),
+                    prefixes.getOrDefault(key, "").length());
+            int nextOpened = Math.min(value.length(), opened + 1);
+            applied.put(key, nextOpened);
+            revealedAny = true;
+            if (nextOpened >= value.length()) {
+                // Все буквы открыты — короткое слово разгадано автоматически.
+                solved.put(key, value);
+                prefixes.remove(key);
+            } else {
+                prefixes.put(key, value.substring(0, nextOpened));
+            }
+        }
+        if (!revealedAny) {
+            throw new BadRequestException("Сначала разгадайте хотя бы одну пару слов, чтобы использовать подсказку");
+        }
+
+        progress.setHintLevel(usedHints + 1);
+        progress.setSolvedData(writeSolved(solved));
+        progress.setHintPrefixes(writePrefixes(prefixes));
+        progress.setHintsApplied(writeHintsApplied(applied));
+        progressRepository.save(progress);
+        persistState(session, level, solved, progress.getPenaltyTime());
+
+        addEvent(session, "Игрок " + user.getUsername() + " открыл подсказку пирамиды");
+
+        TeamGameStateResponse state = buildState(session, user);
+        Map<String, Object> payload = event("pyramid_hint", session, user, state);
+        payload.put("hintLevel", progress.getHintLevel());
+        broadcast(session.getId(), payload);
+
+        // Подсказка могла автоматически разгадать вершину пирамиды — уровень пройден.
+        if (!topSolvedBefore && solved.containsKey("5:1")) {
+            advance(session, user, state);
+        }
+        return buildState(session, user);
+    }
+
+    /**
+     * Неразгаданные ячейки колонок 2-5, у которых оба родительских слова
+     * из предыдущей колонки уже разгаданы (аналог одиночного режима).
+     */
+    private List<LevelWord> availablePyramidWords(GameLevel level, Map<String, String> solved) {
+        List<LevelWord> available = new ArrayList<>();
+        if (level == null || level.getId() == null) {
+            return available;
+        }
+        List<LevelWord> words = levelWordRepository.findByLevelIdOrderByColumnNumAscPositionAsc(level.getId());
+        if (words == null) {
+            return available;
+        }
+        for (LevelWord word : words) {
+            int columnNum = word.getColumnNum();
+            if (columnNum < 2) {
+                continue;
+            }
+            int position = word.getPosition();
+            String key = columnNum + ":" + position;
+            if (solved.containsKey(key)) {
+                continue;
+            }
+            if (columnNum == 2) {
+                // Родители второй колонки — пары стартовых слов, они всегда известны.
+                available.add(word);
+                continue;
+            }
+            int parentColumn = columnNum - 1;
+            int parentPos1 = (position - 1) * 2 + 1;
+            int parentPos2 = parentPos1 + 1;
+            if (solved.containsKey(parentColumn + ":" + parentPos1)
+                    && solved.containsKey(parentColumn + ":" + parentPos2)) {
+                available.add(word);
+            }
+        }
+        return available;
+    }
+
+    private Map<String, String> parsePrefixes(TeamSessionProgress progress) {
+        try {
+            Map<String, String> prefixes = objectMapper.readValue(
+                    progress.getHintPrefixes() == null ? "{}" : progress.getHintPrefixes(),
+                    new TypeReference<LinkedHashMap<String, String>>() { });
+            return prefixes == null ? new LinkedHashMap<>() : prefixes;
+        } catch (JsonProcessingException e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private String writePrefixes(Map<String, String> prefixes) {
+        try {
+            return objectMapper.writeValueAsString(prefixes);
+        } catch (JsonProcessingException e) {
+            return "{}";
+        }
+    }
+
+    private Map<String, Integer> parseHintsApplied(TeamSessionProgress progress) {
+        try {
+            Map<String, Integer> applied = objectMapper.readValue(
+                    progress.getHintsApplied() == null ? "{}" : progress.getHintsApplied(),
+                    new TypeReference<LinkedHashMap<String, Integer>>() { });
+            return applied == null ? new LinkedHashMap<>() : applied;
+        } catch (JsonProcessingException e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private String writeHintsApplied(Map<String, Integer> applied) {
+        try {
+            return objectMapper.writeValueAsString(applied);
+        } catch (JsonProcessingException e) {
+            return "{}";
+        }
     }
 
     private Map<String, String> parseSolved(TeamSessionProgress progress) {

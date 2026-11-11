@@ -102,6 +102,14 @@ public class TeamGameController {
         return ResponseEntity.ok(teamGameService.submitPyramidAnswer(sessionId, user, request));
     }
 
+    /** Подсказка-пирамида командной сессии: открывает буквы во всех доступных ячейках. */
+    @PostMapping("/{sessionId}/pyramid/hint")
+    public ResponseEntity<TeamGameStateResponse> pyramidHint(@PathVariable Long sessionId,
+                                                             @AuthenticationPrincipal UserDetails userDetails) {
+        User user = currentUser(userDetails);
+        return ResponseEntity.ok(teamGameService.takePyramidHint(sessionId, user));
+    }
+
     /** Подсказка: штраф начисляется, событие рассылается всем участникам. */
     @PostMapping("/{sessionId}/hint")
     public ResponseEntity<TeamGameStateResponse> hint(@PathVariable Long sessionId,

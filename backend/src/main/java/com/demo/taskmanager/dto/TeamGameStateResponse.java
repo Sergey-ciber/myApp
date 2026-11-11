@@ -19,6 +19,10 @@ public record TeamGameStateResponse(
         GamePlayResponse game,
         Map<String, String> solved,
         double penaltyTime,
+        /** Подсказки-пирамида: число нажатий, открытые префиксы и буквы по ячейкам. */
+        int hintLevel,
+        Map<String, String> hintPrefixes,
+        Map<String, Integer> hintsApplied,
         Map<String, Object> hints,
         /** Состояние вопросов и подсказок текущего уровня: ключ — id вопроса. */
         Map<String, Object> questionStates,

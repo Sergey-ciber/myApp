@@ -52,6 +52,10 @@ export const disconnectTeamGame = (sessionId) =>
 export const submitPyramidTeamAnswer = (sessionId, column, position, answer) =>
   api.post(`/team-games/${sessionId}/pyramid/answer`, { sessionId, column, position, answer }).then((res) => res.data)
 
+/** Подсказка-пирамида: открывает буквы во всех доступных ячейках, состояние общее для команды. */
+export const requestPyramidTeamHint = (sessionId) =>
+  api.post(`/team-games/${sessionId}/pyramid/hint`).then((res) => res.data)
+
 /** Heartbeat: продлевает отметку «онлайн». */
 export const heartbeatTeamGame = (sessionId) =>
   api.post(`/team-games/${sessionId}/heartbeat`).then((res) => res.data)

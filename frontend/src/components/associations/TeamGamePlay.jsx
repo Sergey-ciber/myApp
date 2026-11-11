@@ -9,6 +9,7 @@ import {
     heartbeatTeamGame,
     joinTeamGame,
     leaveTeamGame,
+    requestPyramidTeamHint,
     revealTeamHint,
     revealTeamHintById,
     submitPyramidTeamAnswer,
@@ -394,6 +395,9 @@ export default function TeamGamePlay({
                                 showFlash(`💡 ${payload.username || 'Команда'} открыл(а) подсказку`
                                     + (payload.penaltySeconds ? ` (+${payload.penaltySeconds} сек.)` : ''))
                                 break
+                            case 'pyramid_hint':
+                                showFlash(`💡 ${payload.username || 'Команда'} открыл(а) подсказку пирамиды`)
+                                break
                             case 'sync_level_up':
                                 setAnswer('')
                                 clearAnswerFeedback('answer')
@@ -481,6 +485,10 @@ export default function TeamGamePlay({
         ? new Date(state.startedAt || state.startTime).getTime()
         : Date.now()
     const gameElapsedSec = Math.max(0, Math.floor((now - startTimeMs) / 1000))
+    // Таймер подсказок и уровневый таймер в пирамиде считаются от старта уровня,
+    // а не от старта всей партии: иначе на 2+ уровнях подсказки «просрочены».
+    const levelStartTimeMs = state?.levelStartedAt ? new Date(state.levelStartedAt).getTime() : startTimeMs
+    const levelElapsedSec = Math.max(0, Math.floor((now - levelStartTimeMs) / 1000))
     const gameEndsAtMs = state?.endsAt ? new Date(state.endsAt).getTime() : null
     const gameRemainingSec = gameEndsAtMs ? Math.max(0, Math.floor((gameEndsAtMs - now) / 1000)) : null
     const levelEndTimeMs = state?.levelEndTime ? new Date(state.levelEndTime).getTime() : null
@@ -643,6 +651,27 @@ export default function TeamGamePlay({
             setError(apiMessage(err))
         } finally {
             setChecking(false)
+        }
+    }
+
+    /**
+     * Подсказка-пирамида командной сессии.
+     *
+     * Сервер обновляет общий прогресс и рассылает событие комнате.
+     * Возвращаем прогресс в формате GameBoard, чтобы автор нажатия сразу
+     * увидел новые буквы; остальные получат их из состояния по WebSocket.
+     */
+    const handlePyramidHint = async () => {
+        const res = await requestPyramidTeamHint(sessionId)
+        if (res) applyState(res, true)
+        // Сервер мог автоматически разгадать вершину и перевести уровень.
+        if (!res || res.currentLevelIndex !== levelIndex) return null
+        return {
+            solved: res.solved || {},
+            hintLevel: res.hintLevel ?? 0,
+            hintPrefixes: res.hintPrefixes || {},
+            hintsApplied: res.hintsApplied || {},
+            elapsedSeconds: levelElapsedSec,
         }
     }
 
@@ -906,7 +935,10 @@ export default function TeamGamePlay({
                     level={level}
                     progress={{
                         solved: solvedPyramid,
-                        elapsedSeconds: gameElapsedSec,
+                        elapsedSeconds: levelElapsedSec,
+                        hintLevel: state?.hintLevel ?? 0,
+                        hintPrefixes: state?.hintPrefixes || {},
+                        hintsApplied: state?.hintsApplied || {},
                     }}
                     onLevelComplete={(payload) => {
                         showFlash('Уровень пройден!', 2000)
@@ -918,6 +950,7 @@ export default function TeamGamePlay({
                         }
                     }}
                     onCheckAnswer={(column, position, text) => handleSubmitPyramid(column, position, text)}
+                    onRequestHint={handlePyramidHint}
                     feedbackEvent={pyramidFeedback}
                 />
             ) : (
