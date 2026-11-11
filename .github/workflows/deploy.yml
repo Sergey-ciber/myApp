@@ -55,6 +55,7 @@ jobs:
           REPO_URL: ${{ vars.REPO_URL || format('git@github.com:{0}.git', github.repository) }}
           APP_DIR: ${{ vars.APP_DIR }}
           HTTP_PORT: ${{ vars.HTTP_PORT }}
+          HTTPS_DOMAIN: ${{ vars.HTTPS_DOMAIN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
@@ -76,7 +77,8 @@ jobs:
             printf 'export REPO_URL=%q\n'          "$REPO_URL"
             printf 'export GIT_REF=%q\n'           "${GITHUB_REF_NAME:-main}"
             printf 'export APP_DIR=%q\n'           "${APP_DIR:-/opt/taskmanager}"
-            printf 'export HTTP_PORT=%q\n'         "${HTTP_PORT:-80}"
+            printf 'export HTTP_PORT=%q\n'         "${HTTP_PORT:-8080}"
+            printf 'export HTTPS_DOMAIN=%q\n'      "${HTTPS_DOMAIN:-}"
             printf 'export POSTGRES_PASSWORD=%q\n' "$POSTGRES_PASSWORD"
             printf 'export JWT_SECRET=%q\n'        "$JWT_SECRET"
             printf 'export CORS_ORIGINS=%q\n'      "$CORS_ORIGINS"

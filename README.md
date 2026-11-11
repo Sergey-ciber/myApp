@@ -288,7 +288,8 @@ cd frontend && npm run build   # статика: frontend/dist
 ## Развёртывание на удалённом сервере
 
 Понадобится Linux-сервер (Ubuntu 22.04+), Docker с плагином Compose, ~2 ГБ RAM
-и открытый порт 80 (или 443). Готовы `docker-compose.prod.yml` (PostgreSQL +
+и открытые порты 80 и 443 (HTTPS терминирует Caddy на хосте). Готовы
+`docker-compose.prod.yml` (PostgreSQL +
 backend + frontend на nginx) и `Dockerfile` для каждой части.
 
 ### 1. Установить Docker на сервере
@@ -342,7 +343,7 @@ nano .env
 | `JWT_SECRET` | случайные ≥32 символа: `openssl rand -base64 48` |
 | `CORS_ORIGINS` | **публичный адрес приложения**, например `http://203.0.113.10` или `https://tasks.example.com` |
 | `APP_BASE_URL` | публичный адрес для ссылки в письме; пусто — берётся первый адрес из `CORS_ORIGINS` |
-| `HTTP_PORT` | порт nginx на хосте (по умолчанию 80) |
+| `HTTP_PORT` | локальный порт nginx контейнера (по умолчанию 8080, слушается только `127.0.0.1`; наружу — TLS-прокси на хосте) |
 | `MAIL_HOST` | SMTP-сервер для писем восстановления пароля; пусто — отправка отключена |
 | `MAIL_PORT` | порт SMTP (587 или 465) |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | учётные данные SMTP |
@@ -388,7 +389,8 @@ docker compose -f docker-compose.prod.yml logs -f backend
 При первом запуске на существующей базе примените миграцию email (см.
 «Заметки по эксплуатации»); `deploy/deploy.sh` делает это автоматически.
 
-Приложение доступно на `http://SERVER_IP:${HTTP_PORT}`. Порт 8080 наружу не
+Приложение доступно на `http://127.0.0.1:${HTTP_PORT}` на самом сервере, а
+снаружи — по HTTPS через Caddy (см. раздел «HTTPS» ниже). Порт 8080 наружу не
 публикуется — backend доступен только из внутренней сети Docker, `/api`
 проксирует nginx (поэтому фронтенд и API живут на одном origin).
 
@@ -412,17 +414,45 @@ docker run --rm -v demoproject_uploads:/data -v $(pwd):/out alpine \
 
 ### 7. HTTPS
 
-Проще всего поставить на хост Caddy или nginx+certbot и проксировать на
-`127.0.0.1:${HTTP_PORT}` (в `.env` тогда укажите `CORS_ORIGINS=https://домен`,
-`HTTP_PORT=8080` или другой локальный порт). Caddy получит сертификат сам:
+Сайт работает по HTTPS: на хосте стоит **Caddy**, он терминирует TLS и
+проксирует запросы в контейнер `frontend` на `127.0.0.1:${HTTP_PORT}`.
+Сертификат Let's Encrypt выпускается и продлевается автоматически.
+
+Настройка на сервере (один раз, идемпотентно):
+
+```bash
+cd /opt/taskmanager
+# A-записи домена и www должны уже указывать на сервер
+sudo HTTP_PORT=8080 HTTPS_DOMAIN=мойсбой.рф HTTPS_EMAIL=admin@мойсбой.рф \
+  bash deploy/setup-https.sh
+```
+
+Скрипт ставит Caddy, пишет `/etc/caddy/Caddyfile` (домен + `www`, punycode
+для кириллицы), открывает 80/443 в ufw и проверяет ответ `https://домен`.
+
+Что должно быть в `.env`:
 
 ```
-tasks.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
+HTTP_PORT=8080
+CORS_ORIGINS=https://мойсбой.рф,https://www.мойсбой.рф
+APP_BASE_URL=https://мойсбой.рф
 ```
 
-Затем откройте нужные порты: `sudo ufw allow 80,443/tcp`.
+Важно:
+
+- контейнер `frontend` публикуется только на `127.0.0.1` (см.
+  `docker-compose.prod.yml`), снаружи виден только Caddy;
+- `CORS_ORIGINS` должен содержать **https**-адрес: браузер присылает его в
+  `Origin`, иначе POST/PUT/PATCH вернут 403;
+- порты 80 и 443 должны быть свободны. Если 443 занят другим сервисом
+  (например, Telegram MTProto-прокси), перенесите его на другой порт:
+  `mtproto-proxy.service` — параметр `-H <порт>`;
+- после смены `.env` перезапустите контейнеры:
+  `docker compose -f docker-compose.prod.yml up -d`.
+
+Для домена в зоне `.рф` сертификат выдаётся на punycode-имя
+(`xn--...xn--p1ai`), в браузере и `CORS_ORIGINS` можно писать кириллицу —
+браузер сам отправляет punycode.
 
 ### Заметки по эксплуатации
 
@@ -521,11 +551,12 @@ Secrets:
 | `SSH_KEY` | приватный ключ, которым вы заходите на сервер (содержимое `~/.ssh/xorek_ed25519`) |
 | `POSTGRES_PASSWORD` | пароль БД |
 | `JWT_SECRET` | длинная случайная строка (менять на работающем приложении нельзя — разлогинит всех) |
-| `CORS_ORIGINS` | `http://2.27.33.116` |
+| `CORS_ORIGINS` | `https://мойсбой.рф,https://www.мойсбой.рф` (браузер присылает punycode, это нормально) |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | учётные данные SMTP для писем восстановления пароля |
 
 Необязательные: секрет `SSH_PORT` (по умолчанию 22) и переменные (`Variables`)
-`HTTP_PORT` (по умолчанию 80), `APP_DIR` (по умолчанию `/opt/taskmanager`),
+`HTTP_PORT` (по умолчанию 8080), `HTTPS_DOMAIN` (`мойсбой.рф` — включает
+проверку HTTPS после выката), `APP_DIR` (по умолчанию `/opt/taskmanager`),
 `REPO_URL` (если репозиторий не на github.com), `APP_BASE_URL` (публичный адрес
 для ссылки в письме), `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`,
 `MAIL_SMTP_STARTTLS`, `MAIL_SMTP_SSL`.

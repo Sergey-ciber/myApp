@@ -10,7 +10,8 @@
 #   REPO_URL           адрес репозитория (обязателен при первом запуске)
 #   GIT_REF            ветка для выката (по умолчанию main)
 #   APP_DIR            каталог приложения (по умолчанию /opt/taskmanager)
-#   HTTP_PORT          порт nginx на хосте (по умолчанию 80)
+#   HTTP_PORT          локальный порт nginx на хосте (по умолчанию 8080, только 127.0.0.1;
+#                      наружу приложение отдаёт TLS-прокси на хосте — deploy/setup-https.sh)
 #   POSTGRES_DB        имя БД (по умолчанию taskmanager)
 #   POSTGRES_USER      пользователь БД (по умолчанию postgres)
 #   POSTGRES_PASSWORD  пароль БД (обязателен)
@@ -46,6 +47,7 @@ if [ -f "$APP_DIR/.env" ]; then
     export "$name=${line#*=}"
   }
   load_env HTTP_PORT
+  load_env HTTPS_DOMAIN
   load_env POSTGRES_DB
   load_env POSTGRES_USER
   load_env POSTGRES_PASSWORD
@@ -63,7 +65,7 @@ if [ -f "$APP_DIR/.env" ]; then
 fi
 
 # ---------- значения по умолчанию ----------
-HTTP_PORT="${HTTP_PORT:-80}"
+HTTP_PORT="${HTTP_PORT:-8080}"
 POSTGRES_DB="${POSTGRES_DB:-taskmanager}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
@@ -119,6 +121,7 @@ JWT_SECRET=$JWT_SECRET
 CORS_ORIGINS=$CORS_ORIGINS
 APP_BASE_URL=${APP_BASE_URL:-}
 HTTP_PORT=$HTTP_PORT
+HTTPS_DOMAIN=${HTTPS_DOMAIN:-}
 MAIL_HOST=${MAIL_HOST:-}
 MAIL_PORT=${MAIL_PORT:-587}
 MAIL_USERNAME=${MAIL_USERNAME:-}
@@ -157,6 +160,20 @@ if [ -z "$ok" ]; then
   fail "Деплой завершился с ошибкой, приложение не отвечает"
 fi
 
+# ---------- проверка HTTPS (если на хосте настроен TLS-прокси) ----------
+# HTTPS_DOMAIN задаётся в CI (vars.HTTPS_DOMAIN). Без него проверяем только
+# локальный порт: на серверах без TLS-прокси https может не быть.
+if [ -n "${HTTPS_DOMAIN:-}" ]; then
+  log "Проверяю HTTPS через прокси на хосте: https://$HTTPS_DOMAIN"
+  https_code=""
+  for _ in $(seq 1 10); do
+    https_code=$(curl -s -o /dev/null -w '%{http_code}' "https://$HTTPS_DOMAIN/" || true)
+    [ "$https_code" = "200" ] && break
+    sleep 2
+  done
+  [ "$https_code" = "200" ] || fail "HTTPS не отвечает 200 (получено: ${https_code:-нет ответа})"
+fi
+
 # ---------- миграция БД ----------
 # Идемпотентно: пустые email -> NULL и регистронезависимый уникальный индекс.
 # Запускаем после health-check, потому что backend уже создал колонки email,
@@ -168,5 +185,9 @@ if ! docker compose -f "$COMPOSE_FILE" exec -T db \
   fail "Не удалось применить deploy/fix-user-emails.sql: скорее всего, в users есть дубликаты email (без учёта регистра). Устраните их и повторите деплой"
 fi
 
-log "Готово. Приложение доступно на порту $HTTP_PORT"
+if [ -n "${HTTPS_DOMAIN:-}" ]; then
+  log "Готово. Приложение доступно на https://$HTTPS_DOMAIN (локально: 127.0.0.1:$HTTP_PORT)"
+else
+  log "Готово. Приложение доступно на порту $HTTP_PORT"
+fi
 docker image prune -f >/dev/null 2>&1 || true
