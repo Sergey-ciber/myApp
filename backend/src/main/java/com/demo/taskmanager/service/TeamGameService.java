@@ -1820,6 +1820,10 @@ public class TeamGameService {
         if (usedHints >= totalHints) {
             throw new BadRequestException("Все подсказки уже получены");
         }
+        // Штраф берём из настроек именно той подсказки, которую открываем:
+        // у подсказок уровня он может отличаться.
+        LevelHint usedHint = levelHints.get(usedHints);
+        double hintPenalty = usedHint.getPenaltyTime() == null ? 0.0 : usedHint.getPenaltyTime();
 
         // Одна кнопка появляется по самому раннему времени из настроек уровня.
         long requiredSeconds = levelHints.stream()
@@ -1874,14 +1878,21 @@ public class TeamGameService {
         progress.setSolvedData(writeSolved(solved));
         progress.setHintPrefixes(writePrefixes(prefixes));
         progress.setHintsApplied(writeHintsApplied(applied));
+        // Штрафное время копится в прогрессе уровня — из него считается
+        // статистика партии (team_level_stats.penalty_seconds).
+        double penalty = progress.getPenaltyTime() + hintPenalty;
+        progress.setPenaltyTime(penalty);
         progressRepository.save(progress);
-        persistState(session, level, solved, progress.getPenaltyTime());
+        persistState(session, level, solved, penalty);
 
-        addEvent(session, "Игрок " + user.getUsername() + " открыл подсказку пирамиды");
+        long penaltySeconds = Math.round(hintPenalty * 60);
+        addEvent(session, "Игрок " + user.getUsername() + " открыл подсказку пирамиды"
+                + (penaltySeconds > 0 ? " (+" + penaltySeconds + " сек. штрафа)" : ""));
 
         TeamGameStateResponse state = buildState(session, user);
         Map<String, Object> payload = event("pyramid_hint", session, user, state);
         payload.put("hintLevel", progress.getHintLevel());
+        payload.put("penaltySeconds", penaltySeconds);
         broadcast(session.getId(), payload);
 
         // Подсказка могла автоматически разгадать вершину пирамиды — уровень пройден.
