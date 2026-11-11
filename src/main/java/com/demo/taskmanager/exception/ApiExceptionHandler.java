@@ -1,7 +1,9 @@
 package com.demo.taskmanager.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -43,6 +45,21 @@ public class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Map<String, Object> handleAuth(AuthenticationException e) {
         return error(HttpStatus.UNAUTHORIZED, "Неверный логин или пароль");
+    }
+
+    /** Отказ method security (@PreAuthorize) должен быть 403, а не 500. */
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, Object> handleAccessDenied(AccessDeniedException e) {
+        return error(HttpStatus.FORBIDDEN, "Недостаточно прав для выполнения действия");
+    }
+
+    /** Понятное сообщение вместо «Internal Server Error» при конфликте связей в БД. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, Object> handleIntegrityViolation(DataIntegrityViolationException e) {
+        return error(HttpStatus.CONFLICT,
+                "Не удалось выполнить операцию: запись связана с другими данными");
     }
 
     /** Ошибки @Valid: отдаём 400 с первой ошибкой поля, а не 500. */

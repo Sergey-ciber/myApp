@@ -3,6 +3,7 @@ com\demo\taskmanager\dto\GameProgressDto.class
 com\demo\taskmanager\dto\QuestionHintRequest.class
 com\demo\taskmanager\entity\UserGameProgress.class
 com\demo\taskmanager\dto\BoardResponse.class
+com\demo\taskmanager\service\TeamGameService$2.class
 com\demo\taskmanager\dto\TaskResponse.class
 com\demo\taskmanager\entity\Task.class
 com\demo\taskmanager\dto\GameResponse$QuestionResponse.class
@@ -10,6 +11,7 @@ com\demo\taskmanager\controller\TeamGameWsController.class
 com\demo\taskmanager\entity\GameLevel.class
 com\demo\taskmanager\controller\FileController.class
 com\demo\taskmanager\dto\TeamGameAnswerRequest.class
+com\demo\taskmanager\config\SuperAdminInitializer.class
 com\demo\taskmanager\dto\TaskRequest.class
 com\demo\taskmanager\entity\InvitationStatus.class
 com\demo\taskmanager\entity\TeamSessionPresence.class
@@ -26,6 +28,7 @@ com\demo\taskmanager\repository\MediaReferenceRepository.class
 com\demo\taskmanager\repository\TeamHintStateRepository.class
 com\demo\taskmanager\entity\Game.class
 com\demo\taskmanager\dto\BoardRequest.class
+com\demo\taskmanager\entity\UserRole.class
 com\demo\taskmanager\service\TeamService.class
 com\demo\taskmanager\service\PasswordResetRateLimiter.class
 com\demo\taskmanager\dto\TeamGameLobbyResponse.class
@@ -93,7 +96,9 @@ com\demo\taskmanager\dto\GamePlayResponse$GameLevelView.class
 com\demo\taskmanager\entity\TeamQuestionState.class
 com\demo\taskmanager\dto\TeamGameStatisticsResponse$LevelStat.class
 com\demo\taskmanager\repository\StandardAnswerRepository.class
+com\demo\taskmanager\service\GameService$4.class
 com\demo\taskmanager\dto\UserSummaryResponse.class
+com\demo\taskmanager\service\TeamGameService$3.class
 com\demo\taskmanager\dto\TeamPyramidAnswerRequest.class
 com\demo\taskmanager\controller\TeamController.class
 com\demo\taskmanager\controller\BoardController.class

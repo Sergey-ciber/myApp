@@ -85,7 +85,7 @@ public class AuthService {
             throw new BadRequestException("Пользователь с таким логином или email уже существует");
         }
 
-        String token = jwtService.generateToken(user.getUsername());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, UserResponse.from(user));
     }
 
@@ -98,7 +98,7 @@ public class AuthService {
         User user = userRepository.findByUsernameIgnoreCase(username)
                 .orElseThrow(() -> new BadRequestException("Пользователь не найден"));
 
-        String token = jwtService.generateToken(user.getUsername());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, UserResponse.from(user));
     }
 

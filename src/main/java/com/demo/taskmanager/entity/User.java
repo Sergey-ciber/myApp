@@ -37,6 +37,14 @@ public class User {
     @Column(length = 255)
     private String avatarUrl;
 
+    /**
+     * Глобальная роль пользователя. Значение по умолчанию в БД нужно для
+     * безопасного обновления схемы: старые записи автоматически получают USER.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'USER'")
+    private UserRole role = UserRole.USER;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -63,6 +71,12 @@ public class User {
 
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+
+    public UserRole getRole() { return role == null ? UserRole.USER : role; }
+    public void setRole(UserRole role) { this.role = role == null ? UserRole.USER : role; }
+
+    /** Удобная проверка для сервисов: является ли пользователь супер-администратором. */
+    public boolean isSuperAdmin() { return getRole() == UserRole.SUPERADMIN; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

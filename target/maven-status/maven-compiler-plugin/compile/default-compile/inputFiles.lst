@@ -1,5 +1,6 @@
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\AsyncConfig.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\SecurityConfig.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\SuperAdminInitializer.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\config\WebSocketConfig.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\controller\AuthController.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\controller\BoardController.java
@@ -82,6 +83,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\TeamSe
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\User.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\UserGameProgress.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\UserProgress.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\UserRole.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\ApiExceptionHandler.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\BadRequestException.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\exception\ForbiddenException.java

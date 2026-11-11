@@ -73,3 +73,9 @@ app:
       max-requests: ${PASSWORD_RESET_RATE_LIMIT_MAX:5}
       window-minutes: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES:15}
 
+# Супер-администратор: создаётся при старте, если его ещё нет.
+# Пароль хранится в БД только в виде BCrypt-хэша.
+superadmin:
+  username: ${SUPERADMIN_USERNAME:superadmin}
+  password: ${SUPERADMIN_PASSWORD:serg6363}
+

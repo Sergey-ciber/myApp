@@ -6,6 +6,8 @@ import com.demo.taskmanager.dto.UserSummaryResponse;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.service.UserService;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -49,5 +51,22 @@ public class UserController {
                                             @RequestParam(name = "search", required = false) String search) {
         User current = userService.getByUsername(principal.getUsername());
         return userService.searchUsers(search, current.getId());
+    }
+
+    /** Полный список пользователей — только для супер-администратора. */
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public List<UserResponse> listAll() {
+        return userService.listAllUsers();
+    }
+
+    /** Удаление пользователя со всеми связанными данными — только супер-администратор. */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal UserDetails principal,
+                                       @PathVariable Long id) {
+        User current = userService.getByUsername(principal.getUsername());
+        userService.deleteUser(id, current);
+        return ResponseEntity.noContent().build();
     }
 }
