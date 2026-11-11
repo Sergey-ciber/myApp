@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { trackPageview } from './metrika'
 import Navbar from './components/Navbar'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -23,8 +25,17 @@ function Protected({ children }) {
 
 export default function App() {
   const location = useLocation()
+  const { loading } = useAuth()
   const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password']
     .includes(location.pathname)
+
+  // SPA: при смене маршрута отправляем хит в Метрику вручную.
+  // Ждём окончания проверки авторизации, иначе хит уйдёт на промежуточный
+  // URL, с которого пользователя сейчас перенаправит на /login.
+  useEffect(() => {
+    if (loading) return
+    trackPageview()
+  }, [loading, location.pathname, location.search])
 
   return (
     <div className="app">
