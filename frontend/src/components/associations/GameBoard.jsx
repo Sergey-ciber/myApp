@@ -486,19 +486,19 @@ export default function GameBoard({
         </p>
 
         <div className="assoc-board-tools">
-          <div
-            className={[
-              'assoc-timer',
-              timeUp ? 'is-timeup' : '',
-              timerCritical ? 'is-critical' : '',
-            ].join(' ').trim()}
-            role="timer"
-            aria-live={timerCritical ? 'polite' : 'off'}
-          >
-            <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
-            <span className="assoc-timer-value">{formatTime(remainingSeconds)}</span>
-            <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>
-          </div>
+          {/*<div*/}
+          {/*  className={[*/}
+          {/*    'assoc-timer',*/}
+          {/*    timeUp ? 'is-timeup' : '',*/}
+          {/*    timerCritical ? 'is-critical' : '',*/}
+          {/*  ].join(' ').trim()}*/}
+          {/*  role="timer"*/}
+          {/*  aria-live={timerCritical ? 'polite' : 'off'}*/}
+          {/*>*/}
+          {/*  <span className="assoc-timer-icon" aria-hidden="true">⏱</span>*/}
+          {/*  <span className="assoc-timer-value">{formatTime(remainingSeconds)}</span>*/}
+          {/*  <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>*/}
+          {/*</div>*/}
           {hintScheduled && (
             hintsRemaining === 0 ? (
               <button type="button" className="assoc-hint-btn" disabled>

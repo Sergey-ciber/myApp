@@ -301,11 +301,11 @@ export default function NormalLevelBoard({
           Уровень «{level.title}». Время: <strong>{formatTime(remainingSeconds)}</strong>{' '}
           Разгадайте все {questions.length} {questions.length === 1 ? 'вопрос' : 'вопросов'}.
         </p>
-        <div className="assoc-timer" role="timer" aria-live={timerCritical ? 'polite' : 'off'}>
-          <span className="assoc-timer-icon" aria-hidden="true">⏱</span>
-          <span className="assoc-timer-value">{formatTime(remainingSeconds)}</span>
-          <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>
-        </div>
+        {/*<div className="assoc-timer" role="timer" aria-live={timerCritical ? 'polite' : 'off'}>*/}
+        {/*  <span className="assoc-timer-icon" aria-hidden="true">⏱</span>*/}
+        {/*  <span className="assoc-timer-value">{formatTime(remainingSeconds)}</span>*/}
+        {/*  <span className="assoc-timer-label">{timeUp ? 'время вышло' : 'осталось'}</span>*/}
+        {/*</div>*/}
       </div>
 
       {level.mediaUrls?.length > 0 && (
