@@ -30,6 +30,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\GameSumma
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\InvitationResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\InviteRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\LeaderboardEntry.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\LevelStatsDto.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\LoginRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\ProfileUpdateRequest.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\QuestionHintRequest.java

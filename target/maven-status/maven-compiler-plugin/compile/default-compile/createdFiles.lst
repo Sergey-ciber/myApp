@@ -6,6 +6,7 @@ com\demo\taskmanager\dto\BoardResponse.class
 com\demo\taskmanager\service\TeamGameService$2.class
 com\demo\taskmanager\dto\TaskResponse.class
 com\demo\taskmanager\entity\Task.class
+com\demo\taskmanager\service\GameService$5.class
 com\demo\taskmanager\dto\GameResponse$QuestionResponse.class
 com\demo\taskmanager\controller\TeamGameWsController.class
 com\demo\taskmanager\entity\GameLevel.class
@@ -85,6 +86,7 @@ com\demo\taskmanager\entity\LevelQuestion.class
 com\demo\taskmanager\dto\TeamGameStateResponse.class
 com\demo\taskmanager\controller\UserController.class
 com\demo\taskmanager\controller\TeamGameController.class
+com\demo\taskmanager\dto\LevelStatsDto.class
 com\demo\taskmanager\dto\GameRequest$StandardQuestionRequest.class
 com\demo\taskmanager\repository\UserProgressRepository.class
 com\demo\taskmanager\dto\InviteRequest.class
