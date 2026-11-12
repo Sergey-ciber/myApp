@@ -28,7 +28,7 @@ export default function Navbar() {
         {user && (
           <>
             <NavLink
-              to="/associations"
+              to="/games"
               className={({ isActive }) => `navbar-link${isActive ? ' is-active' : ''}`}
             >
               Игры

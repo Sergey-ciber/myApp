@@ -45,14 +45,16 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/" element={<Navigate to="/associations" replace />} />
+        <Route path="/" element={<Navigate to="/games" replace />} />
         {/*<Route path="/boards/:id" element={<Protected><BoardDetail /></Protected>} />*/}
-        <Route path="/associations" element={<Protected><Associations /></Protected>} />
+        {/* Старый адрес раздела игр — оставлен для закладок и внешних ссылок. */}
+        <Route path="/associations" element={<Navigate to="/games" replace />} />
+        <Route path="/games" element={<Protected><Associations /></Protected>} />
         <Route path="/teams" element={<Protected><Teams /></Protected>} />
         <Route path="/teams/:id" element={<Protected><TeamDetails /></Protected>} />
         <Route path="/users" element={<Protected><Users /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
-        <Route path="*" element={<Navigate to="/boards" replace />} />
+        <Route path="*" element={<Navigate to="/games" replace />} />
       </Routes>
     </div>
   )
@@ -62,14 +64,14 @@ export default function App() {
   //       <Routes>
   //         <Route path="/login" element={<Login />} />
   //         <Route path="/register" element={<Register />} />
-  //         <Route path="/" element={<Navigate to="/boards" replace />} />
+  //         <Route path="/" element={<Navigate to="/games" replace />} />
   //         <Route path="/boards" element={<Protected><Boards /></Protected>} />
   //         <Route path="/boards/:id" element={<Protected><BoardDetail /></Protected>} />
-  //         <Route path="/associations" element={<Protected><Associations /></Protected>} />
+  //         <Route path="/games" element={<Protected><Associations /></Protected>} />
   //         <Route path="/teams" element={<Protected><Teams /></Protected>} />
   //         <Route path="/teams/:id" element={<Protected><TeamDetails /></Protected>} />
   //         <Route path="/profile" element={<Protected><Profile /></Protected>} />
-  //         <Route path="*" element={<Navigate to="/boards" replace />} />
+  //         <Route path="*" element={<Navigate to="/games" replace />} />
   //       </Routes>
   //     </div>
   // )

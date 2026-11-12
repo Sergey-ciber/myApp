@@ -42,7 +42,7 @@ export default function Register() {
     setError('')
     try {
       await register(username.trim(), password, trimmedEmail)
-      navigate('/associations')
+      navigate('/games')
     } catch (err) {
       setError(apiMessage(err))
     } finally {

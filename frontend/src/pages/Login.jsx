@@ -17,7 +17,7 @@ export default function Login() {
     setError('')
     try {
       await login(username, password)
-      navigate('/associations')
+      navigate('/games')
     } catch (err) {
       setError(apiMessage(err))
     } finally {

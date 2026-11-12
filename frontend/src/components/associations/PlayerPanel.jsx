@@ -617,7 +617,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     // прогресс сохранён — игрок сможет продолжить игру позже
     setResumable((prev) => ({ ...prev, hasProgress: true }))
     if (onExit) onExit()
-    else navigate('/boards')
+    else navigate('/games')
   }
 
   if (games.length === 0) {
@@ -728,7 +728,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           leaderboardLoading={leaderboardLoading}
           currentUserId={currentUserId}
           onPlayAgain={playAgain}
-          onHome={() => navigate('/boards')}
+          onHome={() => navigate('/games')}
         />
       ) : (
         <>

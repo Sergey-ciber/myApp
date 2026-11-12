@@ -45,7 +45,7 @@ export default function Users() {
   }, [toast])
 
   if (!isSuperAdmin) {
-    return <Navigate to="/associations" replace />
+    return <Navigate to="/games" replace />
   }
 
   const handleDelete = async () => {
