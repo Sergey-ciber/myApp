@@ -41,9 +41,13 @@ export const activateGame = (id) => api.post(`/games/${id}/activate`).then((res)
 /** Удалить игру (свою или любую — для супер-администратора). */
 export const deleteGame = (id) => api.delete(`/games/${id}`)
 
-/** Сохранить время прохождения после победы. */
-export const submitResult = (gameId, timeSeconds) =>
-  api.post(`/games/${gameId}/results`, { timeSeconds }).then((res) => res.data)
+/**
+ * Сохранить время прохождения после победы.
+ * levelsStats — детализация по уровням: сервер проверяет по ней,
+ * что игра пройдена до конца, и считает общее время сам.
+ */
+export const submitResult = (gameId, timeSeconds, levelsStats) =>
+  api.post(`/games/${gameId}/results`, { timeSeconds, levelsStats }).then((res) => res.data)
 
 /** Рейтинг игры: [{ place, userId, username, timeSeconds, completedAt }]. */
 export const fetchLeaderboard = (gameId) =>

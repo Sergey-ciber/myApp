@@ -11,6 +11,8 @@ import com.demo.taskmanager.dto.GameSummary;
 import com.demo.taskmanager.dto.LeaderboardEntry;
 import com.demo.taskmanager.dto.QuestionHintRequest;
 import com.demo.taskmanager.dto.QuestionHintResponse;
+import com.demo.taskmanager.dto.LevelStatsDto;
+import com.demo.taskmanager.dto.ResultRequest;
 import com.demo.taskmanager.dto.ResultResponse;
 import com.demo.taskmanager.dto.TimeoutResponse;
 import com.demo.taskmanager.entity.Game;
@@ -23,6 +25,8 @@ import com.demo.taskmanager.entity.LevelQuestion;
 import com.demo.taskmanager.entity.LevelWord;
 import com.demo.taskmanager.entity.StandardAnswer;
 import com.demo.taskmanager.entity.StandardQuestion;
+import com.demo.taskmanager.entity.Team;
+import com.demo.taskmanager.entity.TeamGameSession;
 import com.demo.taskmanager.entity.User;
 import com.demo.taskmanager.entity.UserProgress;
 import com.demo.taskmanager.exception.BadRequestException;
@@ -46,6 +50,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class GameService {
@@ -915,19 +922,33 @@ public class GameService {
     }
 
     /**
-     * Сохранить время прохождения. Если на сервере уже зафиксировано время победы
-     * этого пользователя, берём его — подделать результат из клиента нельзя.
-     * После истечения лимита результат не принимается.
+     * Сохранить время прохождения.
+     *
+     * Результат принимается только при полном прохождении игры:
+     * клиент присылает детализацию по уровням, и сервер проверяет, что
+     * пройдены все уровни игры и ни один не закончился по таймауту.
+     * Прерванные (недопройденные) игры в таблицу рекордов не попадают.
+     *
+     * Общее время считается на сервере как сумма уровней — подделать его
+     * из клиента нельзя.
      */
     @Transactional
-    public ResultResponse submitResult(Long gameId, User user, Integer timeSeconds) {
+    public ResultResponse submitResult(Long gameId, User user, ResultRequest request) {
         Game game = findGame(gameId);
         UserProgress progress = progressRepository
                 .findByGameIdAndUserId(gameId, user.getId())
                 .orElseThrow(() -> new BadRequestException("Сначала начните игру"));
-        int seconds = validateTime(timeSeconds);
+
+        List<LevelStatsDto> levels = validateCompletedLevels(game, request);
+
+        int seconds = levels.stream().mapToInt(LevelStatsDto::total).sum();
+        if (seconds < 1 || seconds > MAX_TIME_SECONDS) {
+            throw new BadRequestException("Время прохождения должно быть от 1 до "
+                    + MAX_TIME_SECONDS + " секунд");
+        }
 
         GameResult result = new GameResult(game, user, seconds);
+        result.setLevelsStats(writeLevelsStats(levels));
         resultRepository.save(result);
         // Повторная отправка результата разрешена (в рейтинг идёт лучшая попытка),
         // но победа текущей попытки начисляет командам +1 только один раз.
@@ -941,6 +962,63 @@ public class GameService {
         // иначе после перезагрузки игрок вернулся бы на последний уровень.
         userGameProgressRepository.deleteByUserIdAndGameId(user.getId(), gameId);
         return ResultResponse.from(result);
+    }
+
+    /**
+     * Проверяет, что игра пройдена полностью, и возвращает нормализованную
+     * детализацию уровней.
+     *
+     * Отклоняется результат, если:
+     *  - детализация не прислана или её меньше, чем уровней в игре;
+     *  - какой-либо уровень закончился по таймауту (значит, уровень не пройден);
+     *  - присланы уровни, которых нет в игре.
+     */
+    private List<LevelStatsDto> validateCompletedLevels(Game game, ResultRequest request) {
+        List<GameLevel> gameLevels = sortedLevels(game);
+        if (gameLevels.isEmpty()) {
+            throw new BadRequestException("У игры нет уровней");
+        }
+        List<LevelStatsDto> submitted = request == null ? null : request.levelsStats();
+        if (submitted == null || submitted.isEmpty()) {
+            throw new BadRequestException("Игра не пройдена до конца — результат не сохраняется");
+        }
+        List<LevelStatsDto> levels = LevelStatsDto.normalize(submitted);
+        if (levels.size() != gameLevels.size()) {
+            throw new BadRequestException("Игра не пройдена до конца — результат не сохраняется");
+        }
+        Set<Long> gameLevelIds = gameLevels.stream()
+                .map(GameLevel::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (LevelStatsDto level : levels) {
+            if (level.levelId() == null || !gameLevelIds.contains(level.levelId())) {
+                throw new BadRequestException("Некорректная детализация прохождения");
+            }
+            if (level.timedOut()) {
+                throw new BadRequestException("Игра не пройдена до конца — результат не сохраняется");
+            }
+        }
+        return levels;
+    }
+
+    /** Сериализует детализацию уровней в JSON для хранения в БД. */
+    private String writeLevelsStats(List<LevelStatsDto> levels) {
+        try {
+            return objectMapper.writeValueAsString(levels);
+        } catch (JsonProcessingException e) {
+            return "[]";
+        }
+    }
+
+    /** Читает детализацию уровней из JSON. */
+    private List<LevelStatsDto> readLevelsStats(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return LevelStatsDto.normalize(objectMapper.readValue(json,
+                    new TypeReference<List<LevelStatsDto>>() { }));
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
     }
 
     /**
@@ -963,27 +1041,129 @@ public class GameService {
     }
 
     /**
-     * Рейтинг игры: по одной (лучшей) попытке на пользователя,
-     * сортировка по возрастанию времени.
+     * Рейтинг игры: одиночные результаты и результаты команд в единой таблице.
+     *
+     * В рейтинг попадают только полностью завершённые прохождения:
+     *  - одиночные — лучшая попытка каждого игрока;
+     *  - командные — лучшая завершённая партия каждой команды.
+     *
+     * Прерванные партии (хост завершил игру досрочно или истекло время)
+     * в рейтинг не попадают: у них endReason не равен completed.
+     *
+     * Сортировка — по возрастанию общего времени.
      */
     @Transactional(readOnly = true)
     public List<LeaderboardEntry> leaderboard(Long gameId) {
         findGame(gameId);
+        List<LeaderboardEntry> entries = new ArrayList<>();
+
+        // Одиночные прохождения: по одной (лучшей) попытке на игрока.
         List<GameResult> results = resultRepository
                 .findByGameIdOrderByTimeSecondsAscCompletedAtAsc(gameId);
-
         Map<Long, GameResult> bestByUser = new LinkedHashMap<>();
         for (GameResult result : results) {
             bestByUser.putIfAbsent(result.getUser().getId(), result);
         }
-
-        List<LeaderboardEntry> entries = new ArrayList<>(bestByUser.size());
-        int place = 1;
         for (GameResult best : bestByUser.values()) {
-            entries.add(new LeaderboardEntry(place++, best.getUser().getId(), best.getUser().getUsername(),
-                    best.getTimeSeconds(), best.getCompletedAt()));
+            entries.add(new LeaderboardEntry(
+                    0,
+                    best.getUser().getId(),
+                    null,
+                    best.getUser().getUsername(),
+                    false,
+                    best.getTimeSeconds(),
+                    best.getCompletedAt(),
+                    readLevelsStats(best.getLevelsStats())
+            ));
         }
-        return entries;
+
+        // Командные прохождения: только успешно завершённые партии.
+        // По каждой команде в рейтинг идёт лучшая партия (по общему времени).
+        Map<Long, LeaderboardEntry> bestByTeam = new LinkedHashMap<>();
+        for (TeamGameSession session : completedTeamSessions(gameId)) {
+            Team team = session.getTeam();
+            if (team == null || team.getId() == null) continue;
+            List<LevelStatsDto> levels = teamLevelsStats(session);
+            if (levels.isEmpty()) continue;
+            int total = levels.stream().mapToInt(LevelStatsDto::total).sum();
+            LeaderboardEntry candidate = new LeaderboardEntry(
+                    0,
+                    null,
+                    team.getId(),
+                    team.getName(),
+                    true,
+                    total,
+                    session.getEndedAt() != null ? session.getEndedAt() : session.getFinishedAt(),
+                    levels
+            );
+            LeaderboardEntry current = bestByTeam.get(team.getId());
+            if (current == null || isBetter(candidate, current)) {
+                bestByTeam.put(team.getId(), candidate);
+            }
+        }
+        entries.addAll(bestByTeam.values());
+
+        // Сортировка по времени; при равенстве — кто завершил раньше.
+        entries.sort(Comparator
+                .comparingInt(LeaderboardEntry::timeSeconds)
+                .thenComparing(LeaderboardEntry::completedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(e -> e.team() ? 1 : 0));
+
+        List<LeaderboardEntry> ranked = new ArrayList<>(entries.size());
+        int rank = 1;
+        for (LeaderboardEntry entry : entries) {
+            ranked.add(new LeaderboardEntry(rank++, entry.userId(), entry.teamId(),
+                    entry.playerName(), entry.team(), entry.timeSeconds(),
+                    entry.completedAt(), entry.levelsStats()));
+        }
+        return ranked;
+    }
+
+    /**
+     * Лучше ли кандидат, чем текущая запись рейтинга.
+     * Меньшее время — лучше; при равенстве раньше завершившаяся партия.
+     */
+    private boolean isBetter(LeaderboardEntry candidate, LeaderboardEntry current) {
+        if (candidate.timeSeconds() != current.timeSeconds()) {
+            return candidate.timeSeconds() < current.timeSeconds();
+        }
+        if (candidate.completedAt() == null) return false;
+        if (current.completedAt() == null) return true;
+        return candidate.completedAt().isBefore(current.completedAt());
+    }
+
+    /**
+     * Успешно завершённые партии команды по игре.
+     *
+     * Прерванные партии (endReason = host_ended или time_expired)
+     * и активные сессии отбрасываются — в рейтинг попадают только победы.
+     */
+    private List<TeamGameSession> completedTeamSessions(Long gameId) {
+        return teamGameSessionRepository
+                .findByGameIdAndStatusInOrderByCreatedAtDesc(gameId,
+                        List.of(TeamGameSession.STATUS_FINISHED, TeamGameSession.STATUS_FINISHED_OLD))
+                .stream()
+                .filter(session -> TeamGameSession.END_REASON_COMPLETED.equals(session.getEndReason()))
+                .toList();
+    }
+
+    /** Детализация уровней командной партии — по данным таблицы team_level_stats. */
+    private List<LevelStatsDto> teamLevelsStats(TeamGameSession session) {
+        List<com.demo.taskmanager.entity.TeamLevelStat> stats =
+                teamLevelStatRepository.findBySessionIdOrderByLevelIndexAsc(session.getId());
+        if (stats == null || stats.isEmpty()) return List.of();
+        List<LevelStatsDto> levels = new ArrayList<>(stats.size());
+        for (com.demo.taskmanager.entity.TeamLevelStat stat : stats) {
+            levels.add(LevelStatsDto.of(
+                    stat.getLevelId(),
+                    stat.getTitle(),
+                    (int) Math.max(0, stat.getPureSeconds()),
+                    (int) Math.max(0, stat.getPenaltySeconds()),
+                    stat.isTimedOut()
+            ));
+        }
+        return levels;
     }
 
     /**
@@ -1074,6 +1254,15 @@ public class GameService {
                 .sorted(Comparator.comparingInt(GameLevel::getOrderIndex))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Все уровни игры в порядке прохождения. */
+    private List<GameLevel> sortedLevels(Game game) {
+        if (game == null || game.getLevels() == null) return List.of();
+        return game.getLevels().stream()
+                .filter(level -> level != null)
+                .sorted(Comparator.comparingInt(GameLevel::getOrderIndex))
+                .toList();
     }
 
     /** Редактировать и удалять игру может её создатель или супер-администратор. */
@@ -1177,14 +1366,6 @@ public class GameService {
         } catch (JsonProcessingException e) {
             progress.setHintsApplied("{}");
         }
-    }
-
-    private int validateTime(Integer timeSeconds) {
-        if (timeSeconds == null || timeSeconds < 1 || timeSeconds > MAX_TIME_SECONDS) {
-            throw new BadRequestException("Время прохождения должно быть от 1 до "
-                    + MAX_TIME_SECONDS + " секунд");
-        }
-        return timeSeconds;
     }
 
     /** Лимит времени игры обязателен: положительное число минут, можно дробное. */

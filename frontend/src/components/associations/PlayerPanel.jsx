@@ -11,6 +11,7 @@ import TeamGamePlay from './TeamGamePlay'
 import ActiveTeamGames from './ActiveTeamGames'
 import useTeamChannel from './useTeamChannel'
 import GameStatisticsTable from './GameStatisticsTable'
+import GameStatisticsBlock from './GameStatisticsBlock'
 import { formatMinutes } from './constants'
 
 /** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
@@ -520,7 +521,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const handleLevelComplete = (level, { netTime, penaltyTime = 0, timedOut = false }) => {
     const net = Number(netTime) || 0
     const penalty = Number(penaltyTime) || 0
-    const stat = { levelId: level.id, name: level.title, netTime: net, penaltyTime: penalty, totalTime: net + penalty }
+    const stat = { levelId: level.id, name: level.title, netTime: net, penaltyTime: penalty, totalTime: net + penalty, timedOut: !!timedOut }
     const nextStats = [...levelStats, stat]
     setLevelStats(nextStats)
     writePJson(pk('stats'), nextStats)
@@ -533,9 +534,30 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         const grandTotal = nextStats.reduce((sum, s) => sum + s.totalTime, 0)
         setTotalTime(grandTotal)
         setFinished(true)
-        setResultError('')
         writeP(pk('total'), grandTotal); writeP(pk('finished'),'1')
-        submitResult(game.id, Math.max(1, Math.round(grandTotal)))
+        // Уровень, закончившийся по таймауту, не считается пройденным:
+        // такой результат сервер в рейтинг не примет, поэтому и не отправляем.
+        if (nextStats.some((s) => s.timedOut)) {
+          setResultError('Игра не засчитана: уровень закончился по времени. Результат не попал в рейтинг.')
+          return
+        }
+        setResultError('')
+        // Детализация по уровням уходит на сервер: он проверяет, что все
+        // уровни пройдены, и сам считает общее время.
+        const levelsStats = nextStats.map((s) => ({
+          levelId: s.levelId,
+          levelName: s.name,
+          netSeconds: Math.max(0, Math.round(s.netTime)),
+          penaltySeconds: Math.max(0, Math.round(s.penaltyTime)),
+          totalSeconds: Math.max(0, Math.round(s.totalTime)),
+          timedOut: !!s.timedOut,
+        }))
+        submitResult(game.id, Math.max(1, Math.round(grandTotal)), levelsStats)
+          .then(() => {
+            // Небольшая пауза перед обновлением рейтинга: результат должен
+            // сначала закоммититься на сервере, иначе таблица останется пустой.
+            return new Promise((resolve) => setTimeout(resolve, 300))
+          })
           .then(() => loadLeaderboard(game.id))
           .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
         try { clearGameProgress(game.id).catch(() => {}) } catch {}
@@ -718,6 +740,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           onSelectTeam={setSelectedTeamId}
           onStartTeam={startTeamPlay}
           teamError={teamError}
+          leaderboard={leaderboard}
+          leaderboardLoading={leaderboardLoading}
         />
       ) : finished ? (
         <StatisticsScreen
@@ -768,7 +792,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
 }
 
 /** Экран информации об игре перед стартом. */
-function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canResume, teams, selectedTeamId, onSelectTeam, onStartTeam, teamError }) {
+function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canResume, teams, selectedTeamId, onSelectTeam, onStartTeam, teamError, leaderboard, leaderboardLoading }) {
   const media = Array.isArray(game.mediaUrls) ? game.mediaUrls : []
   const description = (game.description || '').trim()
   const date = formatGameDate(game.gameDate)
@@ -831,6 +855,13 @@ function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canRes
             <p className="assoc-info-description">{description}</p>
           </div>
         )}
+
+        {/* Статистика игры: рейтинг одиночных игроков и команд с детализацией по уровням */}
+        <GameStatisticsBlock
+          entries={leaderboard}
+          loading={leaderboardLoading}
+          error={null}
+        />
 
         {teamError && <div className="alert alert-error">{teamError}</div>}
         <div className="assoc-info-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

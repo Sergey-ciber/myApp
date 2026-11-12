@@ -1,4 +1,4 @@
-import { formatDate, formatTime } from './constants'
+import { formatDate, formatStatTime } from './constants'
 
 const placeLabel = (place) => {
   if (place === 1) return '🥇'
@@ -9,7 +9,9 @@ const placeLabel = (place) => {
 
 /**
  * Таблица лучших результатов игры.
+ *
  * places — уже отсортированный сервером массив (лучшее время сверху).
+ * В массиве смешаны одиночные игроки (👤) и команды (👥).
  */
 export default function Leaderboard({ entries, loading, currentUserId, limit, title = 'Рейтинг игры' }) {
   const rows = limit ? entries.slice(0, limit) : entries
@@ -30,25 +32,32 @@ export default function Leaderboard({ entries, loading, currentUserId, limit, ti
             <thead>
               <tr>
                 <th className="assoc-col-place">Место</th>
-                <th>Игрок</th>
+                <th>Команда / Игрок</th>
                 <th className="assoc-col-time">Время</th>
                 <th className="assoc-col-date">Дата</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((entry) => (
-                <tr key={entry.userId} className={entry.userId === currentUserId ? 'is-me' : ''}>
-                  <td className="assoc-place">{placeLabel(entry.place)}</td>
-                  <td className="assoc-player-cell">
-                    {entry.username}
-                    {entry.userId === currentUserId && <span className="assoc-me">вы</span>}
-                  </td>
-                  <td className="assoc-time-cell" title={`${entry.timeSeconds} сек`}>
-                    {formatTime(entry.timeSeconds)}
-                  </td>
-                  <td className="assoc-date-cell">{formatDate(entry.completedAt)}</td>
-                </tr>
-              ))}
+              {rows.map((entry, index) => {
+                const key = entry.team ? `team-${entry.teamId ?? index}` : `user-${entry.userId ?? index}`
+                const isMe = !entry.team && entry.userId != null && entry.userId === currentUserId
+                return (
+                  <tr key={key} className={isMe ? 'is-me' : ''}>
+                    <td className="assoc-place">{placeLabel(entry.rank)}</td>
+                    <td className="assoc-player-cell">
+                      <span className="assoc-game-stats-kind" aria-hidden="true">
+                        {entry.team ? '👥' : '👤'}
+                      </span>{' '}
+                      {entry.playerName}
+                      {isMe && <span className="assoc-me">вы</span>}
+                    </td>
+                    <td className="assoc-time-cell" title={`${entry.timeSeconds} сек`}>
+                      {formatStatTime(entry.timeSeconds)}
+                    </td>
+                    <td className="assoc-date-cell">{formatDate(entry.completedAt)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

@@ -32,6 +32,14 @@ public class GameResult {
     @Column(name = "completed_at", nullable = false, updatable = false)
     private Instant completedAt = Instant.now();
 
+    /**
+     * Детализация прохождения по уровням в JSON: [{"levelId":1,"levelName":"...",
+     * "netSeconds":120,"penaltySeconds":15,"totalSeconds":135,"timedOut":false}].
+     * Нужна для разворачиваемой детализации в рейтинге игры.
+     */
+    @Column(name = "levels_stats", columnDefinition = "text")
+    private String levelsStats;
+
     public GameResult() {
     }
 
@@ -54,4 +62,7 @@ public class GameResult {
 
     public Instant getCompletedAt() { return completedAt; }
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
+
+    public String getLevelsStats() { return levelsStats; }
+    public void setLevelsStats(String levelsStats) { this.levelsStats = levelsStats; }
 }

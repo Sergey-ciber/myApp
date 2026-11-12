@@ -136,13 +136,15 @@ public class GameController {
         return ResponseEntity.noContent().build();
     }
 
-    /** Сохранить время прохождения после победы. */
+    /**
+     * Сохранить время прохождения после победы.
+     * Результат принимается только при полном прохождении всех уровней.
+     */
     @PostMapping("/{id}/results")
     public ResponseEntity<ResultResponse> submitResult(@AuthenticationPrincipal UserDetails principal,
                                                        @PathVariable Long id,
                                                        @RequestBody(required = false) ResultRequest request) {
-        ResultResponse result = gameService.submitResult(id, currentUser(principal),
-                request == null ? null : request.timeSeconds());
+        ResultResponse result = gameService.submitResult(id, currentUser(principal), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
