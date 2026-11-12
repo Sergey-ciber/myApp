@@ -230,15 +230,27 @@ export default function TeamGamePlay({
      * Статистику времени после финиша запрашиваем только у сервера.
      * Небольшие повторы нужны на случай, если финиш пришёл broadcasтом
      * до коммита транзакции завершения сессии.
+     *
+     * Повторяем не только при пустом ответе: сервер может успеть вернуть
+     * уже закрытые уровни, но ещё не последний. Тогда его штрафное время
+     * (в том числе за подсказки пирамиды) выпадало бы из итоговой таблицы.
      */
     const loadStatistics = useCallback(async () => {
         setStatisticsLoading(true)
         setStatisticsError('')
+        const totalLevels = state?.game?.levels?.length || 0
+        const currentIndex = state?.currentLevelIndex || 0
+        const reason = String(state?.endReason || '').toLowerCase()
+        const expectedLevels = totalLevels > 0
+            ? (reason === 'completed' ? totalLevels : Math.min(currentIndex + 1, totalLevels))
+            : 0
         for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
                 const data = await getTeamGameStatistics(sessionId)
-                const empty = !data?.levels || data.levels.length === 0
-                if (empty && attempt < 2) {
+                const gotLevels = data?.levels?.length || 0
+                const incomplete = gotLevels === 0
+                    || (expectedLevels > 0 && gotLevels < expectedLevels)
+                if (incomplete && attempt < 2) {
                     await new Promise((resolve) => setTimeout(resolve, 600))
                     continue
                 }
@@ -254,7 +266,7 @@ export default function TeamGamePlay({
                 await new Promise((resolve) => setTimeout(resolve, 600))
             }
         }
-    }, [sessionId])
+    }, [sessionId, state?.game?.levels?.length, state?.currentLevelIndex, state?.endReason])
 
     const finishedNow = String(state?.status || '').toLowerCase() === 'finished' || finishedFromServer
     useEffect(() => {
