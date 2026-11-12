@@ -46,7 +46,7 @@ export default function Leaderboard({ entries, loading, currentUserId, limit, ti
                     <td className="assoc-place">{placeLabel(entry.rank)}</td>
                     <td className="assoc-player-cell">
                       <span className="assoc-game-stats-kind" aria-hidden="true">
-                        {entry.team ? '👥' : '👤'}
+                        {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
                       </span>{' '}
                       {entry.playerName}
                       {isMe && <span className="assoc-me">вы</span>}

@@ -209,7 +209,7 @@ body {
   padding: 24px;
   position: relative;
   min-height: 100vh;
-  background-image: url('/backgroundLogin.png');
+  background-image: url('../dist/backgroundLogin.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -1814,7 +1814,7 @@ padding-bottom: 10px;
 
 /* Таблица результатов */
 .assoc-leaderboard {
-  background: #f6792b;
+  background: #070707;
   border-radius: 12px;
   box-shadow: var(--shadow);
   padding: 16px 18px;
@@ -1834,9 +1834,9 @@ padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-.assoc-table td { padding: 9px 10px; border-bottom: 1px solid #eef1f6; }
+.assoc-table td { padding: 9px 10px; border-bottom: 1px solid #cc6220; border-top: 1px solid #cc6220; }
 .assoc-table tr:last-child td { border-bottom: none; }
-.assoc-table tbody tr.is-me { background: #f2f8ff; }
+.assoc-table tbody tr.is-me { background: #292624; }
 .assoc-table tbody tr.is-me td { font-weight: 600; }
 .assoc-col-place { width: 74px; }
 .assoc-col-time { width: 92px; }

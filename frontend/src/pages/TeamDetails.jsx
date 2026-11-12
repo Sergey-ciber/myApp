@@ -163,7 +163,7 @@ export default function TeamDetails() {
           <span className="team-stat-caption">{winsWord(team.wins)}</span>
         </div>
         <div className="team-stat">
-          <span className="team-stat-icon" aria-hidden="true">👥</span>
+          <span className="team-stat-icon" aria-hidden="true">👨‍👩‍👧‍👧</span>
           <span className="team-stat-label">Участники</span>
           <strong className="team-stat-value">{team.membersCount}</strong>
           <span className="team-stat-caption">{membersWord(team.membersCount)}</span>

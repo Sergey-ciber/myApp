@@ -97,7 +97,7 @@ export default function GameStatisticsBlock({ entries, loading, error }) {
                           <td className="assoc-place">{placeLabel(entry.rank)}</td>
                           <td className="assoc-player-cell">
                             <span className="assoc-game-stats-kind" aria-hidden="true">
-                              {entry.team ? '👥' : '👤'}
+                              {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
                             </span>{' '}
                             {entry.playerName}
                           </td>
