@@ -125,6 +125,24 @@ export default function GameBoard({
   const limitSeconds = Math.max(1, Math.round((Number(level.timeLimitMinutes) || 10) * 60))
   const remainingSeconds = Math.max(0, limitSeconds - elapsed)
 
+  // Подсказки уровня в том же порядке, в котором их выдаёт сервер (по orderIndex).
+  const hintSettings = [...(level.hints || [])]
+    .filter(Boolean)
+    .sort((a, b) => (Number(a.orderIndex) || 0) - (Number(b.orderIndex) || 0))
+
+  /**
+   * Штраф за взятые подсказки: сумма penaltyTime (минуты) первых used подсказок.
+   * Штраф не хранится отдельно — он однозначно выводится из hintLevel, поэтому
+   * переживает перезагрузку страницы вместе с серверным прогрессом.
+   */
+  const hintPenaltySeconds = (used) => hintSettings
+    .slice(0, Math.max(0, Number(used) || 0))
+    .reduce((sum, hint) => sum + Math.round((Number(hint.penaltyTime) || 0) * 60), 0)
+
+  const penaltySeconds = hintPenaltySeconds(hintLevel)
+  // Штраф, который добавит следующая подсказка — показываем на кнопке.
+  const nextHintPenalty = Math.round((Number(hintSettings[hintLevel]?.penaltyTime) || 0) * 60)
+
   const elapsedSeconds = () =>
     clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
 
@@ -157,14 +175,14 @@ export default function GameBoard({
   // истечение времени уровня — переходим к следующему уровню
   useEffect(() => {
     if (completedRef.current || elapsed < limitSeconds) return
-    completeLevel({ netTime: limitSeconds, timedOut: true })
+    completeLevel({ netTime: limitSeconds, penaltyTime: penaltySeconds, timedOut: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsed, limitSeconds])
+  }, [elapsed, limitSeconds, penaltySeconds])
 
   // если пирамида уже разгадана (восстановление прогресса) — сразу завершаем уровень
   useEffect(() => {
     if (Object.prototype.hasOwnProperty.call(solved, cellKey(LAST_COLUMN, 0))) {
-      completeLevel({ netTime: 0, timedOut: false })
+      completeLevel({ netTime: 0, penaltyTime: penaltySeconds, timedOut: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -280,7 +298,7 @@ export default function GameBoard({
       if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
       if (result.progress?.hintsApplied) setHintsApplied(result.progress.hintsApplied)
       if (result.progress?.elapsedSeconds != null) syncElapsedFromProgress(result.progress.elapsedSeconds)
-      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes, hintsApplied })
+      if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes, hintsApplied, penaltySeconds })
       if (result.correct) {
         // Ячейка блокируется и остаётся с каноничным словом — только
         // кратковременно подсвечиваем её зелёным.
@@ -290,7 +308,10 @@ export default function GameBoard({
           : words)))
         showFeedback(key, 'correct')
         if (columnIndex === LAST_COLUMN) {
-          completeLevel({ netTime: elapsedSeconds() })
+          completeLevel({
+            netTime: elapsedSeconds(),
+            penaltyTime: hintPenaltySeconds(result.progress?.hintLevel ?? hintLevel),
+          })
         }
       } else if (!onlyPrefix) {
         // Неверный ответ: красная рамка, очистка поля и возврат фокуса.
@@ -376,6 +397,7 @@ export default function GameBoard({
           hintLevel: nextHintLevel,
           hintPrefixes: nextPrefixes,
           hintsApplied: nextApplied,
+          penaltySeconds: hintPenaltySeconds(nextHintLevel),
         })
       }
       setValues((prev) => prev.map((words, c) => words.map((word, p) => {
@@ -389,7 +411,10 @@ export default function GameBoard({
       setHintNotice(false)
       // Подсказка могла автоматически разгадать последнюю колонку.
       if (!wasLastSolved && nextSolved[cellKey(LAST_COLUMN, 0)]) {
-        completeLevel({ netTime: elapsedSeconds() })
+        completeLevel({
+          netTime: elapsedSeconds(),
+          penaltyTime: hintPenaltySeconds(nextHintLevel),
+        })
       }
     } catch (err) {
       setActionError(apiMessage(err))
@@ -506,15 +531,21 @@ export default function GameBoard({
                 Получить подсказку (0)
               </button>
             ) : hintAvailable ? (
-              <button
-                type="button"
-                className="assoc-hint-btn"
-                onClick={getHint}
-                disabled={takingHint || timeUp}
-              >
-                <span aria-hidden="true">💡</span>{' '}
-                {takingHint ? 'Открываем…' : `Получить подсказку (${hintsRemaining})`}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="assoc-hint-btn"
+                  onClick={getHint}
+                  disabled={takingHint || timeUp}
+                >
+                  <span aria-hidden="true">💡</span>{' '}
+                  {takingHint ? 'Открываем…' : `Получить подсказку (${hintsRemaining})`}
+                </button>
+                {/* Штраф следующей подсказки — попадёт в статистику уровня. */}
+                {nextHintPenalty > 0 && (
+                  <span className="assoc-normal-hint-penalty">штраф: +{nextHintPenalty} сек.</span>
+                )}
+              </>
             ) : (
               <span className="assoc-hint-countdown">
                 <span aria-hidden="true">💡</span> Подсказка через {formatTime(hintSecondsLeft)}
