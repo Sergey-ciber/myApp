@@ -1825,11 +1825,10 @@ public class TeamGameService {
         LevelHint usedHint = levelHints.get(usedHints);
         double hintPenalty = usedHint.getPenaltyTime() == null ? 0.0 : usedHint.getPenaltyTime();
 
-        // Одна кнопка появляется по самому раннему времени из настроек уровня.
-        long requiredSeconds = levelHints.stream()
-                .map(hint -> hint.getTriggerTime() == null ? 0L : Math.round(hint.getTriggerTime() * 60))
-                .min(Long::compareTo)
-                .orElse(0L);
+        // Каждая подсказка открывается по своему времени от старта уровня.
+        long requiredSeconds = usedHint.getTriggerTime() == null
+                ? 0L
+                : Math.round(usedHint.getTriggerTime() * 60);
         long elapsed = Math.max(0, Duration.between(levelAnchor(session), Instant.now()).getSeconds());
         if (elapsed < requiredSeconds) {
             throw new BadRequestException("Подсказка будет доступна через "

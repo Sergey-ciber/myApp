@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiMessage } from '../../api/client'
-import { fetchGame, fetchLeaderboard, startGame, submitResult, restartGame, saveGameProgress, loadGameProgress, clearGameProgress } from '../../api/games'
+import { fetchGame, fetchLeaderboard, startGame, startGameLevel, submitResult, restartGame, saveGameProgress, loadGameProgress, clearGameProgress } from '../../api/games'
 import { fetchTeams } from '../../api/teams'
 import { getTeamGameState, joinTeamGame, leaveTeamGame, startTeamGameSession } from '../../api/teamGames'
 import GameBoard from './GameBoard'
@@ -66,6 +66,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const tpk = useCallback((s) => playerKey(currentUserId, s), [currentUserId])
   const [game, setGame] = useState(null)
   const [progress, setProgress] = useState(null)
+  // Сохранённое состояние игры загружено — можно фиксировать старт уровня.
+  const [savedProgressLoaded, setSavedProgressLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [leaderboard, setLeaderboard] = useState([])
@@ -279,6 +281,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     let cancelled = false
     setLoading(true)
     setError('')
+    setSavedProgressLoaded(false)
     fetchGame(gameId)
       .then((data) => {
         if (cancelled) return
@@ -343,8 +346,27 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         })
       })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setSavedProgressLoaded(true) })
     return () => { cancelled = true }
   }, [gameId, currentUserId])
+
+  /**
+   * Фиксируем на сервере вход на уровень: от этого момента считаются таймер
+   * уровня и доступность подсказок. Повторный вход на тот же уровень
+   * (например, после перезагрузки страницы) прогресс не сбрасывает.
+   */
+  const levelStartKeyRef = useRef(null)
+  useEffect(() => {
+    if (!game?.id || !gameStarted || finished || !savedProgressLoaded) return undefined
+    const key = `${game.id}:${currentLevelIndex}`
+    if (levelStartKeyRef.current === key) return undefined
+    levelStartKeyRef.current = key
+    let cancelled = false
+    startGameLevel(game.id, currentLevelIndex)
+      .then((fresh) => { if (!cancelled && fresh) setProgress(fresh) })
+      .catch(() => { if (!cancelled) levelStartKeyRef.current = null })
+    return () => { cancelled = true }
+  }, [game?.id, gameStarted, finished, currentLevelIndex, savedProgressLoaded])
 
   /** Начать игру с нуля: сбрасываем серверный прогресс и начинаем первый уровень. */
   const startPlaying = async () => {
@@ -564,6 +586,9 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       } else {
         const nextIdx = currentLevelIndex + 1
         setCurrentLevelIndex(nextIdx)
+        // Новый уровень начинается с чистого прогресса: иначе до ответа
+        // сервера на доске могли бы остаться подсказки и слова прошлого уровня.
+        setProgress(null)
         writeP(pk('level'), nextIdx)
         writeP(pk('question'), null)
         setSavedQuestionIndex(0)

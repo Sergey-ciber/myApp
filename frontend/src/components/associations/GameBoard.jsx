@@ -72,10 +72,12 @@ export default function GameBoard({
   const [hintNotice, setHintNotice] = useState(false)
   const hintWasAvailable = useRef(false)
   const [clock, setClock] = useState(() => ({
-    baseElapsed: Number(progress?.elapsedSeconds) || 0,
+    baseElapsed: Number(progress?.levelElapsedSeconds ?? progress?.elapsedSeconds) || 0,
     loadedAt: Date.now(),
   }))
-  const [elapsed, setElapsed] = useState(() => Number(progress?.elapsedSeconds) || 0)
+  const [elapsed, setElapsed] = useState(
+    () => Number(progress?.levelElapsedSeconds ?? progress?.elapsedSeconds) || 0,
+  )
   const [checking, setChecking] = useState({})
   const [timeUp, setTimeUp] = useState(false)
   const [actionError, setActionError] = useState('')
@@ -146,12 +148,14 @@ export default function GameBoard({
   const elapsedSeconds = () =>
     clock.baseElapsed + Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
 
-  /** Синхронизируем локальный таймер с серверным прогрессом (учёт времени офлайн). */
+  /**
+   * Синхронизируем локальный таймер с серверным прогрессом (учёт времени офлайн).
+   * Серверное время уже включает всё прошедшее время уровня, поэтому берём его
+   * за точку отсчёта: иначе накопленная задержка ответа сдвигала бы таймер назад.
+   */
   const syncElapsedFromProgress = (freshElapsed) => {
-    const secondsSinceLoaded = Math.max(0, Math.floor((Date.now() - clock.loadedAt) / 1000))
-    const fresh = Number(freshElapsed) || 0
-    const base = Math.max(0, fresh - secondsSinceLoaded)
-    setClock({ baseElapsed: base, loadedAt: Date.now() })
+    const fresh = Math.max(0, Number(freshElapsed) || 0)
+    setClock({ baseElapsed: fresh, loadedAt: Date.now() })
     setElapsed(fresh)
   }
 
@@ -164,6 +168,22 @@ export default function GameBoard({
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock, timeUp])
+
+  /**
+   * Серверное время уровня приходит при загрузке страницы и при входе на новый
+   * уровень. Подтягиваем его, чтобы после перезагрузки таймер и подсказки
+   * продолжались с того же момента, а не сбрасывались и не «просрочивались».
+   */
+  const lastServerLevelElapsed = useRef(
+    Number(progress?.levelElapsedSeconds ?? progress?.elapsedSeconds) || 0,
+  )
+  useEffect(() => {
+    const fresh = Number(progress?.levelElapsedSeconds)
+    if (!Number.isFinite(fresh) || lastServerLevelElapsed.current === fresh) return
+    lastServerLevelElapsed.current = fresh
+    syncElapsedFromProgress(fresh)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress?.levelElapsedSeconds])
 
   const completeLevel = (payload) => {
     if (completedRef.current) return
@@ -196,13 +216,18 @@ export default function GameBoard({
   }
 
   // Одна кнопка подсказки на уровень: количество нажатий равно числу
-  // подсказок, настроенных администратором. Кнопка появляется по самому
-  // раннему времени из настроек уровня.
-  const hintTriggerMinutes = (level.hints || []).map((hint) => Number(hint.triggerTime) || 0)
-  const totalHints = (level.hints || []).length
+  // подсказок, настроенных администратором. Каждая следующая подсказка
+  // открывается по своему triggerTime от старта уровня.
+  const totalHints = hintSettings.length
   const hintsRemaining = Math.max(0, totalHints - hintLevel)
-  const hintUnlockAt = totalHints > 0 ? Math.round(Math.min(...hintTriggerMinutes) * 60) : null
-  const hintScheduled = !timeUp && hintUnlockAt != null && hintUnlockAt < limitSeconds
+  const nextHint = hintSettings[hintLevel] || null
+  const hintUnlockAt = nextHint
+    ? Math.round((Number(nextHint.triggerTime) || 0) * 60)
+    : null
+  // Когда подсказки закончились, блок остаётся с неактивной кнопкой «(0)».
+  const hintsExhausted = totalHints > 0 && hintsRemaining === 0
+  const hintScheduled = !timeUp
+    && (hintsExhausted || (hintUnlockAt != null && hintUnlockAt < limitSeconds))
   const hintAvailable = hintScheduled && hintsRemaining > 0 && elapsed >= hintUnlockAt
   const hintSecondsLeft = hintUnlockAt == null ? 0 : Math.max(0, hintUnlockAt - elapsed)
 
@@ -297,7 +322,9 @@ export default function GameBoard({
       if (result.progress?.hintLevel != null) setHintLevel(result.progress.hintLevel)
       if (result.progress?.hintPrefixes) setHintPrefixes(result.progress.hintPrefixes)
       if (result.progress?.hintsApplied) setHintsApplied(result.progress.hintsApplied)
-      if (result.progress?.elapsedSeconds != null) syncElapsedFromProgress(result.progress.elapsedSeconds)
+      if (result.progress?.elapsedSeconds != null) {
+        syncElapsedFromProgress(result.progress.levelElapsedSeconds ?? result.progress.elapsedSeconds)
+      }
       if (onSave) onSave({ elapsedSeconds: elapsedSeconds(), hintLevel, hintPrefixes, hintsApplied, penaltySeconds })
       if (result.correct) {
         // Ячейка блокируется и остаётся с каноничным словом — только
@@ -390,7 +417,9 @@ export default function GameBoard({
       setHintLevel(nextHintLevel)
       setHintPrefixes(nextPrefixes)
       setHintsApplied(nextApplied)
-      if (fresh?.elapsedSeconds != null) syncElapsedFromProgress(fresh.elapsedSeconds)
+      if (fresh?.elapsedSeconds != null) {
+        syncElapsedFromProgress(fresh.levelElapsedSeconds ?? fresh.elapsedSeconds)
+      }
       if (onSave) {
         onSave({
           elapsedSeconds: elapsedSeconds(),
@@ -506,7 +535,7 @@ export default function GameBoard({
       <div className="assoc-board-head">
         <p className="assoc-board-tip">
           Уровень «{level.title}». Время: <strong>{formatTime(remainingSeconds)}</strong>{' '}
-          Разгадайте слово в колонке 5 до конца таймера. Подсказки следующих колонок
+          Игра в ассоциации. Например ВИЛКА + СУП = ЛОЖКА. Разгадайте слово в колонке 5 до конца таймера. Подсказки следующих колонок
           открываются, когда разгаданы оба слова пары. Ответы проверяет сервер.
         </p>
 

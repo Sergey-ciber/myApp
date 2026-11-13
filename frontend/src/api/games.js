@@ -19,6 +19,13 @@ export const checkAnswer = (gameId, column, position, answer, questionId) =>
 /** Начать заново: обнуляет прогресс только текущего пользователя. */
 export const restartGame = (id) => api.post(`/games/${id}/restart`).then((res) => res.data)
 
+/**
+ * Зафиксировать вход на уровень: сервер запоминает момент старта уровня,
+ * от которого считаются таймер уровня и подсказки.
+ */
+export const startGameLevel = (id, levelIndex) =>
+  api.post(`/games/${id}/levels/${levelIndex}/start`).then((res) => res.data)
+
 /** Взять подсказку: сервер проверяет время и открывает первые буквы неразгаданных слов. */
 export const requestHint = (id) => api.post(`/games/${id}/hint`).then((res) => res.data)
 

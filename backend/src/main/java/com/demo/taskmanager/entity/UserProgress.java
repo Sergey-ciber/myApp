@@ -47,9 +47,20 @@ public class UserProgress {
     @Column(name = "hints_applied", columnDefinition = "text")
     private String hintsApplied = "{}";
 
-    /** Момент старта текущей попытки — от него считается таймер. */
+    /** Момент старта текущей попытки — от него считается общий таймер игры. */
     @Column(name = "started_at", nullable = false)
     private Instant startedAt = Instant.now();
+
+    /** Индекс текущего уровня (с нуля). Уровни проходятся последовательно. */
+    @Column(name = "level_index", nullable = false, columnDefinition = "integer default 0")
+    private int levelIndex = 0;
+
+    /**
+     * Момент старта текущего уровня — от него считаются таймер уровня
+     * и время доступности подсказок. Переживает перезагрузку страницы.
+     */
+    @Column(name = "level_started_at")
+    private Instant levelStartedAt;
 
     /** Время победы в секундах; null — игра ещё не пройдена. */
     @Column(name = "finished_seconds")
@@ -92,6 +103,12 @@ public class UserProgress {
 
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
+
+    public int getLevelIndex() { return levelIndex; }
+    public void setLevelIndex(int levelIndex) { this.levelIndex = levelIndex; }
+
+    public Instant getLevelStartedAt() { return levelStartedAt; }
+    public void setLevelStartedAt(Instant levelStartedAt) { this.levelStartedAt = levelStartedAt; }
 
     public Integer getFinishedSeconds() { return finishedSeconds; }
     public void setFinishedSeconds(Integer finishedSeconds) { this.finishedSeconds = finishedSeconds; }

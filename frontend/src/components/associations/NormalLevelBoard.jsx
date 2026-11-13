@@ -59,7 +59,9 @@ export default function NormalLevelBoard({
   // содержимое использованных подсказок: { [questionId]: { [hintIndex]: content } }
   const [hintContents, setHintContents] = useState({})
 
-  const levelStartedAt = useRef(Date.now() - (Number(progress?.elapsedSeconds) || 0) * 1000)
+  const levelStartedAt = useRef(
+    Date.now() - (Number(progress?.levelElapsedSeconds ?? progress?.elapsedSeconds) || 0) * 1000,
+  )
   const [now, setNow] = useState(Date.now())
   const completedRef = useRef(false)
   // время старта таймеров подсказок для каждого вопроса (при первом открытии)

@@ -86,6 +86,17 @@ public class GameController {
         return gameService.restartProgress(id, currentUser(principal));
     }
 
+    /**
+     * Вход на уровень: сервер запоминает момент старта уровня, чтобы таймер
+     * и подсказки не сбрасывались и не «просрочивались» при перезагрузке.
+     */
+    @PostMapping("/{id}/levels/{levelIndex}/start")
+    public GameProgressDto startLevel(@AuthenticationPrincipal UserDetails principal,
+                                      @PathVariable Long id,
+                                      @PathVariable int levelIndex) {
+        return gameService.startLevel(id, currentUser(principal), levelIndex);
+    }
+
     /** Подсказка: первые буквы неразгаданных слов. Доступность проверяется сервером. */
     @PostMapping("/{id}/hint")
     public GameProgressDto hint(@AuthenticationPrincipal UserDetails principal,

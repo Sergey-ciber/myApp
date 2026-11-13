@@ -212,7 +212,51 @@ public class GameService {
     public GameSessionResponse startSession(Long id, User user) {
         Game game = findGame(id);
         UserProgress progress = findOrCreateProgress(game, user);
+        // Для прогресса, созданного до появления поля, старт уровня восстанавливаем
+        // от начала попытки: таймер не должен обнуляться при каждом входе в игру.
+        if (progress.getLevelStartedAt() == null) {
+            progress.setLevelStartedAt(progress.getStartedAt() != null
+                    ? progress.getStartedAt()
+                    : Instant.now());
+            progress.setUpdatedAt(Instant.now());
+            progressRepository.save(progress);
+        }
         return new GameSessionResponse(GamePlayResponse.from(game), toDto(progress));
+    }
+
+    /**
+     * Зафиксировать вход игрока на уровень: от этого момента считаются таймер
+     * уровня и доступность подсказок. Повторный вызов для того же уровня
+     * ничего не сбрасывает, поэтому перезагрузка страницы безопасна.
+     */
+    @Transactional
+    public GameProgressDto startLevel(Long gameId, User user, int levelIndex) {
+        Game game = findGame(gameId);
+        List<GameLevel> levels = sortedLevels(game);
+        if (levelIndex < 0 || levelIndex >= levels.size()) {
+            throw new BadRequestException("Уровень не найден");
+        }
+        UserProgress progress = findOrCreateProgress(game, user);
+        boolean changed = false;
+        if (progress.getLevelIndex() != levelIndex) {
+            progress.setLevelIndex(levelIndex);
+            progress.setLevelStartedAt(Instant.now());
+            // Подсказки и разгаданные слова относятся к конкретному уровню:
+            // на новом уровне отсчёт начинается заново.
+            progress.setHintLevel(0);
+            progress.setHintPrefixes("{}");
+            progress.setHintsApplied("{}");
+            progress.setSolvedWords("{}");
+            changed = true;
+        } else if (progress.getLevelStartedAt() == null) {
+            progress.setLevelStartedAt(Instant.now());
+            changed = true;
+        }
+        if (changed) {
+            progress.setUpdatedAt(Instant.now());
+            progressRepository.save(progress);
+        }
+        return toDto(progress);
     }
 
     /**
@@ -399,9 +443,9 @@ public class GameService {
     }
 
     /**
-     * Выдать следующую подсказку. Кнопка одна на уровень: она появляется после
-     * самого раннего времени из настроек подсказок, а каждое нажатие открывает
-     * ещё одну букву во всех доступных неразгаданных ячейках.
+     * Выдать следующую подсказку. Каждая подсказка открывается по своему
+     * triggerTime, отсчитанному от старта уровня; нажатие открывает ещё одну
+     * букву во всех доступных неразгаданных ячейках.
      *
      * Доступность ячейки: оба родительских слова из предыдущей колонки разгаданы.
      * Если открыты все буквы короткого слова — ячейка разгадывается автоматически.
@@ -411,7 +455,7 @@ public class GameService {
         Game game = findGame(gameId);
         UserProgress progress = findOrCreateProgress(game, user);
 
-        GameLevel level = currentLevel(game);
+        GameLevel level = levelAt(game, progress.getLevelIndex());
         if (level == null) {
             throw new BadRequestException("Нет активного уровня");
         }
@@ -430,12 +474,12 @@ public class GameService {
             throw new BadRequestException("Все подсказки уже получены");
         }
 
-        // Одна кнопка появляется по первому (самому раннему) времени из настроек уровня.
-        long requiredSeconds = levelHints.stream()
-                .map(hint -> hint.getTriggerTime() == null ? 0L : Math.round(hint.getTriggerTime() * 60))
-                .min(Long::compareTo)
-                .orElse(0L);
-        long elapsed = elapsedSeconds(progress);
+        // Следующая подсказка доступна по своему времени от старта уровня.
+        LevelHint nextHint = levelHints.get(usedHints);
+        long requiredSeconds = nextHint.getTriggerTime() == null
+                ? 0L
+                : Math.round(nextHint.getTriggerTime() * 60);
+        long elapsed = levelElapsedSeconds(progress);
         if (elapsed < requiredSeconds) {
             throw new BadRequestException("Подсказка будет доступна через "
                     + (requiredSeconds - elapsed) + " с");
@@ -533,6 +577,8 @@ public class GameService {
         progress.setHintPrefixes("{}");
         progress.setHintsApplied("{}");
         progress.setStartedAt(Instant.now());
+        progress.setLevelIndex(0);
+        progress.setLevelStartedAt(Instant.now());
         progress.setFinishedSeconds(null);
         progress.setWinCounted(false);
         progress.setUpdatedAt(Instant.now());
@@ -1247,13 +1293,13 @@ public class GameService {
                 .orElseThrow(() -> new NotFoundException("Игра не найдена"));
     }
 
-    /** Текущий уровень игры: первый по порядку. */
-    private GameLevel currentLevel(Game game) {
-        return game.getLevels() == null ? null : game.getLevels().stream()
-                .filter(level -> level != null)
-                .sorted(Comparator.comparingInt(GameLevel::getOrderIndex))
-                .findFirst()
-                .orElse(null);
+    /** Уровень по индексу в порядке прохождения; null — если индекс вне диапазона. */
+    private GameLevel levelAt(Game game, int levelIndex) {
+        List<GameLevel> levels = sortedLevels(game);
+        if (levelIndex < 0 || levelIndex >= levels.size()) {
+            return null;
+        }
+        return levels.get(levelIndex);
     }
 
     /** Все уровни игры в порядке прохождения. */
@@ -1304,12 +1350,22 @@ public class GameService {
                 : elapsedSeconds(progress);
         return new GameProgressDto(parseSolved(progress), progress.getStartedAt(),
                 elapsed, progress.getFinishedSeconds(),
-                progress.getHintLevel(), parsePrefixes(progress), parseHintsApplied(progress));
+                progress.getHintLevel(), parsePrefixes(progress), parseHintsApplied(progress),
+                progress.getLevelIndex(), levelElapsedSeconds(progress));
     }
 
     private long elapsedSeconds(UserProgress progress) {
         if (progress.getStartedAt() == null) return 0;
         return Math.max(0, Duration.between(progress.getStartedAt(), Instant.now()).getSeconds());
+    }
+
+    /** Время с начала текущего уровня: таймер уровня и пороги подсказок. */
+    private long levelElapsedSeconds(UserProgress progress) {
+        Instant start = progress.getLevelStartedAt() != null
+                ? progress.getLevelStartedAt()
+                : progress.getStartedAt();
+        if (start == null) return 0;
+        return Math.max(0, Duration.between(start, Instant.now()).getSeconds());
     }
 
     private Map<String, String> parseSolved(UserProgress progress) {
