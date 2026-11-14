@@ -80,6 +80,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [savedQuestionIndex, setSavedQuestionIndex] = useState(() => { const v=Number(readP(pk('question'))); return Number.isFinite(v)&&v>=0?v:0 })
   const [levelStats, setLevelStats] = useState(() => readPJson(pk('stats')) || [])
   const [finished, setFinished] = useState(() => readP(pk('finished')) === '1')
+  // Партия завершена досрочно (кнопка «Завершить игру»): результат не засчитан.
+  const [endedEarly, setEndedEarly] = useState(() => readP(pk('endedEarly')) === '1')
   const [totalTime, setTotalTime] = useState(() => { const v=Number(readP(pk('total'))); return Number.isFinite(v)?v:0 })
   const [teamMode, setTeamMode] = useState(() => readP(tpk('teamMode')) === '1')
   const [teams, setTeams] = useState([])
@@ -294,6 +296,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           setCurrentLevelIndex(0)
           setLevelStats([])
           setFinished(false)
+          setEndedEarly(false)
           setTotalTime(0)
         }
       })
@@ -385,9 +388,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setSavedQuestionIndex(0)
       setLevelStats([])
       setFinished(false)
+      setEndedEarly(false)
       setTotalTime(0)
       setGameStarted(true)
-      writeP(pk('started'),'1'); writeP(pk('level'),'0'); writeP(pk('question'),null); writePJson(pk('stats'),[]); writeP(pk('finished'),null); writeP(pk('total'),null)
+      writeP(pk('started'),'1'); writeP(pk('level'),'0'); writeP(pk('question'),null); writePJson(pk('stats'),[]); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null)
       writeP(tpk('teamMode'),null); writeP(tpk('teamSession'),null); writeP(tpk('teamId'),null)
       setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
       gameStateRef.current = {
@@ -423,13 +427,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setSavedQuestionIndex(Math.max(0, Number(resumable.questionIndex) || 0))
       setLevelStats(Array.isArray(resumable.levelStats) ? resumable.levelStats : [])
       setFinished(false)
+      setEndedEarly(false)
       setTotalTime(0)
       setGameStarted(true)
       writeP(pk('started'), '1')
       writeP(pk('level'), levelIdx)
       writeP(pk('question'), Number(resumable.questionIndex) || 0)
       writePJson(pk('stats'), Array.isArray(resumable.levelStats) ? resumable.levelStats : [])
-      writeP(pk('finished'), null); writeP(pk('total'), null)
+      writeP(pk('finished'), null); writeP(pk('total'), null); writeP(pk('endedEarly'), null)
       writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
       gameStateRef.current = {
         ...gameStateRef.current,
@@ -556,7 +561,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         const grandTotal = nextStats.reduce((sum, s) => sum + s.totalTime, 0)
         setTotalTime(grandTotal)
         setFinished(true)
-        writeP(pk('total'), grandTotal); writeP(pk('finished'),'1')
+        setEndedEarly(false)
+        writeP(pk('total'), grandTotal); writeP(pk('finished'),'1'); writeP(pk('endedEarly'), null)
         // Уровень, закончившийся по таймауту, не считается пройденным:
         // такой результат сервер в рейтинг не примет, поэтому и не отправляем.
         if (nextStats.some((s) => s.timedOut)) {
@@ -627,12 +633,20 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setSavedQuestionIndex(0)
     setLevelStats([])
     setFinished(false)
+    setEndedEarly(false)
     setTotalTime(0)
     setResultError('')
     setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
-    writeP(pk('started'),null); writeP(pk('level'),null); writeP(pk('question'),null); writePJson(pk('stats'),null); writeP(pk('finished'),null); writeP(pk('total'),null)
+    writeP(pk('started'),null); writeP(pk('level'),null); writeP(pk('question'),null); writePJson(pk('stats'),null); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null)
   }
 
+  /**
+   * Завершение партии.
+   *
+   * В командном режиме игрок только выходит из сессии — остальные продолжают.
+   * В одиночном режиме партия останавливается окончательно: серверный прогресс
+   * очищается, результат в рейтинг не отправляется, продолжить игру нельзя.
+   */
   const confirmQuit = async () => {
     if (quitting) return
     clearLevelCompleteNotice()
@@ -642,29 +656,34 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         // в командной игре игрок только выходит из сессии —
         // остальные участники продолжают прохождение без него
         try { await leaveTeamGame(teamSessionId) } catch {}
+        setShowQuitModal(false)
+        setQuitting(false)
+        setGameStarted(false)
+        writeP(pk('started'), null)
+        writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
+        setResumable((prev) => ({ ...prev, hasProgress: true }))
+        if (onExit) onExit()
+        else navigate('/games')
+        return
       }
-      // Сохранённый прогресс не удаляем: игрок сможет продолжить игру позже.
-      // Полностью сбрасывается прогресс кнопкой «Начать заново».
-      // Сохраняем сразу (без debounce), т.к. после выхода компонент размонтируется.
-      const gs = gameStateRef.current
-      try {
-        await saveGameProgress(game.id, {
-          currentLevelIndex: gs.levelIndex,
-          currentQuestionIndex: gs.questionIndex,
-          // started=false: после выхода показываем экопи игры, а не продолжаем её
-          gameState: { ...gs, started: false },
-        })
-      } catch {}
-    } catch {}
-    setShowQuitModal(false)
-    setQuitting(false)
-    setGameStarted(false)
-    writeP(pk('started'), null)
-    writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
-    // прогресс сохранён — игрок сможет продолжить игру позже
-    setResumable((prev) => ({ ...prev, hasProgress: true }))
-    if (onExit) onExit()
-    else navigate('/games')
+
+      // Одиночная партия: очищаем сохранённый прогресс, чтобы её нельзя было
+      // продолжить, и показываем экран итогов с пометкой о досрочном завершении.
+      try { await clearGameProgress(game.id) } catch {}
+      const grandTotal = levelStats.reduce((sum, s) => sum + (Number(s.totalTime) || 0), 0)
+      setTotalTime(grandTotal)
+      setFinished(true)
+      setEndedEarly(true)
+      // Чистим возможную старую ошибку сохранения результата: партия не засчитана.
+      setResultError('')
+      setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
+      writeP(pk('total'), grandTotal)
+      writeP(pk('finished'), '1')
+      writeP(pk('endedEarly'), '1')
+    } finally {
+      setShowQuitModal(false)
+      setQuitting(false)
+    }
   }
 
   if (games.length === 0) {
@@ -714,22 +733,19 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       {/*        автор: {game.creatorUsername || 'неизвестен'} · лимит: {formatMinutes(game.timeLimitMinutes)} мин.*/}
       {/*      </span>*/}
       {/*    </div>*/}
-      {/*    {gameStarted && !finished && (*/}
-      {/*      <button type="button" className="btn btn-danger" onClick={() => setShowQuitModal(true)}>*/}
-      {/*        Завершить игру*/}
-      {/*      </button>*/}
-      {/*    )}*/}
       {/*  </div>*/}
       {/*)}*/}
 
       {showQuitModal && (
-        <div className="modal-overlay" onClick={() => setShowQuitModal(false)}>
+        <div className="modal-overlay" onClick={() => !quitting && setShowQuitModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth:'520px', width:'90%' }}>
-            <h3 className="modal-title">Вы уверены, что хотите завершить игру?</h3>
+            <h3 className="modal-title">
+              {teamMode ? 'Выйти из командной игры?' : 'Завершить игру?'}
+            </h3>
             <p className="modal-text">
               {teamMode
-                ? 'Вы выйдете из командной игры. Остальные участники смогут продолжить прохождение без вас. Вы уверены?'
-                : 'Ваш текущий прогресс будет сохранён, и вы вернётесь в главное меню. Продолжить игру можно будет позже.'}
+                ? 'Вы выйдете из командной игры. Остальные участники смогут продолжить прохождение без вас.'
+                : 'Партия будет остановлена, сохранённый прогресс удалён. Результат не попадёт в рейтинг, продолжить игру после завершения нельзя.'}
             </p>
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setShowQuitModal(false)} disabled={quitting}>Отмена</button>
@@ -773,6 +789,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           stats={levelStats}
           totalTime={totalTime}
           resultError={resultError}
+          endedEarly={endedEarly}
           leaderboard={leaderboard}
           leaderboardLoading={leaderboardLoading}
           currentUserId={currentUserId}
@@ -781,8 +798,18 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         />
       ) : (
         <>
-          <div className="assoc-level-progress">
-            Уровень {currentLevelIndex + 1} из {levels.length}
+          <div className="assoc-play-toolbar">
+            <div className="assoc-level-progress">
+              Уровень {currentLevelIndex + 1} из {levels.length}
+            </div>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => setShowQuitModal(true)}
+              title="Остановить партию: результат не попадёт в рейтинг"
+            >
+              Завершить игру
+            </button>
           </div>
           {currentLevel.type === 'NORMAL' ? (
             <NormalLevelBoard
@@ -932,7 +959,7 @@ function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canRes
 }
 
 /** Экран итоговой статистики после последнего уровня. */
-function StatisticsScreen({ stats, totalTime, resultError, leaderboard, leaderboardLoading, currentUserId, onPlayAgain, onHome }) {
+function StatisticsScreen({ stats, totalTime, resultError, endedEarly, leaderboard, leaderboardLoading, currentUserId, onPlayAgain, onHome }) {
   const rows = (stats || []).map((stat, index) => ({
     levelId: stat.levelId,
     levelIndex: index,
@@ -944,10 +971,22 @@ function StatisticsScreen({ stats, totalTime, resultError, leaderboard, leaderbo
   return (
     <div className="assoc-statistics">
       <div className="assoc-statistics-card">
-        <div className="assoc-win-emoji" aria-hidden="true">🏆</div>
-        <h3 className="assoc-statistics-title">Игра завершена!</h3>
+        <div className="assoc-win-emoji" aria-hidden="true">{endedEarly ? '🏁' : '🏆'}</div>
+        <h3 className="assoc-statistics-title">
+          {endedEarly ? 'Игра завершена досрочно' : 'Игра завершена!'}
+        </h3>
 
-        <GameStatisticsTable levels={rows} totalSeconds={totalTime} />
+        {endedEarly && (
+          <p className="assoc-statistics-note">
+            Партия остановлена до прохождения всех уровней. Результат не засчитан и не попал в рейтинг.
+          </p>
+        )}
+
+        <GameStatisticsTable
+          levels={rows}
+          totalSeconds={totalTime}
+          emptyText={endedEarly ? 'Ни один уровень не пройден' : undefined}
+        />
 
         {resultError && <p className="assoc-win-error">{resultError}</p>}
 

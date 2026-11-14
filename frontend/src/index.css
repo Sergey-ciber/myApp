@@ -1639,7 +1639,16 @@ padding-bottom: 10px;
 }
 .assoc-info-start:hover { background: #ff9d2e; }
 
-/* Индикатор текущего уровня */
+/* Индикатор текущего уровня + кнопка завершения партии */
+.assoc-play-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.assoc-play-toolbar .assoc-level-progress { margin: 0; }
 .assoc-level-progress {
   margin: 10px 0;
   padding: 8px 14px;
@@ -1672,6 +1681,12 @@ padding-bottom: 10px;
 .assoc-statistics-table tfoot td { border-bottom: none; font-weight: 600; }
 .assoc-statistics-card .assoc-leaderboard { text-align: left; margin: 0 0 18px; }
 .assoc-statistics-card .form-actions { justify-content: center; }
+/* Пометка о досрочном завершении партии */
+.assoc-statistics-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #c9c9d4;
+}
 
 /* Командный финиш: итоговая карточка + статистика времени по уровням */
 .assoc-team-finish {
