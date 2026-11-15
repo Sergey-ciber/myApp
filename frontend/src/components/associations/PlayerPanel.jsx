@@ -678,15 +678,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     }, 2000)
   }
 
-  /** Начать заново: сбрасываем прогресс и статистику. */
-  const playAgain = async () => {
+  /**
+   * Сброс локального состояния завершённой партии.
+   *
+   * Нужен и в «Играть снова», и при возврате на главную: иначе при повторном
+   * открытии игры игрок снова увидит прошлый экран итогов вместо её описания.
+   */
+  const resetFinishedState = () => {
     clearLevelCompleteNotice()
-    try {
-      await restartGame(game.id)
-      try { await clearGameProgress(game.id) } catch {}
-    } catch {
-      // не критично
-    }
     setGameStarted(false)
     setCurrentLevelIndex(0)
     setSavedQuestionIndex(0)
@@ -698,6 +697,29 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setResultError('')
     setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
     writeP(pk('started'),null); writeP(pk('level'),null); writeP(pk('question'),null); writePJson(pk('stats'),null); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null); writeP(pk('finishReason'),null)
+  }
+
+  /** Начать заново: сбрасываем прогресс и статистику. */
+  const playAgain = async () => {
+    try {
+      await restartGame(game.id)
+      try { await clearGameProgress(game.id) } catch {}
+    } catch {
+      // не критично
+    }
+    resetFinishedState()
+  }
+
+  /**
+   * «Вернуться на главную» с экрана итогов.
+   *
+   * Экран игрока живёт внутри /games, поэтому navigate('/games') ничего не
+   * менял: нужно выйти из режима игрока так же, как кнопка «← К списку игр».
+   */
+  const goHome = () => {
+    resetFinishedState()
+    if (onExit) onExit()
+    else navigate('/games')
   }
 
   /**
@@ -860,7 +882,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           leaderboardLoading={leaderboardLoading}
           currentUserId={currentUserId}
           onPlayAgain={playAgain}
-          onHome={() => navigate('/games')}
+          onHome={goHome}
         />
       ) : (
         <>
