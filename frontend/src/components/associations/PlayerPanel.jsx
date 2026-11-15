@@ -54,6 +54,12 @@ function playerKey(id, suffix) {
   if (!id) return null
   return `assoc_player_${id}_${suffix}`
 }
+
+/**
+ * Страховка восстановления командной сессии: если сервер не ответил за это
+ * время, игрока возвращаем к списку игр, а не оставляем на экране загрузки.
+ */
+const TEAM_SESSION_RESTORE_TIMEOUT_MS = 15000
 function readP(k) { if (!k) return null; try { return localStorage.getItem(k) } catch { return null } }
 function writeP(k,v) { if (!k) return; try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k,String(v)) } catch {} }
 function readPJson(k) { if (!k) return null; try { const s=localStorage.getItem(k); return s?JSON.parse(s):null } catch { return null } }
@@ -235,40 +241,61 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
    * команду удалили, сессию снесли. Тогда просто выходим из командного
    * режима, вместо того чтобы показывать ошибку «Сессия не найдена».
    *
-   * Пока сессия не проверена, лобби не отрисовываем — иначе он успел бы
-   * запросить несуществующую сессию и показать ошибку.
+   * Экран загрузки показывается, пока нет teamState, поэтому у каждого
+   * пути восстановления должен быть выход: иначе игрок «зависает» на
+   * «Восстанавливаем участие в командной игре…» навсегда.
    */
   useEffect(() => {
-    if (!teamMode || !teamSessionId) {
+    if (!teamMode) {
       checkedSessionRef.current = null
       setTeamSessionChecked(true)
       return undefined
     }
+    // Командный режим без id сессии восстановить нельзя (например, флаг
+    // teamMode пришёл из серверного прогресса, а локальная сессия потеряна).
+    if (!teamSessionId) {
+      checkedSessionRef.current = null
+      resetTeamMode()
+      setTeamError('Не удалось восстановить командную игру — откройте игру заново')
+      return undefined
+    }
     if (checkedSessionRef.current === teamSessionId) return undefined
     let cancelled = false
+    let settled = false
     checkedSessionRef.current = teamSessionId
     setTeamSessionChecked(false)
+    // Страховка от запроса, который не завершился ни успехом, ни ошибкой.
+    const watchdog = setTimeout(() => {
+      if (cancelled || settled) return
+      settled = true
+      resetTeamMode()
+      setTeamError('Не удалось подключиться к командной игре — откройте игру заново')
+    }, TEAM_SESSION_RESTORE_TIMEOUT_MS)
     getTeamGameState(teamSessionId)
       .then((state) => {
-        if (cancelled || !state) return
-        const sessionStatus = String(state.status || '').toLowerCase()
-        if (sessionStatus === 'active' || sessionStatus === 'finished') {
+        if (cancelled || settled) return
+        settled = true
+        const sessionStatus = String(state?.status || '').toLowerCase()
+        if (state && (sessionStatus === 'active' || sessionStatus === 'finished')) {
           // Активную партию показываем, а завершённую — экраном результатов.
           // После перезагрузки страницы игрок снова увидит актуальный статус.
           setTeamState(state)
-        } else {
-          resetTeamMode()
+          setTeamSessionChecked(true)
           return
         }
-        if (!cancelled) setTeamSessionChecked(true)
+        // Пустой ответ или партия ещё в лобби — в игру не входим.
+        resetTeamMode()
       })
       .catch(() => {
-        if (cancelled) return
+        if (cancelled || settled) return
+        settled = true
         // Сессии больше нет — возвращаем игрока на экран игры.
         resetTeamMode()
       })
+      .finally(() => clearTimeout(watchdog))
     return () => {
       cancelled = true
+      clearTimeout(watchdog)
       // Освобождаем отметку: эффект перезапустится (например, когда
       // загрузится выбранная игра), и проверка сессии должна повториться.
       if (checkedSessionRef.current === teamSessionId) {
@@ -350,10 +377,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           writePJson(pk('stats'), state.levelStats)
           setLevelStats((prev) => (prev && prev.length ? prev : state.levelStats))
         }
-        // командный режим
+        // командный режим: флаг из прогресса включаем только если в браузере
+        // сохранилась сессия. Иначе игрок попал бы на вечный экран
+        // «Восстанавливаем участие в командной игре…» без id сессии.
         if (state.teamMode != null) {
-          writeP(tpk('teamMode'), String(state.teamMode ? 1 : 0))
-          setTeamMode((prev) => (prev ? prev : Boolean(state.teamMode)))
+          const storedSessionId = readP(tpk('teamSession'))
+          const restoredTeamMode = Boolean(state.teamMode) && Boolean(storedSessionId)
+          writeP(tpk('teamMode'), String(restoredTeamMode ? 1 : 0))
+          setTeamMode((prev) => (prev ? prev : restoredTeamMode))
         }
         // игра была начата — возвращаем игрока сразу на нужный уровень
         const wasStarted = state.started === true
@@ -804,12 +835,6 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       {!teamMode && (
         <ActiveTeamGames onJoin={handleJoinActiveTeamGame} />
       )}
-      {teamMode && !teamState && (
-        // Восстанавливаем участие после перезагрузки страницы:
-        // пока тянем актуальное состояние сессии — показываем загрузку,
-        // а не приглашение присоединиться заново.
-        <div className="page-loader">Восстанавливаем участие в командной игре…</div>
-      )}
 
       {/*{!teamMode && (*/}
       {/*  <div className="assoc-player-top">*/}
@@ -852,7 +877,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
             onEnded={handleTeamGameEnded}
           />
         ) : (
-          <div className="page-loader">Подключение к командной игре…</div>
+          // Восстанавливаем участие после перезагрузки страницы: пока тянем
+          // актуальное состояние сессии, показываем загрузку (единственный
+          // экран загрузки, второй такой же раньше висел над ним же).
+          <div className="page-loader">Восстанавливаем участие в командной игре…</div>
         )
       ) : !gameStarted ? (
         <GameInfoScreen

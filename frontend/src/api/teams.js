@@ -20,7 +20,8 @@ export const deleteTeam = (teamId) => api.delete(`/teams/${teamId}`)
 export const uploadTeamAvatar = (file) => {
   const form = new FormData()
   form.append('file', file)
-  return api.post('/teams/avatar', form).then((res) => res.data.avatarUrl)
+  // Загрузка файла может идти долго — общий таймаут axios здесь только помешал бы.
+  return api.post('/teams/avatar', form, { timeout: 0 }).then((res) => res.data.avatarUrl)
 }
 
 /** Отправить приглашение пользователю (только создатель команды). */

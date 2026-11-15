@@ -143,6 +143,8 @@ export default function TeamGamePlay({
     const [hintNotice, setHintNotice] = useState(null)
     const [ending, setEnding] = useState(false)
     const [showEndConfirm, setShowEndConfirm] = useState(false)
+    // Потеряли WebSocket: события команды не приходят, пока не переподключимся.
+    const [connectionLost, setConnectionLost] = useState(false)
     const [finishedFromServer, setFinishedFromServer] = useState(false)
     const [fullscreenImage, setFullscreenImage] = useState(null)
     const [solvedPyramid, setSolvedPyramid] = useState({})
@@ -327,10 +329,15 @@ export default function TeamGamePlay({
         const stompClient = new Client({
             webSocketFactory: () => new SockJS(WS_URL),
             reconnectDelay: 5000,
+            // Heartbeat: без него «тихо умершее» соединение (прокси, сеть)
+            // выглядит как рабочее, и события команды просто не приходят.
+            heartbeatIncoming: 10000,
+            heartbeatOutgoing: 10000,
             connectHeaders: {
                 Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
             },
             onConnect: () => {
+                setConnectionLost(false)
                 stompClient.subscribe('/topic/team_session_' + sessionId, (message) => {
                     try {
                         const payload = JSON.parse(message.body)
@@ -470,6 +477,20 @@ export default function TeamGamePlay({
                 })
                 // Клиенты, присоединившиеся позже, запрашивают полный слепок состояния
                 stompClient.publish({destination: '/app/team-game/request-sync', body: JSON.stringify({sessionId})})
+            },
+            // Ошибки транспорта и STOMP не должны молча оставлять игрока
+            // без событий команды — показываем баннер и пишем причину в консоль.
+            onStompError: (frame) => {
+                console.error('[team-game] STOMP error:', frame.headers?.message, frame.body)
+                setConnectionLost(true)
+            },
+            onWebSocketError: (event) => {
+                console.error('[team-game] WebSocket error:', event)
+                setConnectionLost(true)
+            },
+            onWebSocketClose: (event) => {
+                console.warn('[team-game] WebSocket closed, reconnecting…', event?.code, event?.reason)
+                setConnectionLost(true)
             },
         })
         stompClient.activate()
@@ -851,6 +872,13 @@ export default function TeamGamePlay({
                 <button type="button" className="btn btn-secondary assoc-back-btn" onClick={onExit}>
                     ← К списку игр
                 </button>
+            )}
+
+            {connectionLost && (
+                <div className="alert alert-warning" role="status">
+                    Соединение с игрой потеряно — переподключаемся… Действия других игроков
+                    могут не отображаться.
+                </div>
             )}
 
             <div className="assoc-player-top">

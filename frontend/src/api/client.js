@@ -1,7 +1,10 @@
 import axios from 'axios'
 import { clearAssocStorage } from '../utils/assocStorage'
 
-const api = axios.create({ baseURL: '/api' })
+// Таймаут обязателен: без него «зависший» запрос (например, восстановление
+// командной сессии) навсегда оставляет интерфейс на экране загрузки.
+// Загрузка файлов его отключает — см. timeout: 0 в uploadGameMedia/uploadTeamAvatar.
+const api = axios.create({ baseURL: '/api', timeout: 30000 })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')

@@ -84,5 +84,6 @@ export const clearGameProgress = (gameId) =>
 export const uploadGameMedia = (file) => {
   const form = new FormData()
   form.append('file', file)
-  return api.post('/files', form).then((res) => res.data.url)
+  // Файлы до 100 МБ: общий таймаут axios здесь только помешал бы.
+  return api.post('/files', form, { timeout: 0 }).then((res) => res.data.url)
 }
