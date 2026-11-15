@@ -282,6 +282,13 @@ public class TeamService {
         teamRepository.incrementWinsForMember(user.getId());
     }
 
+    /** Начисление рейтинга по id пользователя (например, всем участникам командной победы). */
+    @Transactional
+    public void registerWinByUserId(Long userId) {
+        if (userId == null) return;
+        teamRepository.incrementWinsForMember(userId);
+    }
+
     @Transactional(readOnly = true)
     public List<com.demo.taskmanager.dto.TeamMemberResponse> getMembers(Team team) {
         if (team == null) return List.of();

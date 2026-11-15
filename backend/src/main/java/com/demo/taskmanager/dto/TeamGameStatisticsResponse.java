@@ -17,6 +17,8 @@ public record TeamGameStatisticsResponse(
         Long sessionId,
         String status,
         String endReason,
+        /** Причина завершения в формате enum: COMPLETED, TIME_EXPIRED, LEVEL_TIME_EXPIRED, HOST_ENDED. */
+        String finishReason,
         Instant startedAt,
         Instant endedAt,
         long totalSeconds,

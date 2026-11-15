@@ -12,6 +12,7 @@ import com.demo.taskmanager.dto.TeamMemberResponse;
 import com.demo.taskmanager.dto.TeamPyramidAnswerRequest;
 import com.demo.taskmanager.entity.Game;
 import com.demo.taskmanager.entity.GameLevel;
+import com.demo.taskmanager.entity.FinishReason;
 import com.demo.taskmanager.entity.HintType;
 import com.demo.taskmanager.entity.LevelHint;
 import com.demo.taskmanager.entity.LevelType;
@@ -689,35 +690,17 @@ public class TeamGameService {
         }
     }
 
-    /** Истечение времени уровня: переход дальше или завершение последнего уровня. */
+    /**
+     * Истечение времени уровня: партия завершается по LEVEL_TIME_EXPIRED.
+     *
+     * Раньше уровень просто переключался на следующий, и команда могла играть
+     * дальше без ограничения. Теперь таймаут уровня — терминальное событие:
+     * фиксируем полный лимит уровня, закрываем сессию и показываем статистику.
+     */
     private void handleLevelTimeout(TeamGameSession session, Instant now) {
-        List<GameLevel> levels = sortedLevels(session.getGame());
-        if (levels.isEmpty()) {
-            finishSessionInternal(session, TeamGameSession.END_REASON_TIME_EXPIRED, null,
-                    "Время игры истекло");
-            return;
-        }
-        if (session.getCurrentLevelIndex() >= levels.size() - 1) {
-            // Последний уровень истёк: чистое время равно полному лимиту уровня.
-            closeCurrentLevelStat(session, now, true);
-            finishSessionInternal(session, TeamGameSession.END_REASON_TIME_EXPIRED, null,
-                    "Время игры истекло");
-            return;
-        }
-        // Уровень завершился по таймауту: чистое время равно лимиту уровня.
         closeCurrentLevelStat(session, now, true);
-        session.setCurrentLevelIndex(session.getCurrentLevelIndex() + 1);
-        session.setCurrentLevel(session.getCurrentLevelIndex());
-        session.setLevelStartedAt(now);
-        setLevelEndTime(session, levels.get(session.getCurrentLevelIndex()), now);
-        sessionRepository.save(session);
-        ensureQuestionStates(session, levels.get(session.getCurrentLevelIndex()));
-        startLevelStat(session, levels.get(session.getCurrentLevelIndex()), now);
-
-        TeamGameStateResponse state = buildState(session, null);
-        Map<String, Object> payload = event("sync_level_up", session, null, state);
-        payload.put("reason", TeamGameSession.END_REASON_TIME_EXPIRED);
-        broadcast(session.getId(), payload);
+        finishSessionInternal(session, TeamGameSession.END_REASON_LEVEL_TIME_EXPIRED, null,
+                "Время уровня истекло");
     }
 
     /**
@@ -737,16 +720,35 @@ public class TeamGameService {
         session.setEndReason(reason);
         session.setLevelEndTime(null);
         sessionRepository.save(session);
+
+        // Победа начисляется только за реально пройденную игру. Таймауты
+        // и досрочное завершение хостом — не победа.
+        if (TeamGameSession.END_REASON_COMPLETED.equals(reason)) {
+            for (TeamMemberResponse member : teamService.getMembers(session.getTeam())) {
+                if (member.userId() != null) {
+                    teamService.registerWinByUserId(member.userId());
+                }
+            }
+        }
+
         if (eventText != null && !eventText.isBlank()) {
             addEvent(session, eventText);
         }
 
+        String finishReason = finishReasonName(session);
         TeamGameStateResponse state = buildState(session, user);
         Map<String, Object> payload = event("end_team_game", session, user, state);
         payload.put("reason", reason);
         payload.put("endReason", reason);
+        payload.put("finishReason", finishReason);
         broadcast(session.getId(), payload);
         broadcastToTeam(session, payload);
+    }
+
+    /** Причина завершения в формате enum (UPPER_CASE); null — сессия ещё не завершена. */
+    private String finishReasonName(TeamGameSession session) {
+        FinishReason reason = session == null ? null : session.getFinishReason();
+        return reason == null ? null : reason.name();
     }
 
     // ------------------------------------------------------------------
@@ -803,6 +805,7 @@ public class TeamGameService {
                 session.getId(),
                 session.getStatus(),
                 session.getEndReason(),
+                finishReasonName(session),
                 session.getStartTime(),
                 session.getEndedAt(),
                 totalSeconds,
@@ -1071,6 +1074,8 @@ public class TeamGameService {
         payload.put("isHostByUser", hostFlags(session));
         payload.put("hostId", session.getHostId());
         payload.put("hostUsername", session.getHostUsername());
+        payload.put("endReason", session.getEndReason());
+        payload.put("finishReason", finishReasonName(session));
         return payload;
     }
 
@@ -1261,7 +1266,8 @@ public class TeamGameService {
                 session.getDurationMinutes(),
                 session.getEndsAt(),
                 session.getEndedAt(),
-                session.getEndReason()
+                session.getEndReason(),
+                finishReasonName(session)
         );
     }
 

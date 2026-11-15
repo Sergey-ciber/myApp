@@ -13,6 +13,12 @@ import java.util.List;
  */
 public record ResultRequest(
         Integer timeSeconds,
-        List<LevelStatsDto> levelsStats
+        List<LevelStatsDto> levelsStats,
+        /**
+         * Причина завершения: COMPLETED (по умолчанию), TIME_EXPIRED или
+         * LEVEL_TIME_EXPIRED. Для незавершённой попытки сервер сам проверяет
+         * таймеры и определяет точную причину.
+         */
+        String finishReason
 ) {
 }

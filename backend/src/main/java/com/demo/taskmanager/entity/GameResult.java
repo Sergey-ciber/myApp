@@ -40,6 +40,14 @@ public class GameResult {
     @Column(name = "levels_stats", columnDefinition = "text")
     private String levelsStats;
 
+    /**
+     * Причина завершения попытки: completed, time_expired, level_time_expired.
+     * Для записей, созданных до появления поля, NULL трактуется как completed.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "finish_reason", length = 30)
+    private FinishReason finishReason = FinishReason.COMPLETED;
+
     public GameResult() {
     }
 
@@ -65,4 +73,7 @@ public class GameResult {
 
     public String getLevelsStats() { return levelsStats; }
     public void setLevelsStats(String levelsStats) { this.levelsStats = levelsStats; }
+
+    public FinishReason getFinishReason() { return finishReason == null ? FinishReason.COMPLETED : finishReason; }
+    public void setFinishReason(FinishReason finishReason) { this.finishReason = finishReason; }
 }

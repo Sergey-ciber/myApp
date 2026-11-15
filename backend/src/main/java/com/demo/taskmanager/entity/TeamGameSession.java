@@ -26,6 +26,7 @@ public class TeamGameSession {
 
     public static final String END_REASON_HOST_ENDED = "host_ended";
     public static final String END_REASON_TIME_EXPIRED = "time_expired";
+    public static final String END_REASON_LEVEL_TIME_EXPIRED = "level_time_expired";
     public static final String END_REASON_COMPLETED = "completed";
 
     @Id
@@ -306,5 +307,17 @@ public class TeamGameSession {
 
     public void setEndReason(String endReason) {
         this.endReason = endReason;
+    }
+
+    /**
+     * Причина завершения в виде enum. Для старых сессий без причины возвращает null.
+     * Отдельной колонки нет: переиспользуется end_reason (в БД — lower_case).
+     */
+    public FinishReason getFinishReason() {
+        return FinishReason.fromString(endReason);
+    }
+
+    public void setFinishReason(FinishReason finishReason) {
+        this.endReason = finishReason == null ? null : finishReason.storageValue();
     }
 }

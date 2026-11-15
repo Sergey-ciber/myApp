@@ -70,6 +70,15 @@ public class UserProgress {
     @Column(name = "win_counted", nullable = false, columnDefinition = "boolean default false")
     private boolean winCounted = false;
 
+    /**
+     * Причина завершения попытки по времени: TIME_EXPIRED или LEVEL_TIME_EXPIRED.
+     * Для незавершённой попытки — NULL. Если время истекло, продолжить игру
+     * или дорешать уровни нельзя: попытка уже попала в рейтинг.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "finish_reason", length = 30)
+    private FinishReason finishReason;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
 
@@ -115,6 +124,9 @@ public class UserProgress {
 
     public boolean isWinCounted() { return winCounted; }
     public void setWinCounted(boolean winCounted) { this.winCounted = winCounted; }
+
+    public FinishReason getFinishReason() { return finishReason; }
+    public void setFinishReason(FinishReason finishReason) { this.finishReason = finishReason; }
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }

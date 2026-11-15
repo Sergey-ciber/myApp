@@ -5,9 +5,10 @@ import com.demo.taskmanager.entity.GameResult;
 import java.time.Instant;
 
 /** Сохранённый результат прохождения. */
-public record ResultResponse(Long id, int timeSeconds, Instant completedAt) {
+public record ResultResponse(Long id, int timeSeconds, Instant completedAt, String finishReason) {
 
     public static ResultResponse from(GameResult result) {
-        return new ResultResponse(result.getId(), result.getTimeSeconds(), result.getCompletedAt());
+        return new ResultResponse(result.getId(), result.getTimeSeconds(), result.getCompletedAt(),
+                result.getFinishReason().name());
     }
 }

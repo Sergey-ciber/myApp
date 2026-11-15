@@ -39,7 +39,9 @@ public record TeamGameStateResponse(
         Double durationMinutes,
         Instant endsAt,
         Instant endedAt,
-        String endReason
+        String endReason,
+        /** Причина завершения в формате enum: COMPLETED, TIME_EXPIRED, LEVEL_TIME_EXPIRED, HOST_ENDED. */
+        String finishReason
 ) {
     public boolean active() {
         return "active".equalsIgnoreCase(status);

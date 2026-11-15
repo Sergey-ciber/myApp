@@ -132,6 +132,29 @@ MAIL_SMTP_STARTTLS=${MAIL_SMTP_STARTTLS:-true}
 MAIL_SMTP_SSL=${MAIL_SMTP_SSL:-false}
 ENV
 
+# ---------- миграция схемы (до старта backend) ----------
+# Причина завершения попытки и приведение games.difficulty к integer.
+# Запускаем ДО backend: иначе Hibernate на ddl-auto=update может упасть
+# на изменении типа difficulty и приложение не поднимется.
+cd "$APP_DIR"
+log "Поднимаю базу и применяю deploy/add-finish-reason.sql"
+docker compose -f "$COMPOSE_FILE" up -d db
+db_ready=""
+for _ in $(seq 1 30); do
+  if docker compose -f "$COMPOSE_FILE" exec -T db \
+        pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    db_ready=1
+    break
+  fi
+  sleep 2
+done
+[ -n "$db_ready" ] || fail "База не поднялась — не удалось применить deploy/add-finish-reason.sql"
+if ! docker compose -f "$COMPOSE_FILE" exec -T db \
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      < deploy/add-finish-reason.sql; then
+  fail "Не удалось применить deploy/add-finish-reason.sql: проверьте тип и значения games.difficulty"
+fi
+
 # ---------- выкат ----------
 log "Собираю образы и поднимаю контейнеры"
 cd "$APP_DIR"

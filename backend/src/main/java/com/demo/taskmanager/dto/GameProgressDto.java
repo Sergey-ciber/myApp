@@ -17,5 +17,7 @@ public record GameProgressDto(Map<String, String> solved, Instant startedAt,
                               long elapsedSeconds, Integer finishedSeconds,
                               int hintLevel, Map<String, String> hintPrefixes,
                               Map<String, Integer> hintsApplied,
-                              int levelIndex, long levelElapsedSeconds) {
+                              int levelIndex, long levelElapsedSeconds,
+                              /** Причина завершения по времени: TIME_EXPIRED / LEVEL_TIME_EXPIRED; null — попытка активна. */
+                              String finishReason) {
 }

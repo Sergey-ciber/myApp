@@ -49,12 +49,20 @@ export const activateGame = (id) => api.post(`/games/${id}/activate`).then((res)
 export const deleteGame = (id) => api.delete(`/games/${id}`)
 
 /**
- * Сохранить время прохождения после победы.
+ * Сохранить результат попытки.
  * levelsStats — детализация по уровням: сервер проверяет по ней,
  * что игра пройдена до конца, и считает общее время сам.
+ * finishReason — COMPLETED (по умолчанию), TIME_EXPIRED или
+ * LEVEL_TIME_EXPIRED: попытка закрывается по времени, но попадает в рейтинг.
  */
-export const submitResult = (gameId, timeSeconds, levelsStats) =>
-  api.post(`/games/${gameId}/results`, { timeSeconds, levelsStats }).then((res) => res.data)
+export const submitResult = (gameId, timeSeconds, levelsStats, finishReason) =>
+  api.post(`/games/${gameId}/results`, { timeSeconds, levelsStats, finishReason }).then((res) => res.data)
+
+/**
+ * Досрочно завершить одиночную попытку: сервер удаляет прогресс,
+ * результат не сохраняется, рейтинг не меняется.
+ */
+export const abortGame = (gameId) => api.post(`/games/${gameId}/abort`)
 
 /** Рейтинг игры: [{ place, userId, username, timeSeconds, completedAt }]. */
 export const fetchLeaderboard = (gameId) =>

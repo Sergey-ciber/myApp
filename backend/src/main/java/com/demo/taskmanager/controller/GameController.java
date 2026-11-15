@@ -165,6 +165,17 @@ public class GameController {
         return gameService.leaderboard(id);
     }
 
+    /**
+     * Досрочно завершить одиночную попытку: прогресс удаляется, результат
+     * не сохраняется, рейтинг не меняется. Продолжить игру нельзя.
+     */
+    @PostMapping("/{id}/abort")
+    public ResponseEntity<Void> abort(@AuthenticationPrincipal UserDetails principal,
+                                      @PathVariable Long id) {
+        gameService.abortSoloGame(id, currentUser(principal));
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/progress")
     public ResponseEntity<Void> saveProgress(@AuthenticationPrincipal UserDetails principal,
                                              @PathVariable Long id,

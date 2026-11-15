@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiMessage } from '../../api/client'
-import { fetchGame, fetchLeaderboard, startGame, startGameLevel, submitResult, restartGame, saveGameProgress, loadGameProgress, clearGameProgress } from '../../api/games'
+import { fetchGame, fetchLeaderboard, startGame, startGameLevel, submitResult, restartGame, saveGameProgress, loadGameProgress, clearGameProgress, abortGame } from '../../api/games'
 import { fetchTeams } from '../../api/teams'
 import { getTeamGameState, joinTeamGame, leaveTeamGame, startTeamGameSession } from '../../api/teamGames'
 import GameBoard from './GameBoard'
@@ -35,6 +35,12 @@ function formatGameDate(dateStr) {
 function difficultyStars(value) {
   const n = Math.max(0, Math.min(5, Number(value) || 0))
   return n > 0 ? '★'.repeat(n) : ''
+}
+
+/** Причина завершения попытки по времени. */
+function isTimeoutReason(reason) {
+  const value = String(reason || '').toUpperCase()
+  return value === 'TIME_EXPIRED' || value === 'LEVEL_TIME_EXPIRED'
 }
 
 /**
@@ -82,6 +88,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [finished, setFinished] = useState(() => readP(pk('finished')) === '1')
   // Партия завершена досрочно (кнопка «Завершить игру»): результат не засчитан.
   const [endedEarly, setEndedEarly] = useState(() => readP(pk('endedEarly')) === '1')
+  // Причина завершения попытки: TIME_EXPIRED / LEVEL_TIME_EXPIRED.
+  const [finishReason, setFinishReason] = useState(() => readP(pk('finishReason')) || '')
   const [totalTime, setTotalTime] = useState(() => { const v=Number(readP(pk('total'))); return Number.isFinite(v)?v:0 })
   const [teamMode, setTeamMode] = useState(() => readP(tpk('teamMode')) === '1')
   const [teams, setTeams] = useState([])
@@ -289,6 +297,23 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         if (cancelled) return
         setGame(data.game)
         setProgress(data.progress)
+        // Попытка уже закрыта по времени на сервере: показываем итоговый
+        // экран с причиной, а не предложение продолжить или начать заново.
+        if (isTimeoutReason(data.progress?.finishReason)) {
+          const reason = String(data.progress.finishReason).toUpperCase()
+          setGameStarted(true)
+          setFinished(true)
+          setEndedEarly(false)
+          setFinishReason(reason)
+          if (data.progress.finishedSeconds != null) {
+            setTotalTime(Number(data.progress.finishedSeconds) || 0)
+          }
+          writeP(pk('started'), '1')
+          writeP(pk('finished'), '1')
+          writeP(pk('endedEarly'), null)
+          writeP(pk('finishReason'), reason)
+          return
+        }
         // если есть сохранённое состояние - не сбрасываем
         const savedStarted = readP(pk('started')) === '1'
         if (!savedStarted) {
@@ -297,6 +322,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           setLevelStats([])
           setFinished(false)
           setEndedEarly(false)
+          setFinishReason('')
           setTotalTime(0)
         }
       })
@@ -389,9 +415,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setLevelStats([])
       setFinished(false)
       setEndedEarly(false)
+      setFinishReason('')
       setTotalTime(0)
       setGameStarted(true)
-      writeP(pk('started'),'1'); writeP(pk('level'),'0'); writeP(pk('question'),null); writePJson(pk('stats'),[]); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null)
+      writeP(pk('started'),'1'); writeP(pk('level'),'0'); writeP(pk('question'),null); writePJson(pk('stats'),[]); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null); writeP(pk('finishReason'),null)
       writeP(tpk('teamMode'),null); writeP(tpk('teamSession'),null); writeP(tpk('teamId'),null)
       setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
       gameStateRef.current = {
@@ -428,13 +455,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       setLevelStats(Array.isArray(resumable.levelStats) ? resumable.levelStats : [])
       setFinished(false)
       setEndedEarly(false)
+      setFinishReason('')
       setTotalTime(0)
       setGameStarted(true)
       writeP(pk('started'), '1')
       writeP(pk('level'), levelIdx)
       writeP(pk('question'), Number(resumable.questionIndex) || 0)
       writePJson(pk('stats'), Array.isArray(resumable.levelStats) ? resumable.levelStats : [])
-      writeP(pk('finished'), null); writeP(pk('total'), null); writeP(pk('endedEarly'), null)
+      writeP(pk('finished'), null); writeP(pk('total'), null); writeP(pk('endedEarly'), null); writeP(pk('finishReason'), null)
       writeP(tpk('teamMode'), null); writeP(tpk('teamSession'), null); writeP(tpk('teamId'), null)
       gameStateRef.current = {
         ...gameStateRef.current,
@@ -552,6 +580,50 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     const nextStats = [...levelStats, stat]
     setLevelStats(nextStats)
     writePJson(pk('stats'), nextStats)
+
+    const toServerStats = (stats) => stats.map((s) => ({
+      levelId: s.levelId,
+      levelName: s.name,
+      netSeconds: Math.max(0, Math.round(s.netTime)),
+      penaltySeconds: Math.max(0, Math.round(s.penaltyTime)),
+      totalSeconds: Math.max(0, Math.round(s.totalTime)),
+      timedOut: !!s.timedOut,
+    }))
+
+    /**
+     * Таймаут терминален: к следующему уровню не переходим. Показываем
+     * итоговый экран и отправляем попытку в рейтинг с причиной завершения.
+     * Сервер сам проверит дедлайны и уточнит причину (общий таймер/уровень).
+     */
+    const finishByTimeout = (stats) => {
+      const grandTotal = stats.reduce((sum, s) => sum + (Number(s.totalTime) || 0), 0)
+      const overallLimit = Math.max(1, Math.round((Number(game?.timeLimitMinutes) || 0) * 60))
+      const overallElapsed = Number(progress?.elapsedSeconds) || 0
+      const reason = overallLimit > 0 && overallElapsed >= overallLimit
+        ? 'TIME_EXPIRED'
+        : 'LEVEL_TIME_EXPIRED'
+      setTotalTime(grandTotal)
+      setFinished(true)
+      setEndedEarly(false)
+      setFinishReason(reason)
+      setResultError('')
+      writeP(pk('total'), grandTotal)
+      writeP(pk('finished'), '1')
+      writeP(pk('endedEarly'), null)
+      writeP(pk('finishReason'), reason)
+      submitResult(game.id, Math.max(1, Math.round(grandTotal)), toServerStats(stats), reason)
+        .then((res) => {
+          // Причина от сервера авторитетна: он сверяет оба дедлайна.
+          if (res?.finishReason) {
+            setFinishReason(res.finishReason)
+            writeP(pk('finishReason'), res.finishReason)
+          }
+          return new Promise((resolve) => setTimeout(resolve, 300))
+        })
+        .then(() => loadLeaderboard(game.id))
+        .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
+    }
+
     const levels = game?.levels || []
     const isLast = currentLevelIndex >= levels.length - 1
 
@@ -562,25 +634,12 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         setTotalTime(grandTotal)
         setFinished(true)
         setEndedEarly(false)
-        writeP(pk('total'), grandTotal); writeP(pk('finished'),'1'); writeP(pk('endedEarly'), null)
-        // Уровень, закончившийся по таймауту, не считается пройденным:
-        // такой результат сервер в рейтинг не примет, поэтому и не отправляем.
-        if (nextStats.some((s) => s.timedOut)) {
-          setResultError('Игра не засчитана: уровень закончился по времени. Результат не попал в рейтинг.')
-          return
-        }
+        setFinishReason('')
+        writeP(pk('total'), grandTotal); writeP(pk('finished'),'1'); writeP(pk('endedEarly'), null); writeP(pk('finishReason'), null)
         setResultError('')
         // Детализация по уровням уходит на сервер: он проверяет, что все
         // уровни пройдены, и сам считает общее время.
-        const levelsStats = nextStats.map((s) => ({
-          levelId: s.levelId,
-          levelName: s.name,
-          netSeconds: Math.max(0, Math.round(s.netTime)),
-          penaltySeconds: Math.max(0, Math.round(s.penaltyTime)),
-          totalSeconds: Math.max(0, Math.round(s.totalTime)),
-          timedOut: !!s.timedOut,
-        }))
-        submitResult(game.id, Math.max(1, Math.round(grandTotal)), levelsStats)
+        submitResult(game.id, Math.max(1, Math.round(grandTotal)), toServerStats(nextStats))
           .then(() => {
             // Небольшая пауза перед обновлением рейтинга: результат должен
             // сначала закоммититься на сервере, иначе таблица останется пустой.
@@ -602,10 +661,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       }
     }
 
-    // При истечении времени уровень не «пройден» — переключаемся без уведомления.
+    // Истекло время уровня — партия закрывается, к следующему уровню не идём.
     if (timedOut) {
       clearLevelCompleteNotice()
-      goNext()
+      finishByTimeout(nextStats)
       return
     }
 
@@ -634,10 +693,11 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     setLevelStats([])
     setFinished(false)
     setEndedEarly(false)
+    setFinishReason('')
     setTotalTime(0)
     setResultError('')
     setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
-    writeP(pk('started'),null); writeP(pk('level'),null); writeP(pk('question'),null); writePJson(pk('stats'),null); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null)
+    writeP(pk('started'),null); writeP(pk('level'),null); writeP(pk('question'),null); writePJson(pk('stats'),null); writeP(pk('finished'),null); writeP(pk('total'),null); writeP(pk('endedEarly'),null); writeP(pk('finishReason'),null)
   }
 
   /**
@@ -667,19 +727,23 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         return
       }
 
-      // Одиночная партия: очищаем сохранённый прогресс, чтобы её нельзя было
-      // продолжить, и показываем экран итогов с пометкой о досрочном завершении.
+      // Одиночная партия: сервер удаляет прогресс, чтобы её нельзя было
+      // продолжить, и показывает экран итогов с пометкой о досрочном завершении.
+      // Результат в рейтинг не отправляется.
+      try { await abortGame(game.id) } catch {}
       try { await clearGameProgress(game.id) } catch {}
       const grandTotal = levelStats.reduce((sum, s) => sum + (Number(s.totalTime) || 0), 0)
       setTotalTime(grandTotal)
       setFinished(true)
       setEndedEarly(true)
+      setFinishReason('')
       // Чистим возможную старую ошибку сохранения результата: партия не засчитана.
       setResultError('')
       setResumable({ levelIndex: 0, questionIndex: 0, levelStats: [], hasProgress: false })
       writeP(pk('total'), grandTotal)
       writeP(pk('finished'), '1')
       writeP(pk('endedEarly'), '1')
+      writeP(pk('finishReason'), null)
     } finally {
       setShowQuitModal(false)
       setQuitting(false)
@@ -790,6 +854,8 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           totalTime={totalTime}
           resultError={resultError}
           endedEarly={endedEarly}
+          finishReason={finishReason}
+          levelsCount={levels.length}
           leaderboard={leaderboard}
           leaderboardLoading={leaderboardLoading}
           currentUserId={currentUserId}
@@ -959,7 +1025,14 @@ function GameInfoScreen({ game, levelsCount, starting, onStart, onResume, canRes
 }
 
 /** Экран итоговой статистики после последнего уровня. */
-function StatisticsScreen({ stats, totalTime, resultError, endedEarly, leaderboard, leaderboardLoading, currentUserId, onPlayAgain, onHome }) {
+function StatisticsScreen({ stats, totalTime, resultError, endedEarly, finishReason, levelsCount, leaderboard, leaderboardLoading, currentUserId, onPlayAgain, onHome }) {
+  const timedOut = isTimeoutReason(finishReason)
+  const reason = String(finishReason || '').toUpperCase()
+  const title = endedEarly
+    ? 'Игра завершена досрочно'
+    : timedOut
+      ? (reason === 'LEVEL_TIME_EXPIRED' ? 'Время уровня истекло' : 'Время игры истекло')
+      : 'Игра завершена!'
   const rows = (stats || []).map((stat, index) => ({
     levelId: stat.levelId,
     levelIndex: index,
@@ -967,14 +1040,14 @@ function StatisticsScreen({ stats, totalTime, resultError, endedEarly, leaderboa
     pureSeconds: stat.netTime,
     penaltySeconds: stat.penaltyTime,
     totalSeconds: stat.totalTime,
+    timedOut: !!stat.timedOut,
   }))
+
   return (
     <div className="assoc-statistics">
       <div className="assoc-statistics-card">
-        <div className="assoc-win-emoji" aria-hidden="true">{endedEarly ? '🏁' : '🏆'}</div>
-        <h3 className="assoc-statistics-title">
-          {endedEarly ? 'Игра завершена досрочно' : 'Игра завершена!'}
-        </h3>
+        <div className="assoc-win-emoji" aria-hidden="true">{endedEarly ? '🏁' : timedOut ? '⏱️' : '🏆'}</div>
+        <h3 className="assoc-statistics-title">{title}</h3>
 
         {endedEarly && (
           <p className="assoc-statistics-note">
@@ -982,10 +1055,20 @@ function StatisticsScreen({ stats, totalTime, resultError, endedEarly, leaderboa
           </p>
         )}
 
+        {timedOut && (
+          <p className="assoc-statistics-note">
+            {reason === 'LEVEL_TIME_EXPIRED'
+              ? 'Время уровня истекло — продолжить игру нельзя. '
+              : 'Время игры истекло — продолжить игру нельзя. '}
+            Пройдено уровней: {rows.length} из {levelsCount || rows.length}. Результат сохранён
+            и попал в рейтинг, но игра не пройдена до конца.
+          </p>
+        )}
+
         <GameStatisticsTable
           levels={rows}
           totalSeconds={totalTime}
-          emptyText={endedEarly ? 'Ни один уровень не пройден' : undefined}
+          emptyText={endedEarly ? 'Ни один уровень не пройден' : timedOut ? 'Ни один уровень не пройден' : undefined}
         />
 
         {resultError && <p className="assoc-win-error">{resultError}</p>}
@@ -999,12 +1082,25 @@ function StatisticsScreen({ stats, totalTime, resultError, endedEarly, leaderboa
         />
 
         <div className="form-actions">
-          <button type="button" className="btn btn-secondary" onClick={onHome}>
-            Вернуться на главную
-          </button>
-          <button type="button" className="btn btn-primary" onClick={onPlayAgain}>
-            Играть снова
-          </button>
+          {timedOut ? (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={onHome}>
+                ← К списку игр
+              </button>
+              <button type="button" className="btn btn-primary" onClick={onPlayAgain}>
+                Играть снова
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={onHome}>
+                Вернуться на главную
+              </button>
+              <button type="button" className="btn btn-primary" onClick={onPlayAgain}>
+                Играть снова
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -18,6 +18,11 @@ public interface UserProgressRepository extends JpaRepository<UserProgress, Long
     @Query("delete from UserProgress p where p.user.id = :userId")
     void deleteByUserId(@Param("userId") Long userId);
 
+    /** Удалить прогресс пользователя в конкретной игре (досрочное завершение попытки). */
+    @Modifying
+    @Query("delete from UserProgress p where p.game.id = :gameId and p.user.id = :userId")
+    void deleteByGameIdAndUserId(@Param("gameId") Long gameId, @Param("userId") Long userId);
+
     /**
      * Создаёт пустой прогресс, если его ещё нет.
      * ON CONFLICT защищает от гонки двух одновременных открытий игры.

@@ -53,11 +53,19 @@ function finishReasonText(reason) {
             return 'Игра завершена ведущим'
         case 'time_expired':
             return 'Время игры истекло'
+        case 'level_time_expired':
+            return 'Время уровня истекло'
         case 'completed':
             return 'Команда прошла игру!'
         default:
             return 'Игра завершена'
     }
+}
+
+/** Причина завершения по времени: партия засчитана, но это не победа. */
+function isTimeoutReason(reason) {
+    const value = String(reason || '').toLowerCase()
+    return value === 'time_expired' || value === 'level_time_expired'
 }
 
 function shortQuestionText(text, max = 42) {
@@ -240,7 +248,7 @@ export default function TeamGamePlay({
         setStatisticsError('')
         const totalLevels = state?.game?.levels?.length || 0
         const currentIndex = state?.currentLevelIndex || 0
-        const reason = String(state?.endReason || '').toLowerCase()
+        const reason = String(state?.finishReason || state?.endReason || '').toLowerCase()
         const expectedLevels = totalLevels > 0
             ? (reason === 'completed' ? totalLevels : Math.min(currentIndex + 1, totalLevels))
             : 0
@@ -266,7 +274,7 @@ export default function TeamGamePlay({
                 await new Promise((resolve) => setTimeout(resolve, 600))
             }
         }
-    }, [sessionId, state?.game?.levels?.length, state?.currentLevelIndex, state?.endReason])
+    }, [sessionId, state?.game?.levels?.length, state?.currentLevelIndex, state?.endReason, state?.finishReason])
 
     const finishedNow = String(state?.status || '').toLowerCase() === 'finished' || finishedFromServer
     useEffect(() => {
@@ -445,7 +453,7 @@ export default function TeamGamePlay({
                                     getTeamGameState(sessionId).then((s) => applyState(s, true)).catch(() => {
                                     })
                                 }
-                                showFlash(finishReasonText(payload.endReason || payload.reason))
+                                showFlash(finishReasonText(payload.finishReason || payload.endReason || payload.reason))
                                 if (onEnded) onEnded(payload.state)
                                 break
                             case 'DISCONNECTED':
@@ -490,7 +498,9 @@ export default function TeamGamePlay({
     const status = String(state?.status || '').toLowerCase()
     const isFinished = status === 'finished' || finishedFromServer
     const endReason = state?.endReason || ''
-    const finishTitle = finishReasonText(endReason)
+    // finishReason — enum в UPPER_CASE; endReason — историческое поле в lower_case.
+    const finishReason = state?.finishReason || endReason
+    const finishTitle = finishReasonText(finishReason)
 
     // Таймеры (на сервере - независимы от подключений)
     const startTimeMs = state?.startTime
@@ -764,20 +774,30 @@ export default function TeamGamePlay({
     }
 
     if (isFinished) {
-        const completed = String(endReason).toLowerCase() === 'completed'
+        const completed = String(finishReason).toLowerCase() === 'completed'
+        const timedOut = isTimeoutReason(finishReason)
+        // Сервер закрывает текущий уровень и при таймауте, и при завершении
+        // хостом, поэтому фактическое число закрытых уровней берём из статистики.
+        const finishedLevels = statistics?.levels?.length
+            || (completed ? levels.length : Math.min(levelIndex + 1, levels.length))
         return (
             <div className="assoc-start-screen">
                 <div className="assoc-team-finish">
                     <div className="assoc-info-card">
-                        <div className="assoc-win-emoji" aria-hidden="true">{completed ? '🏆' : '🏁'}</div>
+                        <div className="assoc-win-emoji" aria-hidden="true">{completed ? '🏆' : timedOut ? '⏱️' : '🏁'}</div>
                         <h2 className="assoc-info-title">{finishTitle}</h2>
                         <p className="assoc-info-description">
                             Штрафное время команды: +{formatTime(Math.round(penalty * 60))}
                         </p>
                         <p className="assoc-info-description">
                             Пройдено
-                            уровней: {Math.min(levelIndex + (completed ? 1 : 0), levels.length)} из {levels.length}
+                            уровней: {finishedLevels} из {levels.length}
                         </p>
+                        {timedOut && (
+                            <p className="assoc-info-description">
+                                Партия закрыта по времени: результат попал в статистику игры, но победа команде не засчитана.
+                            </p>
+                        )}
                         <div className="assoc-info-actions">
                             {onExit && (
                                 <button type="button" className="btn btn-secondary" onClick={onExit}>
