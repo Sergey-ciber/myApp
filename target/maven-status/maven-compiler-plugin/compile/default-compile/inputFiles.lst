@@ -57,6 +57,7 @@ C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\TimeoutRe
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\UserResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\dto\UserSummaryResponse.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\Board.java
+C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\FinishReason.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\Game.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\GameLevel.java
 C:\projects\DemoProject\backend\src\main\java\com\demo\taskmanager\entity\GameResult.java

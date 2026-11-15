@@ -109,6 +109,7 @@ com\demo\taskmanager\entity\User.class
 com\demo\taskmanager\dto\ProfileUpdateRequest.class
 com\demo\taskmanager\exception\ForbiddenException.class
 com\demo\taskmanager\dto\UserResponse.class
+com\demo\taskmanager\entity\FinishReason.class
 com\demo\taskmanager\entity\StandardQuestion.class
 com\demo\taskmanager\service\GameService$1.class
 com\demo\taskmanager\dto\InvitationResponse.class
