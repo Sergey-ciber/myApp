@@ -14,17 +14,31 @@
 DO $$
 BEGIN
     -- 1. games.difficulty: varchar -> integer, значение по умолчанию 3.
+    --    Скрипт запускается на каждом деплое, поэтому тип проверяем заранее:
+    --    повторное приведение уже integer-колонки падает на btrim(integer).
     IF to_regclass('games') IS NOT NULL THEN
-        ALTER TABLE games ALTER COLUMN difficulty DROP DEFAULT;
-        ALTER TABLE games
-            ALTER COLUMN difficulty TYPE integer
-            USING (
-                CASE
-                    WHEN difficulty IS NULL OR btrim(difficulty) = '' THEN NULL
-                    ELSE btrim(difficulty)::integer
-                END
-            );
-        ALTER TABLE games ALTER COLUMN difficulty SET DEFAULT 3;
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'games'
+              AND column_name = 'difficulty'
+              AND data_type <> 'integer'
+        ) THEN
+            ALTER TABLE games ALTER COLUMN difficulty DROP DEFAULT;
+            ALTER TABLE games
+                ALTER COLUMN difficulty TYPE integer
+                USING (
+                    CASE
+                        WHEN difficulty IS NULL OR btrim(difficulty::text) = '' THEN NULL
+                        ELSE btrim(difficulty::text)::integer
+                    END
+                );
+            ALTER TABLE games ALTER COLUMN difficulty SET DEFAULT 3;
+            RAISE NOTICE 'games.difficulty приведён к integer';
+        ELSE
+            RAISE NOTICE 'games.difficulty уже integer — миграция не нужна';
+        END IF;
         UPDATE games SET difficulty = 3 WHERE difficulty IS NULL;
     ELSE
         RAISE NOTICE 'games не найден — миграция difficulty пропущена';
