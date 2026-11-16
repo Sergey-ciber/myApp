@@ -92,4 +92,5 @@ jobs:
             printf 'export MAIL_SMTP_STARTTLS=%q\n' "${MAIL_SMTP_STARTTLS:-}"
             printf 'export MAIL_SMTP_SSL=%q\n'     "${MAIL_SMTP_SSL:-}"
             cat deploy/deploy.sh
-          } | ssh -F ~/.ssh/config deploy-target 'bash -s'
+          } | ssh -F ~/.ssh/config deploy-target \
+            'tmp=$(mktemp /tmp/deploy.XXXXXX.sh) && cat > "$tmp" && bash "$tmp"; rc=$?; rm -f "$tmp"; exit $rc'

@@ -411,6 +411,47 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   }, [gameId, currentUserId])
 
   /**
+   * Игру могли отредактировать, пока попытка была в процессе: уровни
+   * пересоздаются с новыми id, а в сохранённой статистике остаются старые.
+   * Сервер сверяет id уровней при сохранении результата и отклоняет такую
+   * попытку (400 «Игра не пройдена до конца»). Привязываем статистику
+   * к актуальным уровням по порядку — время прохождения при этом сохраняется.
+   */
+  useEffect(() => {
+    if (!game?.levels?.length || !levelStats.length) return
+    const levels = game.levels
+    const byId = new Map(levels.map((level) => [level.id, level]))
+    let changed = false
+    const fixed = levelStats
+      .map((stat, index) => {
+        const level = byId.get(stat.levelId) || levels[index]
+        if (!level) {
+          changed = true
+          return null
+        }
+        if (level.id !== stat.levelId || level.title !== stat.name) {
+          changed = true
+          return { ...stat, levelId: level.id, name: level.title }
+        }
+        return stat
+      })
+      .filter(Boolean)
+    if (!changed) return
+    setLevelStats(fixed)
+    writePJson(pk('stats'), fixed)
+  }, [game, levelStats, pk])
+
+  /** Номер уровня из старого сохранения мог выйти за пределы новой игры. */
+  useEffect(() => {
+    if (!game?.levels?.length) return
+    const lastIndex = game.levels.length - 1
+    if (currentLevelIndex > lastIndex) {
+      setCurrentLevelIndex(lastIndex)
+      writeP(pk('level'), lastIndex)
+    }
+  }, [game, currentLevelIndex, pk])
+
+  /**
    * Фиксируем на сервере вход на уровень: от этого момента считаются таймер
    * уровня и доступность подсказок. Повторный вход на тот же уровень
    * (например, после перезагрузки страницы) прогресс не сбрасывает.

@@ -71,7 +71,12 @@ POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 # ---------- проверки ----------
 command -v docker >/dev/null 2>&1 || fail "Docker не установлен. Сначала запустите deploy/server-bootstrap.sh"
-docker compose version >/dev/null 2>&1 || fail "Не найден плагин 'docker compose' (нужен Docker Compose v2)"
+# ВАЖНО: этот скрипт приходит на сервер по stdin (`ssh ... 'bash -s'`).
+# Любая команда, которая читает stdin (например, `docker compose exec -T`),
+# съедает остаток скрипта — деплой молча обрывается с кодом 0. Поэтому у всех
+# таких команд stdin явно отключён через `< /dev/null`.
+docker compose version < /dev/null >/dev/null 2>&1 \
+  || fail "Не найден плагин 'docker compose' (нужен Docker Compose v2)"
 command -v git >/dev/null 2>&1 || fail "git не установлен"
 
 [ -n "${POSTGRES_PASSWORD:-}" ] || fail "Не задан POSTGRES_PASSWORD"
@@ -138,11 +143,11 @@ ENV
 # на изменении типа difficulty и приложение не поднимется.
 cd "$APP_DIR"
 log "Поднимаю базу и применяю deploy/add-finish-reason.sql"
-docker compose -f "$COMPOSE_FILE" up -d db
+docker compose -f "$COMPOSE_FILE" up -d db < /dev/null
 db_ready=""
 for _ in $(seq 1 30); do
   if docker compose -f "$COMPOSE_FILE" exec -T db \
-        pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+        pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1; then
     db_ready=1
     break
   fi
@@ -158,7 +163,7 @@ fi
 # ---------- выкат ----------
 log "Собираю образы и поднимаю контейнеры"
 cd "$APP_DIR"
-docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans < /dev/null
 
 # ---------- проверка ----------
 log "Жду ответа приложения на порту $HTTP_PORT"
@@ -175,11 +180,11 @@ for _ in $(seq 1 40); do
 done
 
 echo
-docker compose -f "$COMPOSE_FILE" ps
+docker compose -f "$COMPOSE_FILE" ps < /dev/null
 
 if [ -z "$ok" ]; then
   log "Проверка не прошла (страница: ${page:-нет ответа}, /api: ${api:-нет ответа})"
-  docker compose -f "$COMPOSE_FILE" logs --tail=80
+  docker compose -f "$COMPOSE_FILE" logs --tail=80 < /dev/null
   fail "Деплой завершился с ошибкой, приложение не отвечает"
 fi
 
