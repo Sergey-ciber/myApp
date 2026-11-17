@@ -12,7 +12,7 @@ import ActiveTeamGames from './ActiveTeamGames'
 import useTeamChannel from './useTeamChannel'
 import GameStatisticsTable from './GameStatisticsTable'
 import GameStatisticsBlock from './GameStatisticsBlock'
-import { formatMinutes } from './constants'
+import { formatMinutes, formatTime } from './constants'
 
 /** Определить тип медиафайла по URL (расширение сохраняется бэкендом). */
 function mediaKind(url) {
@@ -65,6 +65,28 @@ function writeP(k,v) { if (!k) return; try { if (v == null) localStorage.removeI
 function readPJson(k) { if (!k) return null; try { const s=localStorage.getItem(k); return s?JSON.parse(s):null } catch { return null } }
 function writePJson(k,v) { if (!k) return; try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k,JSON.stringify(v)) } catch {} }
 
+/** Обратный отсчёт общего времени попытки. Авторитет — серверный таймер. */
+function OverallTimer({ startedAt, limitMinutes }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const startMs = startedAt ? new Date(startedAt).getTime() : NaN
+  if (!Number.isFinite(startMs)) return null
+  const limit = Math.max(1, Math.round((Number(limitMinutes) || 0) * 60))
+  const remaining = Math.max(0, limit - Math.floor((now - startMs) / 1000))
+  return (
+    <div
+      className="assoc-overall-timer"
+      style={remaining <= 60 ? { background: '#b3261e' } : undefined}
+      title="Общее время на прохождение игры"
+    >
+      ⏳ До конца: {formatTime(remaining)}
+    </div>
+  )
+}
+
 export default function PlayerPanel({ games, gameId, onSelectGame, onExit, currentUserId }) {
   const navigate = useNavigate()
   // Ключ хранилища должен быть стабильным между рендерами,
@@ -113,6 +135,9 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const [teamSessionChecked, setTeamSessionChecked] = useState(false)
   // id уже проверенной сессии — чтобы не проверять одну и ту же сессию снова
   const checkedSessionRef = useRef(null)
+  // Момент старта попытки: нужен для обратного отсчёта общего времени.
+  // Переживает переходы между уровнями, когда progress временно сбрасывается.
+  const attemptStartedAtRef = useRef(null)
 
   /** Скрыть уведомление о пройденном уровне и отменить отложенный переход. */
   const clearLevelCompleteNotice = useCallback(() => {
@@ -410,6 +435,11 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     return () => { cancelled = true }
   }, [gameId, currentUserId])
 
+  // Запоминаем серверный момент старта попытки для общего таймера.
+  useEffect(() => {
+    if (progress?.startedAt) attemptStartedAtRef.current = progress.startedAt
+  }, [progress?.startedAt])
+
   /**
    * Игру могли отредактировать, пока попытка была в процессе: уровни
    * пересоздаются с новыми id, а в сохранённой статистике остаются старые.
@@ -591,6 +621,62 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     }
   }, [])
 
+  /**
+   * Попытку закрыл серверный таймер. Показываем итоговый экран с причиной
+   * и временем из ответа сервера; статистика по уровням уже есть локально
+   * (или восстановлена из автосохранения).
+   */
+  const applyServerTimeout = useCallback((data) => {
+    if (!isTimeoutReason(data?.finishReason)) return false
+    const reason = String(data.finishReason).toUpperCase()
+    const seconds = Number(data.finishedSeconds) || 0
+    clearLevelCompleteNotice()
+    setFinished(true)
+    setEndedEarly(false)
+    setFinishReason(reason)
+    setResultError('')
+    if (seconds > 0) setTotalTime(seconds)
+    writeP(pk('finished'), '1')
+    writeP(pk('endedEarly'), null)
+    writeP(pk('finishReason'), reason)
+    if (seconds > 0) writeP(pk('total'), seconds)
+    return true
+  }, [clearLevelCompleteNotice, pk])
+
+  /**
+   * Отправка результата не прошла, потому что серверный таймер уже закрыл
+   * попытку. Подтягиваем авторитетное состояние и показываем итоги.
+   */
+  const recoverFinishedAttempt = useCallback((id) => {
+    return loadGameProgress(id)
+      .then((data) => {
+        if (!applyServerTimeout(data)) return false
+        loadLeaderboard(id)
+        return true
+      })
+      .catch(() => false)
+  }, [applyServerTimeout, loadLeaderboard])
+
+  /**
+   * Серверный таймер одиночной игры: пока попытка активна, раз в 5 секунд
+   * спрашиваем сервер, не истекло ли время. Браузер не является источником
+   * истины — итоговый статус выставляет только сервер.
+   */
+  useEffect(() => {
+    if (!gameId || !gameStarted || finished || teamMode) return undefined
+    let cancelled = false
+    const poll = () => {
+      loadGameProgress(gameId)
+        .then((data) => {
+          if (cancelled || !applyServerTimeout(data)) return
+          loadLeaderboard(gameId)
+        })
+        .catch(() => {})
+    }
+    const id = setInterval(poll, 5000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [gameId, gameStarted, finished, teamMode, applyServerTimeout, loadLeaderboard])
+
   useEffect(() => {
     setLeaderboard([])
     setResultError('')
@@ -693,7 +779,13 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           return new Promise((resolve) => setTimeout(resolve, 300))
         })
         .then(() => loadLeaderboard(game.id))
-        .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
+        .catch((err) => {
+          recoverFinishedAttempt(game.id).then((recovered) => {
+            if (!recovered) {
+              setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`)
+            }
+          })
+        })
     }
 
     const levels = game?.levels || []
@@ -718,7 +810,13 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
             return new Promise((resolve) => setTimeout(resolve, 300))
           })
           .then(() => loadLeaderboard(game.id))
-          .catch((err) => setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`))
+          .catch((err) => {
+            recoverFinishedAttempt(game.id).then((recovered) => {
+              if (!recovered) {
+                setResultError(`Не удалось сохранить результат: ${apiMessage(err)}`)
+              }
+            })
+          })
         try { clearGameProgress(game.id).catch(() => {}) } catch {}
       } else {
         const nextIdx = currentLevelIndex + 1
@@ -959,6 +1057,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
             <div className="assoc-level-progress">
               Уровень {currentLevelIndex + 1} из {levels.length}
             </div>
+            <OverallTimer
+              startedAt={progress?.startedAt || attemptStartedAtRef.current}
+              limitMinutes={game.timeLimitMinutes}
+            />
             <button
               type="button"
               className="btn btn-danger"

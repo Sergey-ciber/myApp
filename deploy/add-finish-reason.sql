@@ -63,4 +63,46 @@ BEGIN
     ELSE
         RAISE NOTICE 'user_progress не найден — колонка finish_reason появится при старте backend';
     END IF;
+
+    -- 4. Попытки, завершённые победой до появления серверного таймера:
+    --    раньше finished_seconds не заполнялся, поэтому таймер мог бы принять
+    --    такую попытку за активную и закрыть её как TIME_EXPIRED. Победную
+    --    попытку узнаём по результату COMPLETED, созданному после её старта.
+    IF to_regclass('user_progress') IS NOT NULL AND to_regclass('results') IS NOT NULL THEN
+        UPDATE user_progress p
+        SET finished_seconds = r.time_seconds,
+            updated_at = now()
+        FROM (
+            SELECT DISTINCT ON (user_id, game_id)
+                   user_id, game_id, time_seconds, completed_at
+            FROM results
+            WHERE finish_reason = 'COMPLETED'
+            ORDER BY user_id, game_id, completed_at DESC
+        ) r
+        WHERE p.user_id = r.user_id
+          AND p.game_id = r.game_id
+          AND p.finished_seconds IS NULL
+          AND p.finish_reason IS NULL
+          AND r.completed_at >= p.started_at;
+    END IF;
+
+    -- 5. Быстрый поиск активных попыток для серверного таймера.
+    --    Частичный индекс: строки завершённых попыток в него не попадают.
+    IF to_regclass('user_progress') IS NOT NULL
+       AND EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = current_schema()
+             AND table_name = 'user_progress'
+             AND column_name = 'finished_seconds'
+       )
+       AND EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = current_schema()
+             AND table_name = 'user_progress'
+             AND column_name = 'finish_reason'
+       ) THEN
+        CREATE INDEX IF NOT EXISTS idx_user_progress_active
+            ON user_progress (id)
+            WHERE finished_seconds IS NULL AND finish_reason IS NULL;
+    END IF;
 END $$;

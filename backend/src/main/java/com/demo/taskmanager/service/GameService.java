@@ -73,6 +73,11 @@ public class GameService {
     private static final int HINT_LEVEL_THREE_SECONDS = 540;
     private static final int HINT_LEVEL_FOUR_SECONDS = 720;
     private static final int MAX_HINT_LEVEL = 4;
+    /**
+     * Запас после лимита уровня для серверного таймера: даёт клиенту время
+     * отправить результат, если уровень решён в последнюю секунду.
+     */
+    private static final long LEVEL_TIMEOUT_GRACE_SECONDS = 5;
 
     private final GameRepository gameRepository;
     private final GameResultRepository resultRepository;
@@ -580,6 +585,7 @@ public class GameService {
     @Transactional
     public GameProgressDto restartProgress(Long gameId, User user) {
         Game game = findGame(gameId);
+        // findOrCreateProgress блокирует строку: рестарт не пересечётся с таймером.
         UserProgress progress = findOrCreateProgress(game, user);
         progress.setSolvedWords("{}");
         progress.setHintLevel(0);
@@ -991,8 +997,10 @@ public class GameService {
     @Transactional
     public ResultResponse submitResult(Long gameId, User user, ResultRequest request) {
         Game game = findGame(gameId);
+        // Блокируем строку прогресса: серверный таймер завершает ту же попытку
+        // в отдельной транзакции. Иначе оба пути могли бы создать результат.
         UserProgress progress = progressRepository
-                .findByGameIdAndUserId(gameId, user.getId())
+                .findByGameIdAndUserIdForUpdate(gameId, user.getId())
                 .orElseThrow(() -> new BadRequestException("Сначала начните игру"));
         // Попытка уже закрыта по времени: повторно отправить её нельзя —
         // иначе каждый запрос создавал бы новую запись в рейтинге.
@@ -1017,6 +1025,11 @@ public class GameService {
     /** Полное прохождение игры: результат — в рейтинг, команде — победа. */
     private ResultResponse finishSoloCompleted(Game game, User user, UserProgress progress,
                                                ResultRequest request) {
+        // Общий лимит авторитетен: если он истёк, попытка закрывается как
+        // таймаут, даже когда игрок успел дорешать последний уровень.
+        if (isTimeUp(game, progress)) {
+            return finishSoloTimeout(game, user, progress, request);
+        }
         List<LevelStatsDto> levels = validateCompletedLevels(game, request);
 
         int seconds = levels.stream().mapToInt(LevelStatsDto::total).sum();
@@ -1029,14 +1042,17 @@ public class GameService {
         result.setFinishReason(FinishReason.COMPLETED);
         result.setLevelsStats(writeLevelsStats(levels));
         resultRepository.save(result);
+        // finishedSeconds помечает попытку завершённой: серверный таймер её
+        // больше не проверяет. finishReason остаётся null — это не таймаут.
+        progress.setFinishedSeconds(seconds);
+        progress.setUpdatedAt(Instant.now());
         // Повторная отправка результата разрешена (в рейтинг идёт лучшая попытка),
         // но победа текущей попытки начисляет командам +1 только один раз.
         if (!progress.isWinCounted()) {
             progress.setWinCounted(true);
-            progress.setUpdatedAt(Instant.now());
-            progressRepository.save(progress);
             teamService.registerWin(user);
         }
+        progressRepository.save(progress);
         // Игра полностью пройдена: сохранённое состояние больше не нужно,
         // иначе после перезагрузки игрок вернулся бы на последний уровень.
         userGameProgressRepository.deleteByUserIdAndGameId(user.getId(), game.getId());
@@ -1057,6 +1073,15 @@ public class GameService {
         }
 
         List<LevelStatsDto> levels = buildTimeoutLevels(game, progress, request);
+        return saveSoloTimeoutResult(game, user, progress, reason, levels);
+    }
+
+    /**
+     * Сохраняет результат таймаут-попытки. Вызывается и по запросу клиента,
+     * и серверным таймером, поэтому не зависит от тела запроса.
+     */
+    private ResultResponse saveSoloTimeoutResult(Game game, User user, UserProgress progress,
+                                                 FinishReason reason, List<LevelStatsDto> levels) {
         int seconds = levels.stream().mapToInt(LevelStatsDto::total).sum();
         if (seconds < 1 || seconds > MAX_TIME_SECONDS) {
             throw new BadRequestException("Время прохождения должно быть от 1 до "
@@ -1076,13 +1101,56 @@ public class GameService {
     }
 
     /**
+     * Один тик серверного таймера одиночной попытки.
+     *
+     * Вызывается планировщиком ({@link SoloGameTimerService}) под блокировкой
+     * строки прогресса. Сначала проверяется общий лимит игры, затем лимит
+     * уровня — как в командном режиме. Браузер не является источником истины:
+     * после перезапуска сервера просроченные попытки закрываются при первой
+     * же проверке.
+     */
+    @Transactional
+    public void tickSoloAttempt(Long progressId) {
+        UserProgress progress = progressRepository.findByIdForUpdate(progressId).orElse(null);
+        if (progress == null || progress.getFinishedSeconds() != null
+                || progress.getFinishReason() != null) {
+            return;
+        }
+        Game game = progress.getGame();
+        if (game == null) {
+            return;
+        }
+        FinishReason reason;
+        if (isTimeUp(game, progress)) {
+            reason = FinishReason.TIME_EXPIRED;
+        } else {
+            GameLevel level = levelAt(game, progress.getLevelIndex());
+            long limit = levelLimitSeconds(level);
+            // Небольшой запас после лимита уровня: клиент успевает отправить
+            // результат, если решил уровень в последнюю секунду.
+            reason = limit > 0
+                    && levelElapsedSeconds(progress) >= limit + LEVEL_TIMEOUT_GRACE_SECONDS
+                    ? FinishReason.LEVEL_TIME_EXPIRED
+                    : null;
+        }
+        if (reason == null) {
+            return;
+        }
+        List<LevelStatsDto> levels = buildTimeoutLevelsFromSaved(game, progress, reason);
+        saveSoloTimeoutResult(game, progress.getUser(), progress, reason, levels);
+    }
+
+    /**
      * Досрочное завершение попытки игроком: ни результата, ни изменения
      * рейтинга. Удаляем и прогресс, и автосохранение — продолжить нельзя.
      */
     @Transactional
     public void abortSoloGame(Long gameId, User user) {
         findGame(gameId);
-        progressRepository.deleteByGameIdAndUserId(gameId, user.getId());
+        // Блокируем строку: если таймер уже завершает попытку, дождёмся его
+        // коммита и не удалим прогресс «из-под» сохранённого результата.
+        progressRepository.findByGameIdAndUserIdForUpdate(gameId, user.getId())
+                .ifPresent(progressRepository::delete);
         userGameProgressRepository.deleteByUserIdAndGameId(user.getId(), gameId);
     }
 
@@ -1146,6 +1214,104 @@ public class GameService {
         long limit = levelLimitSeconds(level);
         long seconds = limit > 0 ? limit : levelElapsedSeconds(progress);
         return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, seconds));
+    }
+
+    /**
+     * Детализация таймаут-попытки без участия клиента: берём последнее
+     * автосохранение (user_game_progress.gameState). Пройденные уровни
+     * восстанавливаем по порядку (id уровней могли измениться после
+     * редактирования игры), текущий считаем истёкшим.
+     */
+    private List<LevelStatsDto> buildTimeoutLevelsFromSaved(Game game, UserProgress progress,
+                                                            FinishReason reason) {
+        List<GameLevel> gameLevels = sortedLevels(game);
+        if (gameLevels.isEmpty()) {
+            throw new BadRequestException("У игры нет уровней");
+        }
+        int currentIndex = Math.max(0, Math.min(progress.getLevelIndex(), gameLevels.size() - 1));
+        Map<String, Object> state = readSavedGameState(progress);
+        List<Map<String, Object>> savedStats = savedLevelStats(state);
+        int currentPenalty = intValue(state.get("penaltySeconds"));
+
+        List<LevelStatsDto> levels = new ArrayList<>(currentIndex + 1);
+        for (int i = 0; i <= currentIndex; i++) {
+            GameLevel level = gameLevels.get(i);
+            boolean current = i == currentIndex;
+            if (current) {
+                int net = reason == FinishReason.LEVEL_TIME_EXPIRED
+                        ? timedOutLevelSeconds(progress, level)
+                        : currentLevelElapsedSeconds(progress, level);
+                levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net,
+                        Math.max(0, currentPenalty), true));
+                continue;
+            }
+            Map<String, Object> stat = i < savedStats.size() ? savedStats.get(i) : Map.of();
+            int net = intValue(stat.get("netTime"));
+            int penalty = intValue(stat.get("penaltyTime"));
+            long limit = levelLimitSeconds(level);
+            if (limit > 0) {
+                net = (int) Math.min(net, limit);
+            }
+            levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net, penalty, false));
+        }
+        return levels;
+    }
+
+    /** Фактическое время текущего уровня, ограниченное его лимитом (если он есть). */
+    private int currentLevelElapsedSeconds(UserProgress progress, GameLevel level) {
+        long limit = levelLimitSeconds(level);
+        long elapsed = levelElapsedSeconds(progress);
+        long seconds = limit > 0 ? Math.min(elapsed, limit) : elapsed;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, seconds));
+    }
+
+    /** Последнее автосохранение клиента в виде map; пустая map — если его нет. */
+    private Map<String, Object> readSavedGameState(UserProgress progress) {
+        if (progress.getUser() == null || progress.getGame() == null) {
+            return Map.of();
+        }
+        return userGameProgressRepository
+                .findByUserIdAndGameId(progress.getUser().getId(), progress.getGame().getId())
+                .map(saved -> parseGameState(saved.getGameStateJson()))
+                .orElse(Map.of());
+    }
+
+    private Map<String, Object> parseGameState(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> state = objectMapper.readValue(json,
+                    new TypeReference<LinkedHashMap<String, Object>>() { });
+            return state == null ? Map.of() : state;
+        } catch (JsonProcessingException e) {
+            return Map.of();
+        }
+    }
+
+    /** Статистика уровней из автосохранения: список map-ов в порядке уровней. */
+    private List<Map<String, Object>> savedLevelStats(Map<String, Object> state) {
+        Object raw = state.get("levelStats");
+        if (!(raw instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> stats = new ArrayList<>(list.size());
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Map<String, Object> typed = new LinkedHashMap<>();
+                map.forEach((key, value) -> typed.put(String.valueOf(key), value));
+                stats.add(typed);
+            }
+        }
+        return stats;
+    }
+
+    private int intValue(Object value) {
+        if (value instanceof Number number) {
+            return (int) Math.min(Integer.MAX_VALUE,
+                    Math.max(0L, Math.round(number.doubleValue())));
+        }
+        return 0;
     }
 
     /**
@@ -1401,25 +1567,43 @@ public class GameService {
     @Transactional(readOnly = true)
     public Map<String, Object> loadProgress(Long gameId, User user) {
         findGame(gameId);
+        UserProgress progress = progressRepository
+                .findByGameIdAndUserId(gameId, user.getId())
+                .orElse(null);
         com.demo.taskmanager.entity.UserGameProgress saved = userGameProgressRepository
                 .findByUserIdAndGameId(user.getId(), gameId)
                 .orElse(null);
-        if (saved == null) {
+        // Попытка закрыта по времени, но автосохранения уже нет: клиенту всё
+        // равно нужно узнать о завершении, чтобы показать итоговый экран.
+        boolean timedOut = progress != null && progress.getFinishReason() != null;
+        if (saved == null && !timedOut) {
             return null;
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("currentLevelIndex", saved.getCurrentLevelIndex());
-        result.put("currentQuestionIndex", saved.getCurrentQuestionIndex());
-        result.put("updatedAt", saved.getUpdatedAt());
-        String stateJson = saved.getGameStateJson();
-        if (stateJson != null && !stateJson.isBlank()) {
-            try {
-                Map<String, Object> state = objectMapper.readValue(stateJson,
-                        new TypeReference<LinkedHashMap<String, Object>>() { });
-                result.put("gameState", state);
-            } catch (JsonProcessingException e) {
-                result.put("gameState", new LinkedHashMap<String, Object>());
+        if (saved != null) {
+            result.put("currentLevelIndex", saved.getCurrentLevelIndex());
+            result.put("currentQuestionIndex", saved.getCurrentQuestionIndex());
+            result.put("updatedAt", saved.getUpdatedAt());
+            String stateJson = saved.getGameStateJson();
+            if (stateJson != null && !stateJson.isBlank()) {
+                try {
+                    Map<String, Object> state = objectMapper.readValue(stateJson,
+                            new TypeReference<LinkedHashMap<String, Object>>() { });
+                    result.put("gameState", state);
+                } catch (JsonProcessingException e) {
+                    result.put("gameState", new LinkedHashMap<String, Object>());
+                }
             }
+        }
+        // Состояние попытки на сервере: по нему клиент узнаёт, что таймер
+        // закрыл игру, и показывает итоги, не дожидаясь своего таймера.
+        if (progress != null) {
+            result.put("finishReason", progress.getFinishReason() == null
+                    ? null : progress.getFinishReason().name());
+            result.put("finishedSeconds", progress.getFinishedSeconds());
+            result.put("elapsedSeconds", progress.getFinishedSeconds() != null
+                    ? progress.getFinishedSeconds() : elapsedSeconds(progress));
+            result.put("startedAt", progress.getStartedAt());
         }
         return result;
     }
@@ -1467,15 +1651,21 @@ public class GameService {
         }
     }
 
+    /**
+     * Возвращает прогресс попытки под блокировкой строки. Блокировка нужна всем
+     * изменяющим операциям: серверный таймер завершает ту же попытку в отдельной
+     * транзакции и не должен пересечься с ответом игрока или сменой уровня.
+     */
     private UserProgress findOrCreateProgress(Game game, User user) {
-        UserProgress existing = progressRepository.findByGameIdAndUserId(game.getId(), user.getId())
+        UserProgress existing = progressRepository
+                .findByGameIdAndUserIdForUpdate(game.getId(), user.getId())
                 .orElse(null);
         if (existing != null) {
             return existing;
         }
         // идемпотентно: параллельные открытия игры не создают дубль
         progressRepository.insertIfAbsent(user.getId(), game.getId());
-        return progressRepository.findByGameIdAndUserId(game.getId(), user.getId())
+        return progressRepository.findByGameIdAndUserIdForUpdate(game.getId(), user.getId())
                 .orElseThrow(() -> new IllegalStateException("Не удалось создать прогресс игры"));
     }
 

@@ -125,7 +125,7 @@ class GameServiceFinishReasonTest {
         progress.setLevelIndex(1);
 
         when(gameRepository.findById(GAME_ID)).thenReturn(Optional.of(game));
-        when(progressRepository.findByGameIdAndUserId(GAME_ID, USER_ID))
+        when(progressRepository.findByGameIdAndUserIdForUpdate(GAME_ID, USER_ID))
                 .thenReturn(Optional.of(progress));
         when(resultRepository.save(any(GameResult.class))).thenAnswer(invocation -> {
             GameResult result = invocation.getArgument(0);
@@ -221,10 +221,72 @@ class GameServiceFinishReasonTest {
     }
 
     @Test
+    void completedAfterOverallLimitCreatesTimeoutResult() {
+        // Общий лимит игры — 60 минут, но попытка началась 2 часа назад.
+        game.setTimeLimitMinutes(60.0);
+        progress.setStartedAt(Instant.now().minusSeconds(2 * 60 * 60));
+        progress.setLevelIndex(1);
+
+        ResultResponse response = service.submitResult(GAME_ID, user,
+                new ResultRequest(null, List.of(
+                        stat(firstLevel, 30, 5, false),
+                        stat(secondLevel, 40, 0, false)
+                ), "COMPLETED"));
+
+        // Дорешать игру после общего дедлайна нельзя: это таймаут, а не победа.
+        assertThat(response.finishReason()).isEqualTo("TIME_EXPIRED");
+        assertThat(savedResults).hasSize(1);
+        assertThat(savedResults.get(0).getFinishReason()).isEqualTo(FinishReason.TIME_EXPIRED);
+        assertThat(progress.getFinishReason()).isEqualTo(FinishReason.TIME_EXPIRED);
+        assertThat(progress.isWinCounted()).isFalse();
+        verify(teamService, never()).registerWin(any(User.class));
+    }
+
+    @Test
+    void serverTimerClosesExpiredAttemptWithoutClient() {
+        progress.setStartedAt(Instant.now().minusSeconds(2 * 60 * 60));
+        progress.setLevelStartedAt(Instant.now().minusSeconds(2 * 60 * 60));
+        progress.setLevelIndex(1);
+        when(progressRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(progress));
+
+        service.tickSoloAttempt(1L);
+
+        assertThat(savedResults).hasSize(1);
+        assertThat(savedResults.get(0).getFinishReason()).isEqualTo(FinishReason.TIME_EXPIRED);
+        assertThat(savedResults.get(0).getTimeSeconds()).isEqualTo(600);
+        assertThat(progress.getFinishReason()).isEqualTo(FinishReason.TIME_EXPIRED);
+        assertThat(progress.getFinishedSeconds()).isEqualTo(600);
+        assertThat(progress.isWinCounted()).isFalse();
+        verify(teamService, never()).registerWin(any(User.class));
+    }
+
+    @Test
+    void serverTimerClosesLevelOnlyAfterGracePeriod() {
+        // Общий лимит (60 минут) не истёк, а лимит уровня (10 минут) — истёк.
+        progress.setStartedAt(Instant.now().minusSeconds(20 * 60));
+        progress.setLevelStartedAt(Instant.now().minusSeconds(10 * 60 + 2));
+        progress.setLevelIndex(1);
+        when(progressRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(progress));
+
+        // В пределах запаса таймер ждёт: клиент ещё может прислать результат.
+        service.tickSoloAttempt(1L);
+        assertThat(savedResults).isEmpty();
+        assertThat(progress.getFinishReason()).isNull();
+
+        progress.setLevelStartedAt(Instant.now().minusSeconds(10 * 60 + 10));
+        service.tickSoloAttempt(1L);
+
+        assertThat(savedResults).hasSize(1);
+        assertThat(savedResults.get(0).getFinishReason()).isEqualTo(FinishReason.LEVEL_TIME_EXPIRED);
+        assertThat(progress.getFinishReason()).isEqualTo(FinishReason.LEVEL_TIME_EXPIRED);
+        assertThat(progress.getFinishedSeconds()).isEqualTo(600);
+    }
+
+    @Test
     void userAbortedDeletesProgressAndCreatesNoResult() {
         service.abortSoloGame(GAME_ID, user);
 
-        verify(progressRepository).deleteByGameIdAndUserId(GAME_ID, USER_ID);
+        verify(progressRepository).delete(progress);
         verify(userGameProgressRepository).deleteByUserIdAndGameId(USER_ID, GAME_ID);
         verify(resultRepository, never()).save(any(GameResult.class));
         verify(teamService, never()).registerWin(any(User.class));

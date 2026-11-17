@@ -1659,6 +1659,15 @@ padding-bottom: 10px;
   font-size: 14px;
   display: inline-block;
 }
+.assoc-overall-timer {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #2f2f3d;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-block;
+}
 
 /* Экран итоговой статистики */
 .assoc-statistics { display: flex; justify-content: center; padding: 18px; }
