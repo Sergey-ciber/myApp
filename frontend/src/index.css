@@ -1713,7 +1713,7 @@ padding-bottom: 10px;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 16px;
 }
-.assoc-statistics-table-wrap .assoc-statistics-table { margin-bottom: 0; min-width: 460px; }
+.assoc-statistics-table-wrap .assoc-statistics-table { margin-bottom: 0; min-width: 0; }
 .assoc-statistics-table thead th {
   position: sticky;
   top: 0;
@@ -1735,11 +1735,12 @@ padding-bottom: 10px;
 .assoc-statistics-empty { margin: 8px 0 16px; font-size: 14px; color: #a0a0b0; }
 
 /* На узких экранах таблица статистики раскладывается карточками. */
-@media (max-width: 560px) {
+@media (max-width: 768px) {
   .assoc-statistics { padding: 10px; }
   .assoc-statistics-card { padding: 16px 12px; }
   .assoc-team-finish { gap: 12px; }
-  .assoc-statistics-table-wrap { overflow-x: visible; }
+  .assoc-statistics-table-wrap { overflow-x: visible; overflow-y: visible; max-height: none; }
+  .assoc-statistics-table-wrap .assoc-statistics-table,
   .assoc-statistics-table { min-width: 0; font-size: 13px; }
   .assoc-statistics-table thead { display: none; }
   .assoc-statistics-table,
@@ -1801,6 +1802,135 @@ padding-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
+
+  /* Лидерборд и таблица статистики игры: карточный вид без горизонтального скролла */
+  .assoc-table-wrap.assoc-leaderboard-table-wrap,
+  .assoc-table-wrap.assoc-game-stats-table-wrap,
+  .assoc-leaderboard-table-wrap,
+  .assoc-game-stats-table-wrap {
+    overflow: visible !important;
+  }
+  .assoc-leaderboard-table,
+  .assoc-game-stats-table,
+  .assoc-table.assoc-game-stats-table {
+    min-width: 0 !important;
+    width: 100%;
+    font-size: 13px;
+  }
+  .assoc-leaderboard-table thead,
+  .assoc-game-stats-table thead {
+    display: none;
+  }
+  .assoc-leaderboard-table,
+  .assoc-leaderboard-table tbody,
+  .assoc-leaderboard-table tr,
+  .assoc-leaderboard-table td,
+  .assoc-game-stats-table,
+  .assoc-game-stats-table tbody,
+  .assoc-game-stats-table tr,
+  .assoc-game-stats-table td {
+    display: block;
+    width: 100%;
+  }
+  .assoc-leaderboard-table tbody tr,
+  .assoc-game-stats-table tbody tr.assoc-game-stats-row {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid #3a3a4a;
+    border-radius: 10px;
+    background: #1e1e27;
+  }
+  .assoc-leaderboard-table tbody td,
+  .assoc-game-stats-table tbody tr.assoc-game-stats-row > td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border-bottom: none;
+    text-align: right;
+  }
+  .assoc-leaderboard-table tbody td::before,
+  .assoc-game-stats-table tbody tr.assoc-game-stats-row > td::before {
+    content: attr(data-label);
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 45%;
+    color: #a0a0b0;
+    font-size: 11px;
+    line-height: 1.3;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .assoc-leaderboard-table .assoc-player-cell,
+  .assoc-game-stats-table .assoc-player-cell {
+    max-width: none;
+  }
+  .assoc-leaderboard-table .assoc-cell-value,
+  .assoc-game-stats-table .assoc-cell-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .assoc-leaderboard-table .assoc-player-cell-value,
+  .assoc-game-stats-table .assoc-player-cell-value {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .assoc-leaderboard-table .assoc-me {
+    margin-left: 0;
+  }
+  .assoc-leaderboard-table tbody tr.is-me {
+    background: #292624;
+    border-color: #5a4a2a;
+  }
+  .assoc-game-stats-table .assoc-game-stats-details-row {
+    margin: -6px 0 10px;
+    padding: 0 4px 8px;
+    border: 1px solid #3a3a4a;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    background: #1e1e27;
+  }
+  .assoc-game-stats-table tbody tr.assoc-game-stats-row.is-open {
+    margin-bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .assoc-game-stats-table .assoc-game-stats-details-row > td {
+    display: block;
+    padding: 8px 4px 0;
+    text-align: left;
+  }
+  .assoc-game-stats-table .assoc-game-stats-details-row > td::before {
+    content: none;
+  }
+  .assoc-game-stats-table .assoc-game-stats-details-table tbody tr {
+    background: #17171f;
+  }
+
+  /* Кнопки на экранах результатов: в столбец на всю ширину */
+  .assoc-statistics-card .form-actions,
+  .assoc-team-finish .assoc-info-actions,
+  .assoc-team-finish .assoc-info-card .assoc-info-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .assoc-statistics-card .form-actions .btn,
+  .assoc-team-finish .assoc-info-actions .btn,
+  .assoc-team-finish .assoc-info-card .assoc-info-actions .btn {
+    width: 100%;
+  }
 }
 
 /* Победа */
@@ -1833,8 +1963,12 @@ padding-bottom: 10px;
   box-shadow: none;
 }
 .assoc-win .assoc-leaderboard-title { font-size: 14px; }
-.assoc-win .assoc-table { min-width: 460px; font-size: 13px; }
+.assoc-win .assoc-table { min-width: 0; font-size: 13px; }
 .assoc-win .assoc-table td { padding: 7px 8px; }
+
+@media (max-width: 768px) {
+  .assoc-win .assoc-table { min-width: 0; font-size: 13px; }
+}
 
 /* Таблица результатов */
 .assoc-leaderboard {
@@ -1847,7 +1981,7 @@ padding-bottom: 10px;
 .assoc-leaderboard-title { margin: 0 0 10px; font-size: 16px; }
 .assoc-leaderboard-empty { margin: 0; font-size: 13px; color: var(--text-muted); }
 .assoc-table-wrap { overflow-x: auto; }
-.assoc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px; }
+.assoc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 0; }
 .assoc-table th {
   text-align: left;
   padding: 8px 10px;
@@ -2625,7 +2759,7 @@ padding-bottom: 10px;
   color: #a0a0b0;
 }
 .assoc-game-stats-error { color: #d98a8a; }
-.assoc-game-stats-table { min-width: 560px; }
+.assoc-game-stats-table { min-width: 0; }
 /* Иконка типа участника: игрок или команда. */
 .assoc-game-stats-kind { font-size: 15px; }
 /* Кликабельная строка: раскрывает детализацию по уровням. */

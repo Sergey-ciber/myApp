@@ -60,7 +60,7 @@ export default function GameStatisticsBlock({ entries, loading, error }) {
               Пока никто не прошёл эту игру до конца. Разгадайте все уровни и станьте первым!
             </p>
           ) : (
-            <div className="assoc-table-wrap">
+            <div className="assoc-table-wrap assoc-game-stats-table-wrap">
               <table className="assoc-table assoc-game-stats-table">
                 <thead>
                   <tr>
@@ -94,21 +94,27 @@ export default function GameStatisticsBlock({ entries, loading, error }) {
                           role="button"
                           aria-expanded={isOpen}
                         >
-                          <td className="assoc-place">{placeLabel(entry.rank)}</td>
-                          <td className="assoc-player-cell">
-                            <span className="assoc-game-stats-kind" aria-hidden="true">
-                              {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
-                            </span>{' '}
-                            {entry.playerName}
+                          <td className="assoc-place" data-label="Место">
+                            <span className="assoc-cell-value">{placeLabel(entry.rank)}</span>
                           </td>
-                          <td className="assoc-time-cell" title={`${entry.timeSeconds} сек`}>
-                            {formatStatTime(entry.timeSeconds)}
+                          <td className="assoc-player-cell" data-label="Команда / Игрок">
+                            <span className="assoc-cell-value assoc-player-cell-value">
+                              <span className="assoc-game-stats-kind" aria-hidden="true">
+                                {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
+                              </span>{' '}
+                              <span className="assoc-player-name">{entry.playerName}</span>
+                            </span>
                           </td>
-                          <td className="assoc-date-cell">{formatDate(entry.completedAt)}</td>
+                          <td className="assoc-time-cell" data-label="Время игры" title={`${entry.timeSeconds} сек`}>
+                            <span className="assoc-cell-value">{formatStatTime(entry.timeSeconds)}</span>
+                          </td>
+                          <td className="assoc-date-cell" data-label="Дата прохождения">
+                            <span className="assoc-cell-value">{formatDate(entry.completedAt)}</span>
+                          </td>
                         </tr>
                         {isOpen && (
                           <tr className="assoc-game-stats-details-row">
-                            <td colSpan={4}>
+                            <td colSpan={4} data-label={null}>
                               {details.length === 0 ? (
                                 <p className="assoc-game-stats-empty">
                                   Детализация по уровням недоступна для этого прохождения.
@@ -131,13 +137,13 @@ export default function GameStatisticsBlock({ entries, loading, error }) {
                                           key={`${key}-${level.levelId ?? levelIndex}`}
                                           className={included ? undefined : 'assoc-statistics-row-excluded'}
                                         >
-                                          <td className="assoc-statistics-level">
+                                          <td className="assoc-statistics-level" data-label="Уровень">
                                             {level.levelName || `Уровень ${levelIndex + 1}`}
                                             {!included && <span className="assoc-statistics-tag">не учитывается в итоге</span>}
                                           </td>
-                                          <td>{formatStatTime(level.netSeconds)}</td>
-                                          <td>{formatStatTime(level.penaltySeconds)}</td>
-                                          <td>{formatStatTime(level.totalSeconds)}</td>
+                                          <td data-label="Чистое время">{formatStatTime(level.netSeconds)}</td>
+                                          <td data-label="Штрафное время">{formatStatTime(level.penaltySeconds)}</td>
+                                          <td data-label="Общее время уровня">{formatStatTime(level.totalSeconds)}</td>
                                         </tr>
                                       )
                                     })}

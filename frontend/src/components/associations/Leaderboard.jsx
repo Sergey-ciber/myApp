@@ -27,8 +27,8 @@ export default function Leaderboard({ entries, loading, currentUserId, limit, ti
           Пока никто не прошёл игру. Разгадайте колонку 5 и станьте первым!
         </p>
       ) : (
-        <div className="assoc-table-wrap">
-          <table className="assoc-table">
+        <div className="assoc-table-wrap assoc-leaderboard-table-wrap">
+          <table className="assoc-table assoc-leaderboard-table">
             <thead>
               <tr>
                 <th className="assoc-col-place">Место</th>
@@ -43,18 +43,24 @@ export default function Leaderboard({ entries, loading, currentUserId, limit, ti
                 const isMe = !entry.team && entry.userId != null && entry.userId === currentUserId
                 return (
                   <tr key={key} className={isMe ? 'is-me' : ''}>
-                    <td className="assoc-place">{placeLabel(entry.rank)}</td>
-                    <td className="assoc-player-cell">
-                      <span className="assoc-game-stats-kind" aria-hidden="true">
-                        {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
-                      </span>{' '}
-                      {entry.playerName}
-                      {isMe && <span className="assoc-me">вы</span>}
+                    <td className="assoc-place" data-label="Место">
+                      <span className="assoc-cell-value">{placeLabel(entry.rank)}</span>
                     </td>
-                    <td className="assoc-time-cell" title={`${entry.timeSeconds} сек`}>
-                      {formatStatTime(entry.timeSeconds)}
+                    <td className="assoc-player-cell" data-label="Команда / Игрок">
+                      <span className="assoc-cell-value assoc-player-cell-value">
+                        <span className="assoc-game-stats-kind" aria-hidden="true">
+                          {entry.team ? '👨‍👩‍👧‍👧' : '🦍'}
+                        </span>{' '}
+                        <span className="assoc-player-name">{entry.playerName}</span>
+                        {isMe && <span className="assoc-me">вы</span>}
+                      </span>
                     </td>
-                    <td className="assoc-date-cell">{formatDate(entry.completedAt)}</td>
+                    <td className="assoc-time-cell" data-label="Время" title={`${entry.timeSeconds} сек`}>
+                      <span className="assoc-cell-value">{formatStatTime(entry.timeSeconds)}</span>
+                    </td>
+                    <td className="assoc-date-cell" data-label="Дата">
+                      <span className="assoc-cell-value">{formatDate(entry.completedAt)}</span>
+                    </td>
                   </tr>
                 )
               })}
