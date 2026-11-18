@@ -11,7 +11,9 @@ import java.util.List;
  *  - penaltySeconds — суммарный штраф за подсказки уровня;
  *  - totalSeconds   — pureSeconds + penaltySeconds.
  *
- * totalSeconds верхнего уровня — сумма totalSeconds по всем пройденным уровням.
+ * totalSeconds верхнего уровня — сумма totalSeconds по уровням, учитываемым
+ * в общей статистике (includeTimeInStats=true). Время исключённых уровней
+ * сохраняется и отображается по строкам, но не входит в итог.
  */
 public record TeamGameStatisticsResponse(
         Long sessionId,
@@ -34,7 +36,9 @@ public record TeamGameStatisticsResponse(
             long pureSeconds,
             long penaltySeconds,
             long totalSeconds,
-            boolean timedOut
+            boolean timedOut,
+            /** Учитывать ли уровень в общем итоге; по умолчанию true. */
+            boolean includeTimeInStats
     ) {
     }
 }

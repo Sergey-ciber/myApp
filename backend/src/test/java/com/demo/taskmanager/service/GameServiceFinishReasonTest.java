@@ -132,6 +132,8 @@ class GameServiceFinishReasonTest {
             savedResults.add(result);
             return result;
         });
+        when(resultRepository.findByGameId(GAME_ID))
+                .thenAnswer(invocation -> List.copyOf(savedResults));
         when(resultRepository.findByGameIdOrderByTimeSecondsAscCompletedAtAsc(GAME_ID))
                 .thenAnswer(invocation -> List.copyOf(savedResults));
         when(teamGameSessionRepository

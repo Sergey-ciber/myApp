@@ -26,8 +26,13 @@ public record GameRequest(
             List<HintRequest> hints,
             List<List<String>> associationColumns,
             List<QuestionRequest> questions,
-            List<StandardQuestionRequest> standardQuestions
+            List<StandardQuestionRequest> standardQuestions,
+            /** Учитывать время уровня в общей статистике; по умолчанию true. */
+            Boolean includeTimeInStats
     ) {
+        public boolean includeTimeInStatsOrDefault() {
+            return includeTimeInStats == null || includeTimeInStats;
+        }
     }
 
     public record HintRequest(

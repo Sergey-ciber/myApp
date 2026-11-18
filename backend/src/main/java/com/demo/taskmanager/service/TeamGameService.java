@@ -778,13 +778,13 @@ public class TeamGameService {
         long totalSeconds = 0;
         for (GameLevel level : sortedLevels(session.getGame())) {
             TeamLevelStat stat = byLevelId.get(level.getId());
-            // Уровень не начинался или ещё идёт — в статистику не включаем.
             if (stat == null || stat.getEndedAt() == null) {
                 continue;
             }
             long pure = Math.max(0, stat.getPureSeconds());
             long penalty = Math.max(0, stat.getPenaltySeconds());
             long totalLevel = pure + penalty;
+            boolean include = level.isIncludeTimeInStats();
             String title = stat.getTitle() == null || stat.getTitle().isBlank()
                     ? level.getTitle() : stat.getTitle();
             levels.add(new TeamGameStatisticsResponse.LevelStat(
@@ -796,9 +796,12 @@ public class TeamGameService {
                     pure,
                     penalty,
                     totalLevel,
-                    stat.isTimedOut()
+                    stat.isTimedOut(),
+                    include
             ));
-            totalSeconds += totalLevel;
+            if (include) {
+                totalSeconds += totalLevel;
+            }
         }
 
         return new TeamGameStatisticsResponse(
@@ -1555,7 +1558,8 @@ public class TeamGameService {
                                                 hint.questionId(), List.of()))
                                 .toList();
                     return new GamePlayResponse.GameLevelView(level.id(), level.title(), level.type(),
-                            level.timeLimitMinutes(), hints, level.questions(), level.startWords(), level.mediaUrls());
+                            level.timeLimitMinutes(), hints, level.questions(), level.startWords(), level.mediaUrls(),
+                            level.includeTimeInStats());
                 })
                 .toList();
         return new GamePlayResponse(game.id(), game.title(), game.gameDate(), game.createdAt(), game.active(),

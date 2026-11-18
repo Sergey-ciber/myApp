@@ -39,6 +39,7 @@ function createEmptyLevel(index) {
     title: `Уровень ${index + 1}`,
     timeLimitMinutes: '10',
     type: 'ASSOCIATIONS',
+    includeTimeInStats: true,
     hintsCount: '0',
     hints: [],
     mediaUrls: [],
@@ -306,6 +307,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
         title: level.title || `Уровень ${idx + 1}`,
         timeLimitMinutes: formatMinutes(level.timeLimitMinutes ?? 10),
         type: level.type || 'ASSOCIATIONS',
+        includeTimeInStats: level.includeTimeInStats !== false,
         hintsCount: level.hintsCount != null ? String(level.hintsCount) : '0',
         mediaUrls: Array.isArray(level.mediaUrls) ? level.mediaUrls : [],
         hints: ((level.hints || []).filter((h) => h.questionId == null || level.type === 'ASSOCIATIONS')).map((hint) => ({
@@ -667,6 +669,7 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
           title: level.title.trim(),
           timeLimitMinutes: Number(level.timeLimitMinutes),
           type: level.type,
+          includeTimeInStats: level.includeTimeInStats !== false,
           hintsCount: Number(level.hintsCount) || 0,
           mediaUrls: (level.mediaUrls || []).slice(0, 10),
           hints: [
@@ -1091,6 +1094,16 @@ export default function AdminPanel({ games, onReload, onPlay, currentUserId, isS
                   <span>Тип уровня *</span>
                   <select value={level.type} onChange={(event) => updateLevel(levelIndex, { type: event.target.value })}>
                     {LEVEL_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Учитывать время уровня в статистике за игру?</span>
+                  <select
+                    value={level.includeTimeInStats === false ? 'no' : 'yes'}
+                    onChange={(event) => updateLevel(levelIndex, { includeTimeInStats: event.target.value === 'yes' })}
+                  >
+                    <option value="yes">Да</option>
+                    <option value="no">Нет</option>
                   </select>
                 </label>
               </div>

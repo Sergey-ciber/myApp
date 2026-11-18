@@ -56,6 +56,10 @@ public class GameLevel {
     @OrderBy("orderIndex ASC")
     private List<StandardQuestion> standardQuestions = new ArrayList<>();
 
+    /** Учитывать ли время этого уровня в общей статистике и рейтинге игры. */
+    @Column(name = "include_time_in_stats", nullable = false)
+    private boolean includeTimeInStats = true;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Game getGame() { return game; }
@@ -72,6 +76,8 @@ public class GameLevel {
     public void setHintsCount(int hintsCount) { this.hintsCount = hintsCount; }
     public int getOrderIndex() { return orderIndex; }
     public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public boolean isIncludeTimeInStats() { return includeTimeInStats; }
+    public void setIncludeTimeInStats(boolean includeTimeInStats) { this.includeTimeInStats = includeTimeInStats; }
     public List<LevelHint> getHints() { return hints; }
     public List<LevelWord> getWords() { return words; }
     public List<LevelQuestion> getQuestions() { return questions; }

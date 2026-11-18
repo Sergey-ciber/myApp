@@ -21,6 +21,10 @@ public interface GameResultRepository extends JpaRepository<GameResult, Long> {
     @EntityGraph(attributePaths = "user")
     List<GameResult> findByGameIdOrderByTimeSecondsAscCompletedAtAsc(Long gameId);
 
+    /** Все попытки игры для пересчёта рейтинга по актуальным настройкам уровней. */
+    @EntityGraph(attributePaths = "user")
+    List<GameResult> findByGameId(Long gameId);
+
     /**
      * Количество уникальных игр, сохранённых участниками команды.
      * Повторная отправка результата одной и той же игры не увеличивает показатель.

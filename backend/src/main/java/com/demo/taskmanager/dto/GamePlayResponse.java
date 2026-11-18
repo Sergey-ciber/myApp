@@ -110,7 +110,7 @@ public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instan
     /** Полное описание уровня для игрока (без правильных ответов). */
     public record GameLevelView(Long id, String title, LevelType type, double timeLimitMinutes,
                                 List<GameHintView> hints, List<GameQuestionViewResponse> questions, List<String> startWords,
-                                List<String> mediaUrls) {
+                                List<String> mediaUrls, boolean includeTimeInStats) {
         public static GameLevelView from(GameLevel level) {
             List<GameHintView> hints = level.getHints() == null
                     ? List.of()
@@ -128,7 +128,7 @@ public record GamePlayResponse(Long id, String title, LocalDate gameDate, Instan
                     : List.of();
             List<String> mediaUrls = level.getMediaUrls() == null ? List.of() : List.copyOf(level.getMediaUrls());
             return new GameLevelView(level.getId(), level.getTitle(), level.getType(), level.getTimeLimitMinutes(),
-                    hints, questions, startWords, mediaUrls);
+                    hints, questions, startWords, mediaUrls, level.isIncludeTimeInStats());
         }
     }
 

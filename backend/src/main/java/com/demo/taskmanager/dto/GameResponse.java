@@ -62,7 +62,8 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             List<HintResponse> hints,
             List<List<String>> associationColumns,
             List<QuestionResponse> questions,
-            List<StandardQuestionResponse> standardQuestions
+            List<StandardQuestionResponse> standardQuestions,
+            Boolean includeTimeInStats
     ) {
         public static LevelResponse from(GameLevel level) {
             List<HintResponse> hints = level.getHints() == null ? List.of() : level.getHints().stream()
@@ -122,7 +123,8 @@ public record GameResponse(Long id, String title, LocalDate gameDate, Instant cr
             return new LevelResponse(level.getId(), level.getTitle(), level.getTimeLimitMinutes(), level.getType(),
                     level.getHintsCount(), level.getOrderIndex(),
                     level.getMediaUrls() == null ? List.of() : List.copyOf(level.getMediaUrls()),
-                    hints, associationColumns, questions, standardQuestions);
+                    hints, associationColumns, questions, standardQuestions,
+                    level.isIncludeTimeInStats());
         }
 
         private static com.demo.taskmanager.entity.StandardQuestion toStandardQuestion(GameLevel level,

@@ -124,16 +124,23 @@ export default function GameStatisticsBlock({ entries, loading, error }) {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {details.map((level, levelIndex) => (
-                                      <tr key={`${key}-${level.levelId ?? levelIndex}`}>
-                                        <td className="assoc-statistics-level">
-                                          {level.levelName || `Уровень ${levelIndex + 1}`}
-                                        </td>
-                                        <td>{formatStatTime(level.netSeconds)}</td>
-                                        <td>{formatStatTime(level.penaltySeconds)}</td>
-                                        <td>{formatStatTime(level.totalSeconds)}</td>
-                                      </tr>
-                                    ))}
+                                    {details.map((level, levelIndex) => {
+                                      const included = level?.includeTimeInStats !== false
+                                      return (
+                                        <tr
+                                          key={`${key}-${level.levelId ?? levelIndex}`}
+                                          className={included ? undefined : 'assoc-statistics-row-excluded'}
+                                        >
+                                          <td className="assoc-statistics-level">
+                                            {level.levelName || `Уровень ${levelIndex + 1}`}
+                                            {!included && <span className="assoc-statistics-tag">не учитывается в итоге</span>}
+                                          </td>
+                                          <td>{formatStatTime(level.netSeconds)}</td>
+                                          <td>{formatStatTime(level.penaltySeconds)}</td>
+                                          <td>{formatStatTime(level.totalSeconds)}</td>
+                                        </tr>
+                                      )
+                                    })}
                                   </tbody>
                                 </table>
                               )}

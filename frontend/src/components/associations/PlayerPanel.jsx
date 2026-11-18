@@ -459,9 +459,16 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
           changed = true
           return null
         }
-        if (level.id !== stat.levelId || level.title !== stat.name) {
+        const includeTimeInStats = level.includeTimeInStats !== false
+        const currentInclude = stat.includeTimeInStats !== false
+        if (
+          level.id !== stat.levelId ||
+          level.title !== stat.name ||
+          currentInclude !== includeTimeInStats ||
+          stat.includeTimeInStats == null
+        ) {
           changed = true
-          return { ...stat, levelId: level.id, name: level.title }
+          return { ...stat, levelId: level.id, name: level.title, includeTimeInStats }
         }
         return stat
       })
@@ -734,10 +741,14 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
   const handleLevelComplete = (level, { netTime, penaltyTime = 0, timedOut = false }) => {
     const net = Number(netTime) || 0
     const penalty = Number(penaltyTime) || 0
-    const stat = { levelId: level.id, name: level.title, netTime: net, penaltyTime: penalty, totalTime: net + penalty, timedOut: !!timedOut }
+    const includeTimeInStats = level?.includeTimeInStats !== false
+    const stat = { levelId: level.id, name: level.title, netTime: net, penaltyTime: penalty, totalTime: net + penalty, timedOut: !!timedOut, includeTimeInStats }
     const nextStats = [...levelStats, stat]
     setLevelStats(nextStats)
     writePJson(pk('stats'), nextStats)
+
+    const effectiveStatsTotal = (stats) =>
+      stats.reduce((sum, s) => (s?.includeTimeInStats === false ? sum : sum + (Number(s.totalTime) || 0)), 0)
 
     const toServerStats = (stats) => stats.map((s) => ({
       levelId: s.levelId,
@@ -746,6 +757,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       penaltySeconds: Math.max(0, Math.round(s.penaltyTime)),
       totalSeconds: Math.max(0, Math.round(s.totalTime)),
       timedOut: !!s.timedOut,
+      includeTimeInStats: s.includeTimeInStats !== false,
     }))
 
     /**
@@ -754,7 +766,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
      * Сервер сам проверит дедлайны и уточнит причину (общий таймер/уровень).
      */
     const finishByTimeout = (stats) => {
-      const grandTotal = stats.reduce((sum, s) => sum + (Number(s.totalTime) || 0), 0)
+      const grandTotal = effectiveStatsTotal(stats)
       const overallLimit = Math.max(1, Math.round((Number(game?.timeLimitMinutes) || 0) * 60))
       const overallElapsed = Number(progress?.elapsedSeconds) || 0
       const reason = overallLimit > 0 && overallElapsed >= overallLimit
@@ -769,7 +781,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       writeP(pk('finished'), '1')
       writeP(pk('endedEarly'), null)
       writeP(pk('finishReason'), reason)
-      submitResult(game.id, Math.max(1, Math.round(grandTotal)), toServerStats(stats), reason)
+      submitResult(game.id, Math.max(0, Math.round(grandTotal)), toServerStats(stats), reason)
         .then((res) => {
           // Причина от сервера авторитетна: он сверяет оба дедлайна.
           if (res?.finishReason) {
@@ -794,7 +806,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
     /** Переход к следующему уровню или к экрану итогов. */
     const goNext = () => {
       if (isLast) {
-        const grandTotal = nextStats.reduce((sum, s) => sum + s.totalTime, 0)
+        const grandTotal = effectiveStatsTotal(nextStats)
         setTotalTime(grandTotal)
         setFinished(true)
         setEndedEarly(false)
@@ -803,7 +815,7 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
         setResultError('')
         // Детализация по уровням уходит на сервер: он проверяет, что все
         // уровни пройдены, и сам считает общее время.
-        submitResult(game.id, Math.max(1, Math.round(grandTotal)), toServerStats(nextStats))
+        submitResult(game.id, Math.max(0, Math.round(grandTotal)), toServerStats(nextStats))
           .then(() => {
             // Небольшая пауза перед обновлением рейтинга: результат должен
             // сначала закоммититься на сервере, иначе таблица останется пустой.
@@ -924,7 +936,10 @@ export default function PlayerPanel({ games, gameId, onSelectGame, onExit, curre
       // Результат в рейтинг не отправляется.
       try { await abortGame(game.id) } catch {}
       try { await clearGameProgress(game.id) } catch {}
-      const grandTotal = levelStats.reduce((sum, s) => sum + (Number(s.totalTime) || 0), 0)
+      const grandTotal = levelStats.reduce(
+        (sum, s) => (s?.includeTimeInStats === false ? sum : sum + (Number(s.totalTime) || 0)),
+        0
+      )
       setTotalTime(grandTotal)
       setFinished(true)
       setEndedEarly(true)
@@ -1234,6 +1249,7 @@ function StatisticsScreen({ stats, totalTime, resultError, endedEarly, finishRea
     penaltySeconds: stat.penaltyTime,
     totalSeconds: stat.totalTime,
     timedOut: !!stat.timedOut,
+    includeTimeInStats: stat.includeTimeInStats !== false,
   }))
 
   return (

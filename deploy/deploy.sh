@@ -160,6 +160,13 @@ if ! docker compose -f "$COMPOSE_FILE" exec -T db \
   fail "Не удалось применить deploy/add-finish-reason.sql: проверьте тип и значения games.difficulty"
 fi
 
+log "Применение deploy/add-include-time-in-stats.sql"
+if ! docker compose -f "$COMPOSE_FILE" exec -T db \
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      < deploy/add-include-time-in-stats.sql; then
+  fail "Не удалось применить deploy/add-include-time-in-stats.sql"
+fi
+
 # ---------- выкат ----------
 log "Собираю образы и поднимаю контейнеры"
 cd "$APP_DIR"

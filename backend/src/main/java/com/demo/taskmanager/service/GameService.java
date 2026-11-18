@@ -649,6 +649,7 @@ public class GameService {
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
                 level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
+                level.setIncludeTimeInStats(lr.includeTimeInStatsOrDefault());
                 game.getLevels().add(level);
 
                 // Индекс вопроса для каждой подсказки обычного уровня — связываем после создания вопросов.
@@ -827,6 +828,7 @@ public class GameService {
                 level.setHintsCount(lr.hintsCount() == null ? 0 : lr.hintsCount());
                 level.setOrderIndex(i);
                 level.setMediaUrls(normalizeMediaUrls(lr.mediaUrls()));
+                level.setIncludeTimeInStats(lr.includeTimeInStatsOrDefault());
                 game.getLevels().add(level);
 
                 // Индекс вопроса для каждой подсказки обычного уровня — связываем после создания вопросов.
@@ -1030,11 +1032,11 @@ public class GameService {
         if (isTimeUp(game, progress)) {
             return finishSoloTimeout(game, user, progress, request);
         }
-        List<LevelStatsDto> levels = validateCompletedLevels(game, request);
+        List<LevelStatsDto> levels = applyCurrentLevelFlags(validateCompletedLevels(game, request), game);
 
-        int seconds = levels.stream().mapToInt(LevelStatsDto::total).sum();
-        if (seconds < 1 || seconds > MAX_TIME_SECONDS) {
-            throw new BadRequestException("Время прохождения должно быть от 1 до "
+        int seconds = LevelStatsDto.effectiveTotal(levels);
+        if (seconds < 0 || seconds > MAX_TIME_SECONDS) {
+            throw new BadRequestException("Время прохождения должно быть от 0 до "
                     + MAX_TIME_SECONDS + " секунд");
         }
 
@@ -1082,9 +1084,10 @@ public class GameService {
      */
     private ResultResponse saveSoloTimeoutResult(Game game, User user, UserProgress progress,
                                                  FinishReason reason, List<LevelStatsDto> levels) {
-        int seconds = levels.stream().mapToInt(LevelStatsDto::total).sum();
-        if (seconds < 1 || seconds > MAX_TIME_SECONDS) {
-            throw new BadRequestException("Время прохождения должно быть от 1 до "
+        levels = applyCurrentLevelFlags(levels, game);
+        int seconds = LevelStatsDto.effectiveTotal(levels);
+        if (seconds < 0 || seconds > MAX_TIME_SECONDS) {
+            throw new BadRequestException("Время прохождения должно быть от 0 до "
                     + MAX_TIME_SECONDS + " секунд");
         }
 
@@ -1204,7 +1207,7 @@ public class GameService {
             int net = current
                     ? timedOutLevelSeconds(progress, level)
                     : Math.max(0, stat.netSeconds());
-            levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net, penalty, current));
+            levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net, penalty, current, level.isIncludeTimeInStats()));
         }
         return levels;
     }
@@ -1242,7 +1245,7 @@ public class GameService {
                         ? timedOutLevelSeconds(progress, level)
                         : currentLevelElapsedSeconds(progress, level);
                 levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net,
-                        Math.max(0, currentPenalty), true));
+                        Math.max(0, currentPenalty), true, level.isIncludeTimeInStats()));
                 continue;
             }
             Map<String, Object> stat = i < savedStats.size() ? savedStats.get(i) : Map.of();
@@ -1252,7 +1255,7 @@ public class GameService {
             if (limit > 0) {
                 net = (int) Math.min(net, limit);
             }
-            levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net, penalty, false));
+            levels.add(LevelStatsDto.of(level.getId(), level.getTitle(), net, penalty, false, level.isIncludeTimeInStats()));
         }
         return levels;
     }
@@ -1391,59 +1394,63 @@ public class GameService {
     }
 
     /**
-     * Рейтинг игры: одиночные результаты и результаты команд в единой таблице.
+     * Рейтинг игры: смешанный рейтинг участников и команд в единой таблице.
      *
      * В рейтинг попадают полностью завершённые прохождения и попытки,
      * закрытые по времени (общий таймер игры или таймер уровня):
      *  - одиночные — лучшая попытка каждого игрока;
      *  - командные — лучшая зачётная партия каждой команды.
      *
-     * Досрочно остановленные хостом партии (HOST_ENDED) в рейтинг не попадают.
+     * Досрочно завершённые хостом партии (HOST_ENDED) в рейтинг не попадают.
      *
-     * Сортировка — по возрастанию общего времени.
+     * Время и порядок считаются по актуальному флагу учёта времени уровней:
+     * из totals/ranking исключаются уровни с includeTimeInStats=false, при этом
+     * сами уровни и их время остаются в детализации. Пересчёт выполняется при
+     * чтении и не опирается на устаревшие сохранённые totals.
      */
     @Transactional(readOnly = true)
     public List<LeaderboardEntry> leaderboard(Long gameId) {
-        findGame(gameId);
+        Game game = findGame(gameId);
         List<LeaderboardEntry> entries = new ArrayList<>();
 
-        // Одиночные прохождения: по одной (лучшей) попытке на игрока.
-        List<GameResult> results = resultRepository
-                .findByGameIdOrderByTimeSecondsAscCompletedAtAsc(gameId);
-        Map<Long, GameResult> bestByUser = new LinkedHashMap<>();
+        // Одиночные прохождения: по лучшей (быстрой) попытке на игрока по актуальному total.
+        List<GameResult> results = resultRepository.findByGameId(gameId);
+        Map<Long, LeaderboardEntry> bestByUser = new LinkedHashMap<>();
         for (GameResult result : results) {
-            bestByUser.putIfAbsent(result.getUser().getId(), result);
-        }
-        for (GameResult best : bestByUser.values()) {
-            entries.add(new LeaderboardEntry(
+            if (result == null || result.getUser() == null || result.getUser().getId() == null) continue;
+            List<LevelStatsDto> levels = applyCurrentLevelFlags(readLevelsStats(result.getLevelsStats()), game);
+            LeaderboardEntry candidate = new LeaderboardEntry(
                     0,
-                    best.getUser().getId(),
+                    result.getUser().getId(),
                     null,
-                    best.getUser().getUsername(),
+                    result.getUser().getUsername(),
                     false,
-                    best.getTimeSeconds(),
-                    best.getCompletedAt(),
-                    readLevelsStats(best.getLevelsStats())
-            ));
+                    LevelStatsDto.effectiveTotal(levels),
+                    result.getCompletedAt(),
+                    levels
+            );
+            Long userId = result.getUser().getId();
+            LeaderboardEntry current = bestByUser.get(userId);
+            if (current == null || isBetter(candidate, current)) {
+                bestByUser.put(userId, candidate);
+            }
         }
+        entries.addAll(bestByUser.values());
 
-        // Командные прохождения: зачётные партии — завершённые и закрытые
-        // по времени. Досрочное завершение хостом в рейтинг не идёт.
-        // По каждой команде в рейтинг идёт лучшая партия (по общему времени).
+        // Командные прохождения: лучшая зачётная партия каждой команды.
         Map<Long, LeaderboardEntry> bestByTeam = new LinkedHashMap<>();
         for (TeamGameSession session : completedTeamSessions(gameId)) {
             Team team = session.getTeam();
             if (team == null || team.getId() == null) continue;
             List<LevelStatsDto> levels = teamLevelsStats(session);
             if (levels.isEmpty()) continue;
-            int total = levels.stream().mapToInt(LevelStatsDto::total).sum();
             LeaderboardEntry candidate = new LeaderboardEntry(
                     0,
                     null,
                     team.getId(),
                     team.getName(),
                     true,
-                    total,
+                    LevelStatsDto.effectiveTotal(levels),
                     session.getEndedAt() != null ? session.getEndedAt() : session.getFinishedAt(),
                     levels
             );
@@ -1454,7 +1461,6 @@ public class GameService {
         }
         entries.addAll(bestByTeam.values());
 
-        // Сортировка по времени; при равенстве — кто завершил раньше.
         entries.sort(Comparator
                 .comparingInt(LeaderboardEntry::timeSeconds)
                 .thenComparing(LeaderboardEntry::completedAt,
@@ -1503,22 +1509,55 @@ public class GameService {
                 .toList();
     }
 
-    /** Детализация уровней командной партии — по данным таблицы team_level_stats. */
+
+    /** Детализация уровней командной партии из team_level_stats с актуальным флагом учёта времени. */
     private List<LevelStatsDto> teamLevelsStats(TeamGameSession session) {
         List<com.demo.taskmanager.entity.TeamLevelStat> stats =
                 teamLevelStatRepository.findBySessionIdOrderByLevelIndexAsc(session.getId());
         if (stats == null || stats.isEmpty()) return List.of();
+        Map<Long, Boolean> includeByLevelId = levelIncludeFlags(session == null ? null : session.getGame());
         List<LevelStatsDto> levels = new ArrayList<>(stats.size());
         for (com.demo.taskmanager.entity.TeamLevelStat stat : stats) {
+            boolean include = stat.getLevelId() != null
+                    ? includeByLevelId.getOrDefault(stat.getLevelId(), Boolean.TRUE)
+                    : true;
             levels.add(LevelStatsDto.of(
                     stat.getLevelId(),
                     stat.getTitle(),
                     (int) Math.max(0, stat.getPureSeconds()),
                     (int) Math.max(0, stat.getPenaltySeconds()),
-                    stat.isTimedOut()
+                    stat.isTimedOut(),
+                    include
             ));
         }
         return levels;
+    }
+
+    private Map<Long, Boolean> levelIncludeFlags(Game game) {
+        if (game == null || game.getLevels() == null) return Map.of();
+        Map<Long, Boolean> flags = new LinkedHashMap<>();
+        for (GameLevel level : game.getLevels()) {
+            if (level != null && level.getId() != null) {
+                flags.put(level.getId(), level.isIncludeTimeInStats());
+            }
+        }
+        return flags;
+    }
+
+    /** Применяет актуальные флаги уровней к сохранённой статистике (чтение без перезаписи истории). */
+    private List<LevelStatsDto> applyCurrentLevelFlags(List<LevelStatsDto> stored, Game game) {
+        List<LevelStatsDto> normalized = LevelStatsDto.normalize(stored);
+        if (normalized.isEmpty()) return normalized;
+        Map<Long, Boolean> includeByLevelId = levelIncludeFlags(game);
+        if (includeByLevelId.isEmpty()) return normalized;
+        List<LevelStatsDto> result = new ArrayList<>(normalized.size());
+        for (LevelStatsDto level : normalized) {
+            boolean include = level.levelId() != null
+                    ? includeByLevelId.getOrDefault(level.levelId(), level.countsInTotals())
+                    : level.countsInTotals();
+            result.add(level.withIncludeTimeInStats(include));
+        }
+        return result;
     }
 
     /**
